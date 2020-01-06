@@ -103,11 +103,15 @@ void StochasticBlock::serialize( netCDF::NcGroup & group ) const {
 
  group.putAtt( "type" , "StochasticBlock" );
 
- auto inner_block = get_inner_block();
+ Block * inner_block = nullptr;
+ if( ! v_Block.empty() ) {
+  assert( v_Block.size() == 1 );
+  inner_block = v_Block[ 0 ];
+ }
 
  if( inner_block ) {
   auto inner_block_group = group.addGroup( "Block" );
-  v_Block[ 0 ]->serialize( inner_block_group );
+  inner_block->serialize( inner_block_group );
  }
 
  ::serialize( group , "NumDataMappings" , netCDF::NcUint64() ,

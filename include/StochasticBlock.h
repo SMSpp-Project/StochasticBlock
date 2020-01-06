@@ -8,7 +8,7 @@
  *
  * \version 0.1
  *
- * \date 23 - 12 - 2019
+ * \date 02 - 01 - 2020
  *
  * \author Rafael Durbano Lobato \n
  *         Operations Research Group \n
@@ -127,8 +127,7 @@ namespace SMSpp_di_unipi_it
  * for the moment, it is not supported by this class and this feature will be
  * implemented later on. Typically, an object of this class would be used in
  * conjunction with a scenario generator and the set_data() method of this
- * object would be called to consider a particular scenario. For now, the
- * uncertainty is specified by a fixed set of scenarios.
+ * object would be called to consider a particular scenario.
  */
 
 class StochasticBlock : public Block {
@@ -205,7 +204,7 @@ public:
   *        its allocated memory is released.
   */
  void set_inner_block( Block * block , bool destroy_previous_block = true ) {
-  if( ( ! v_Block.empty() ) && block == v_Block[ 0 ] &&
+  if( ( ! v_Block.empty() ) && ( block == v_Block[ 0 ] ) &&
       ( ! destroy_previous_block ) )
    return; // the given Block is already here; silently return
 
@@ -254,18 +253,6 @@ public:
   *   SimpleDataMapping. Moreover, the inner Block of this StochasticBlock
   *   will serve as the reference Block for both the serialization and
   *   deserialization of the SimpleDataMapping.
-  *
-  * - The dimension "NumScenarios" containing the number of scenarios. This
-  *   dimension is optional.
-  *
-  * - The dimension "ScenarioSize" containing the size of a single
-  *   scenario. This dimension is optional.
-  *
-  * - The two-dimensional variable "Scenarios", indexed over "NumScenarios"
-  *   and "ScenarioSize", containing the scenarios. The i-th row of
-  *   "Scenarios" contains the i-th scenario, so that Scenarios[ i ][ j ] is
-  *   the j-th component of the i-th scenario. This variable is optional only
-  *   if "NumScenarios" or "ScenarioSize" is not present.
   */
 
  virtual void serialize( netCDF::NcGroup & group ) const override;
@@ -334,22 +321,6 @@ public:
 /*--------------------------------------------------------------------------*/
 /** @name Reading the data of the StochasticBlock
     @{ */
-
-/*--------------------------------------------------------------------------*/
- /// return a pointer to the (only) sub-Block of the StochasticBlock
- /** This method returns a pointer to the only sub-Block of the
-  * StochasticBlock. If this StochasticBlock has no sub-Block, a \c nullptr is
-  * returned.
-  *
-  * @return A pointer to the inner Block (if there is one; otherwise, it
-  *         returns a nullptr).
-  */
-
- inline Block * get_inner_block() const {
-  if( v_Block.empty() )
-   return nullptr;
-  return v_Block[ 0 ];
- }
 
 /*--------------------------------------------------------------------------*/
 
