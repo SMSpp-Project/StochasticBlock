@@ -8,7 +8,7 @@
  *
  * \version 0.1
  *
- * \date 02 - 01 - 2020
+ * \date 27 - 02 - 2020
  *
  * \author Rafael Durbano Lobato \n
  *         Operations Research Group \n
@@ -221,6 +221,24 @@ public:
   add_Modification( std::make_shared<NBModification>( this ) );
  }
 
+/*--------------------------------------------------------------------------*/
+
+ /// set the vector of pointers to SimpleDataMappingBase
+ /** This method sets the vector of pointers to SimpleDataMappingBase of this
+  * StochasticBlock.
+  *
+  * @param data_mappings the vector of pointers to SimpleDataMappingBase.
+  *
+  * @param destroy_previous_block indicates whether the previous inner Block
+  *        must be destroyed. The default value of this parameter is \c true,
+  *        which means that the previous inner Block (if any) is destroyed and
+  *        its allocated memory is released.
+  */
+ void set_data_mappings( std::vector< std::unique_ptr< SimpleDataMappingBase > >
+                         && data_mappings ) {
+  this->data_mappings = std::move( data_mappings );
+ }
+
 /**@} ----------------------------------------------------------------------*/
 /*-------------------- Methods for handling Modification -------------------*/
 /*--------------------------------------------------------------------------*/
@@ -243,16 +261,16 @@ public:
  /** Serialize a StochasticBlock into a netCDF::NcGroup, with the following
   * format:
   *
-  * - The sub-group "Block", containing the description of the inner Block.
+  * - The group "Block", containing the description of the inner Block. This
+  *   group is optional. If it is not provided, then the inner Block must be
+  *   provided by other means.
   *
-  * - The variable "NumDataMappings", containing the number of DataMapping.
-  *
-  * - For each i in { 0, ..., NumDataMappings - 1 }, the sub-group named
-  *   "DataMapping_i", containing the description of the i-th DataMapping. For
+  * - The description of a vector of SimpleDataMappingBase, containing the
+  *   DataMappings associated with this StochasticBlock. This is optional. For
   *   the time being, each provided DataMapping is expected to be a
   *   SimpleDataMappingBase. Moreover, the inner Block of this StochasticBlock
   *   will serve as the reference Block for both the serialization and
-  *   deserialization of the SimpleDataMappingBase.
+  *   deserialization of each SimpleDataMappingBase.
   */
 
  virtual void serialize( netCDF::NcGroup & group ) const override;
@@ -306,11 +324,11 @@ public:
 
 /*--------------------------------------------------------------------------*/
 
- /// adds a new DataMapping to this StochasticBlock
- /** This function adds a new DataMapping to the set of DataMapping of this
-  * StochasticBlock.
+ /// adds a new SimpleDataMappingBase to this StochasticBlock
+ /** This function adds a new SimpleDataMappingBase to the set of
+  * SimpleDataMappingBase of this StochasticBlock.
   *
-  * @param data_mapping The DataMapping to be added.
+  * @param data_mapping The SimpleDataMappingBase to be added.
   */
  void add_data_mapping( std::unique_ptr<SimpleDataMappingBase> data_mapping ) {
   data_mappings.push_back( std::move( data_mapping ) );
@@ -324,16 +342,30 @@ public:
 
 /*--------------------------------------------------------------------------*/
 
- /// returns the vector of DataMapping
- /** This function returns the vector of DataMapping that characterizes the
-  * data that can be modified through a call to set_data().
+ /// returns the vector of pointers to SimpleDataMappingBase
+ /** This function returns the vector of pointers to SimpleDataMappingBase
+  * that characterizes the data that can be modified through a call to
+  * set_data().
   *
-  * @return The vector of DataMapping.
+  * @return The vector of pointers to SimpleDataMappingBase.
   */
 
  const std::vector< std::unique_ptr< SimpleDataMappingBase > > &
  get_data_mappings() const {
   return data_mappings;
+ }
+
+/*--------------------------------------------------------------------------*/
+
+ /// returns a pointer to the inner Block
+ /** This function returns a pointer to the inner Block of this
+  * StochasticBlock.
+  *
+  * @return A pointer to the inner Block of this StochasticBlock.
+  */
+
+ Block * get_inner_block() const {
+  return inner_block;
  }
 
 /**@} ----------------------------------------------------------------------*/

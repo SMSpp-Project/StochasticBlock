@@ -6,7 +6,7 @@
  *
  * \version 0.10
  *
- * \date 09 - 12 - 2019
+ * \date 27 - 02 - 2020
  *
  * \author Rafael Durbano Lobato \n
  *         Operations Research Group \n
@@ -45,26 +45,24 @@ SMSpp_insert_in_factory_cpp_1( StochasticBlock );
 
 void StochasticBlock::deserialize( netCDF::NcGroup & group ) {
  auto inner_block_group = group.getGroup( "Block" );
- if( inner_block_group.isNull() )
-  throw std::invalid_argument( "StochasticBlock::deserialize: the 'Block' "
-                               "group must be present in the given "
-                               "netCDF::NcGroup." );
+ if( ! inner_block_group.isNull() ) {
 
- auto inner_block = new_Block( inner_block_group, this );
- if( ! inner_block )
-  throw std::logic_error( "StochasticBlock::deserialize: the 'Block'"
-                          "group is present but its description is "
-                          "incomplete." );
-
- set_inner_block( inner_block );
-
- Index num_data_mappings;
- ::deserialize( group , "NumDataMappings" , & num_data_mappings , false );
+  auto inner_block = new_Block( inner_block_group, this );
+  if( ! inner_block )
+   throw std::logic_error( "StochasticBlock::deserialize: the 'Block'"
+                           "group is present but its description is "
+                           "incomplete." );
+  set_inner_block( inner_block );
+ }
 
  data_mappings.clear();
- data_mappings.reserve( num_data_mappings );
-
- SimpleDataMappingBase::deserialize( group , data_mappings , inner_block );
+ Index num_data_mappings;
+ if( ::SMSpp_di_unipi_it::deserialize_dim( group , "NumberDataMappings" ,
+                                           num_data_mappings , true ) &&
+     num_data_mappings > 0 ) {
+  data_mappings.reserve( num_data_mappings );
+  SimpleDataMappingBase::deserialize( group , data_mappings , inner_block );
+ }
 }
 
 /*--------------------------------------------------------------------------*/
