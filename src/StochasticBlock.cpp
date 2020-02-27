@@ -64,24 +64,7 @@ void StochasticBlock::deserialize( netCDF::NcGroup & group ) {
  data_mappings.clear();
  data_mappings.reserve( num_data_mappings );
 
- for( Index i = 0 ; i < num_data_mappings ; ++i ) {
-  auto data_mapping_group = group.getGroup( "DataMapping_" +
-                                            std::to_string( i ) );
-
-  if( data_mapping_group.isNull() )
-   throw std::logic_error( "StochasticBlock::deserialize: 'DataMapping_" +
-                           std::to_string( i ) + "' sub-group must be "
-                           "present." );
-
-  std::string template_parameter_types;
-  if( ! ::deserialize( data_mapping_group , "TemplateParameterTypes" ,
-                       & template_parameter_types , true ) )
-   data_mappings.emplace_back( new SimpleDataMapping<> );
-  else
-   data_mappings.emplace_back( SimpleDataMappingFactory::new_SimpleDataMapping
-                               ( template_parameter_types ) );
-  data_mappings.back()->deserialize( data_mapping_group , inner_block );
- }
+ SimpleDataMappingBase::deserialize( group , data_mappings , inner_block );
 }
 
 /*--------------------------------------------------------------------------*/
@@ -114,14 +97,7 @@ void StochasticBlock::serialize( netCDF::NcGroup & group ) const {
   inner_block->serialize( inner_block_group );
  }
 
- ::serialize( group , "NumDataMappings" , netCDF::NcUint64() ,
-              data_mappings.size() );
-
- for( Index i = 0 ; i < data_mappings.size() ; ++i ) {
-  auto data_mapping_group = group.addGroup( "DataMapping_" +
-                                            std::to_string( i ) );
-  data_mappings[ i ]->serialize( data_mapping_group , inner_block );
- }
+ SimpleDataMappingBase::serialize( group , data_mappings , inner_block );
 }
 
 /*--------------------------------------------------------------------------*/

@@ -250,9 +250,9 @@ public:
   * - For each i in { 0, ..., NumDataMappings - 1 }, the sub-group named
   *   "DataMapping_i", containing the description of the i-th DataMapping. For
   *   the time being, each provided DataMapping is expected to be a
-  *   SimpleDataMapping. Moreover, the inner Block of this StochasticBlock
+  *   SimpleDataMappingBase. Moreover, the inner Block of this StochasticBlock
   *   will serve as the reference Block for both the serialization and
-  *   deserialization of the SimpleDataMapping.
+  *   deserialization of the SimpleDataMappingBase.
   */
 
  virtual void serialize( netCDF::NcGroup & group ) const override;
@@ -312,7 +312,7 @@ public:
   *
   * @param data_mapping The DataMapping to be added.
   */
- void add_data_mapping( std::unique_ptr< DataMapping > data_mapping ) {
+ void add_data_mapping( std::unique_ptr<SimpleDataMappingBase> data_mapping ) {
   data_mappings.push_back( std::move( data_mapping ) );
  }
 
@@ -331,7 +331,7 @@ public:
   * @return The vector of DataMapping.
   */
 
- const std::vector< std::unique_ptr< DataMapping > > &
+ const std::vector< std::unique_ptr< SimpleDataMappingBase > > &
  get_data_mappings() const {
   return data_mappings;
  }
@@ -360,7 +360,7 @@ protected:
  Block * inner_block;
 
  /// The vector of data mappings
- std::vector< std::unique_ptr< DataMapping > > data_mappings;
+ std::vector< std::unique_ptr< SimpleDataMappingBase > > data_mappings;
 
 /*--------------------------------------------------------------------------*/
 /*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
