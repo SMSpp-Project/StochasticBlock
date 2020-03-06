@@ -1,0 +1,28 @@
+# --------------------------------------------------------------------------- #
+#    Package configuration file                                               #
+#                                                                             #
+#    This file contains instructions on how to generate ***Config.cmake,      #
+#    that is, the file that tells CMake how the package should be             #
+#    configured when found by other projects using find_package().            #
+#                                                                             #
+#    ***Targets.cmake (to be found alongside this file) is the target import  #
+#    file that tells where the headers and library are. It will be different  #
+#    depending on a local build or an installed package.                      #
+#                                                                             #
+#                              Niccolo' Iardella                              #
+#                          Operations Research Group                          #
+#                         Dipartimento di Informatica                         #
+#                             Universita' di Pisa                             #
+# --------------------------------------------------------------------------- #
+get_filename_component(StochasticBlock_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+include(CMakeFindDependencyMacro)
+
+# ----- Requirements -------------------------------------------------------- #
+find_dependency(SMSpp REQUIRED)
+
+# ----- Import target ------------------------------------------------------- #
+if (NOT TARGET SMS++::StochasticBlock)
+    include("${StochasticBlock_CMAKE_DIR}/StochasticBlockTargets.cmake")
+endif ()
+
+set(StochasticBlock_LIBRARIES SMS++::StochasticBlock)
