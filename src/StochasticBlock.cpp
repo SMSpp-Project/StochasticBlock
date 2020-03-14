@@ -6,7 +6,7 @@
  *
  * \version 0.10
  *
- * \date 27 - 02 - 2020
+ * \date 13 - 03 - 2020
  *
  * \author Rafael Durbano Lobato \n
  *         Operations Research Group \n
@@ -49,7 +49,7 @@ void StochasticBlock::deserialize( netCDF::NcGroup & group ) {
 
   auto inner_block = new_Block( inner_block_group, this );
   if( ! inner_block )
-   throw std::logic_error( "StochasticBlock::deserialize: the 'Block'"
+   throw std::logic_error( "StochasticBlock::deserialize: the 'Block' "
                            "group is present but its description is "
                            "incomplete." );
   set_inner_block( inner_block );
@@ -63,6 +63,8 @@ void StochasticBlock::deserialize( netCDF::NcGroup & group ) {
   data_mappings.reserve( num_data_mappings );
   SimpleDataMappingBase::deserialize( group , data_mappings , inner_block );
  }
+
+ Block::deserialize( group );
 }
 
 /*--------------------------------------------------------------------------*/
@@ -81,6 +83,8 @@ void StochasticBlock::add_Modification( sp_Mod mod ,
 /*--------------------------------------------------------------------------*/
 
 void StochasticBlock::serialize( netCDF::NcGroup & group ) const {
+
+ Block::serialize( group );
 
  group.putAtt( "type" , "StochasticBlock" );
 
