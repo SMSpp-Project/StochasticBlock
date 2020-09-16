@@ -7,7 +7,7 @@
 #                             Universita' di Pisa                             #
 # --------------------------------------------------------------------------- #
 cmake_minimum_required(VERSION 3.8...3.15)
-project(StochasticBlock VERSION 0.2.0 LANGUAGES CXX)
+project(StochasticBlock VERSION 0.3.0 LANGUAGES CXX)
 
 # ----- Requirements -------------------------------------------------------- #
 # This is to use the find modules we provide
