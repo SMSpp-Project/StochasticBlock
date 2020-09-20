@@ -61,7 +61,8 @@ void StochasticBlock::deserialize( netCDF::NcGroup & group ) {
                                            num_data_mappings , true ) &&
      num_data_mappings > 0 ) {
   data_mappings.reserve( num_data_mappings );
-  SimpleDataMappingBase::deserialize( group , data_mappings , inner_block );
+  assert( v_Block.size() == 1 && v_Block.front() );
+  SimpleDataMappingBase::deserialize( group , data_mappings , v_Block.front() );
  }
 
  Block::deserialize( group );
@@ -75,7 +76,7 @@ void StochasticBlock::add_Modification( sp_Mod mod ,
                                         Observer::ChnlName chnl ) {
  // TODO
  if( anyone_there() )
-  add_Modification( std::make_shared<NBModification>( this ) );
+  Block::add_Modification( std::make_shared<NBModification>( this ) );
 }
 
 /*--------------------------------------------------------------------------*/
@@ -91,7 +92,7 @@ void StochasticBlock::serialize( netCDF::NcGroup & group ) const {
  Block * inner_block = nullptr;
  if( ! v_Block.empty() ) {
   assert( v_Block.size() == 1 );
-  inner_block = v_Block[ 0 ];
+  inner_block = v_Block.front();
  }
 
  if( inner_block ) {
@@ -110,7 +111,7 @@ void StochasticBlock::print( std::ostream &output ) const {
  if( v_Block.empty() )
   output << "no inner Block";
  else
-  output << "the inner Block " << v_Block[ 0 ] << std::endl;
+  output << "the inner Block " << v_Block.front() << std::endl;
 }
 
 /*--------------------------------------------------------------------------*/
