@@ -18,7 +18,7 @@ get_filename_component(StochasticBlock_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PA
 include(CMakeFindDependencyMacro)
 
 # ----- Requirements -------------------------------------------------------- #
-find_dependency(SMSpp REQUIRED)
+find_dependency(SMSpp)
 
 # ----- Import target ------------------------------------------------------- #
 if (NOT TARGET SMS++::StochasticBlock)

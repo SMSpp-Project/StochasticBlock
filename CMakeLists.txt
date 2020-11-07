@@ -11,17 +11,18 @@ project(StochasticBlock VERSION 0.3.0 LANGUAGES CXX)
 
 # ----- Requirements -------------------------------------------------------- #
 # This is to use the find modules we provide
-list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 find_package(SMSpp REQUIRED)
 
+list(REMOVE_AT CMAKE_MODULE_PATH -1)
+
 # ----- Library ------------------------------------------------------------- #
-add_library(StochasticBlock )
+add_library(StochasticBlock)
 target_compile_features(StochasticBlock PUBLIC cxx_std_17)
 
 target_sources(StochasticBlock PRIVATE
-               src/StochasticBlock.cpp
-               )
+               src/StochasticBlock.cpp)
 
 # Different INSTALL_INTERFACE and BUILD_INTERFACE paths are used when
 # generating the target import file (***Targets.cmake), that must be different
@@ -90,4 +91,8 @@ if (CMAKE_EXPORT_PACKAGE_REGISTRY)
 
     # Register package in user's package registry (~/.cmake/registry)
     export(PACKAGE StochasticBlock)
+endif ()
+
+if (BUILD_TESTING)
+    # Just consuming BUILD_TESTING to avoid warnings
 endif ()
