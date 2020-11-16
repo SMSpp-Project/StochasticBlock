@@ -1,0 +1,20 @@
+/** @file
+ * Configuration header of the StochasticBlock library.
+ *
+ * \author Niccolò Iardella \n
+ *         Operations Research Group \n
+ *         Dipartimento di Informatica \n
+ *         Universita' di Pisa \n
+ *
+ * \copyright &copy; Niccolò Iardella
+ */
+
+#ifndef __STOCHASTICBLOCK_CONFIG_H
+#define __STOCHASTICBLOCK_CONFIG_H
+
+#define StochasticBlock_VERSION       "@StochasticBlock_VERSION@"
+#define StochasticBlock_VERSION_MAJOR "@StochasticBlock_VERSION_MAJOR@"
+#define StochasticBlock_VERSION_MINOR "@StochasticBlock_VERSION_MINOR@"
+#define StochasticBlock_VERSION_PATCH "@StochasticBlock_VERSION_PATCH@"
+
+#endif
