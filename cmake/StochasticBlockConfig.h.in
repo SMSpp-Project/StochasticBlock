@@ -1,5 +1,5 @@
 /** @file
- * Configuration header of the StochasticBlock library.
+ * Configuration header for @modName@.
  *
  * \author Niccolò Iardella \n
  *         Operations Research Group \n
@@ -9,12 +9,12 @@
  * \copyright &copy; Niccolò Iardella
  */
 
-#ifndef __STOCHASTICBLOCK_CONFIG_H
-#define __STOCHASTICBLOCK_CONFIG_H
+#ifndef __@modName@_CONFIG_H
+#define __@modName@_CONFIG_H
 
-#define StochasticBlock_VERSION       "@StochasticBlock_VERSION@"
-#define StochasticBlock_VERSION_MAJOR "@StochasticBlock_VERSION_MAJOR@"
-#define StochasticBlock_VERSION_MINOR "@StochasticBlock_VERSION_MINOR@"
-#define StochasticBlock_VERSION_PATCH "@StochasticBlock_VERSION_PATCH@"
+#define @modName@_VERSION       "@PROJECT_VERSION@"
+#define @modName@_VERSION_MAJOR "@PROJECT_VERSION_MAJOR@"
+#define @modName@_VERSION_MINOR "@PROJECT_VERSION_MINOR@"
+#define @modName@_VERSION_PATCH "@PROJECT_VERSION_PATCH@"
 
 #endif
