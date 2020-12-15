@@ -43,7 +43,7 @@ SMSpp_insert_in_factory_cpp_1( StochasticBlock );
 /*------------- CONSTRUCTING AND DESTRUCTING StochasticBlock ---------------*/
 /*--------------------------------------------------------------------------*/
 
-void StochasticBlock::deserialize( netCDF::NcGroup & group ) {
+void StochasticBlock::deserialize( const netCDF::NcGroup & group ) {
  auto inner_block_group = group.getGroup( "Block" );
  if( ! inner_block_group.isNull() ) {
 

@@ -170,7 +170,7 @@ public:
   *        in the comments to serialize(),
   */
 
- void deserialize( netCDF::NcGroup & group ) override;
+ void deserialize( const netCDF::NcGroup & group ) override;
 
 /*--------------------------------------------------------------------------*/
  /// destructor of StochasticBlock
