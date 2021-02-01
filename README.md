@@ -41,7 +41,8 @@ target_link_libraries(<my_target> SMS++::StochasticBlock)
 
 ## Contributing
 
-This section is not ready yet.
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of
+conduct, and the process for submitting merge requests to us.
 
 ## Authors
 
