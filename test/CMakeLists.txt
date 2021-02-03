@@ -19,3 +19,5 @@ target_link_libraries(StochasticBlock_test PRIVATE SMS++::StochasticBlock)
 
 add_test(NAME StochasticBlock_test
          COMMAND StochasticBlock_test)
+
+# --------------------------------------------------------------------------- #

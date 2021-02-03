@@ -39,6 +39,12 @@ find_package(StochasticBlock)
 target_link_libraries(<my_target> SMS++::StochasticBlock)
 ```
 
+### Running the tests with CMake
+
+Some unit tests will be built with the library.
+Launch `ctest` from the build directory to run them.
+To disable them, set the option `BUILD_TESTING` to `OFF`.
+
 ## Contributing
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of
