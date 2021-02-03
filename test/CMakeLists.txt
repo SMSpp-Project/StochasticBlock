@@ -14,8 +14,8 @@
 #                             Universita' di Pisa                             #
 # --------------------------------------------------------------------------- #
 
-# FIXME: This test cannot be compiled by GCC
-if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    add_executable(StochasticBlock_test test.cpp)
-    target_link_libraries(StochasticBlock_test PRIVATE SMS++::StochasticBlock)
-endif ()
+add_executable(StochasticBlock_test test.cpp)
+target_link_libraries(StochasticBlock_test PRIVATE SMS++::StochasticBlock)
+
+add_test(NAME StochasticBlock_test
+         COMMAND StochasticBlock_test)
