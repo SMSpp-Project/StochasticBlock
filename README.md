@@ -45,6 +45,11 @@ Some unit tests will be built with the library.
 Launch `ctest` from the build directory to run them.
 To disable them, set the option `BUILD_TESTING` to `OFF`.
 
+## Getting help
+
+If you need support, you want to submit bugs or propose a new feature, you can
+[open a new issue](https://gitlab.com/smspp/stochasticblock/-/issues/new).
+
 ## Contributing
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of
