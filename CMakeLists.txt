@@ -21,7 +21,7 @@
 # --------------------------------------------------------------------------- #
 cmake_minimum_required(VERSION 3.11)
 project(StochasticBlock
-        VERSION 0.3.0
+        VERSION 0.4.0
         DESCRIPTION "SMS++ StochasticBlock module"
         HOMEPAGE_URL https://gitlab.com/smspp/stochasticblock
         LANGUAGES C CXX)
