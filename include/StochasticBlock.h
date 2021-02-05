@@ -170,7 +170,7 @@ public:
   *        in the comments to serialize(),
   */
 
- void deserialize( netCDF::NcGroup & group ) override;
+ void deserialize( const netCDF::NcGroup & group ) override;
 
 /*--------------------------------------------------------------------------*/
  /// destructor of StochasticBlock
@@ -182,8 +182,10 @@ public:
   * \c destroy_previous_block parameter. */
 
  virtual ~StochasticBlock() {
-  if( ! v_Block.empty() )
-   delete v_Block[ 0 ];
+  if( ! v_Block.empty() ) {
+   assert( v_Block.size() == 1 );
+   delete v_Block.front();
+  }
   v_Block.clear();
  }
 
@@ -204,12 +206,14 @@ public:
   *        its allocated memory is released.
   */
  void set_inner_block( Block * block , bool destroy_previous_block = true ) {
-  if( ( ! v_Block.empty() ) && ( block == v_Block[ 0 ] ) &&
+  if( ( ! v_Block.empty() ) && ( block == v_Block.front() ) &&
       ( ! destroy_previous_block ) )
    return; // the given Block is already here; silently return
 
-  if( destroy_previous_block && ! v_Block.empty() )
-   delete v_Block[ 0 ];
+  if( destroy_previous_block && ! v_Block.empty() ) {
+   assert( v_Block.size() == 1 );
+   delete v_Block.front();
+  }
 
   v_Block.clear();
   v_Block.push_back( block );
@@ -298,7 +302,7 @@ public:
                 c_ModParam issuePMod = eNoBlck ,
                 c_ModParam issueAMod = eModBlck ) {
   for( size_t i = 0 ; i < data_mappings.size() ; ++i )
-   data_mappings[ i ]->set_data( data , issuePMod , issueAMod );
+   data_mappings[ i ]->set_data( data.begin() , issuePMod , issueAMod );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -307,7 +311,7 @@ public:
  /** This function sets the value of the (possibly stochastic) data of this
   * StochasticBlock.
   *
-  * @param data The array containing the values of the data to be set.
+  * @param data An iterator to the first element of the data.
   *
   * @param issuePMod Decides if and how a "physical Modification" is issued,
   *        as described in Observer::make_par().
@@ -315,8 +319,8 @@ public:
   * @param issueAMod Decides if and how an "abstract Modification" is issued,
   *        as described in Observer::make_par().
   */
- void set_data( const Eigen::ArrayXd & data ,
-                c_ModParam issuePMod = eNoBlck ,
+ template<class Iterator>
+ void set_data( Iterator data , c_ModParam issuePMod = eNoBlck ,
                 c_ModParam issueAMod = eModBlck ) {
   for( size_t i = 0 ; i < data_mappings.size() ; ++i )
    data_mappings[ i ]->set_data( data , issuePMod , issueAMod );
@@ -365,7 +369,7 @@ public:
   */
 
  Block * get_inner_block() const {
-  return inner_block;
+  return v_Block.empty() ? nullptr : v_Block.front();
  }
 
 /**@} ----------------------------------------------------------------------*/
@@ -387,9 +391,6 @@ protected:
 /*--------------------------------------------------------------------------*/
 /*---------------------------- PROTECTED FIELDS  ---------------------------*/
 /*--------------------------------------------------------------------------*/
-
- /// The Block that is becoming stochastic
- Block * inner_block;
 
  /// The vector of data mappings
  std::vector< std::unique_ptr< SimpleDataMappingBase > > data_mappings;
