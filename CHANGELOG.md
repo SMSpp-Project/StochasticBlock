@@ -31,7 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - First test release.
 
-[Unreleased]: https://gitlab.com/smspp/stochasticblock/-/compare/0.3.0...develop
-[0.2.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.2.0...0.3.0
+[Unreleased]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.0...develop
+[0.4.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.3.0...0.4.0
+[0.3.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.2.0...0.3.0
 [0.2.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.1.0...0.2.0
 [0.1.0]: https://gitlab.com/smspp/stochasticblock/-/tags/0.1.0
