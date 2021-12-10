@@ -300,7 +300,7 @@ public:
   */
  void set_data( const std::vector< double > & data ,
                 c_ModParam issuePMod = eNoBlck ,
-                c_ModParam issueAMod = eModBlck ) {
+                c_ModParam issueAMod = eNoBlck ) {
   for( size_t i = 0 ; i < data_mappings.size() ; ++i )
    data_mappings[ i ]->set_data( data.begin() , issuePMod , issueAMod );
  }
@@ -321,7 +321,7 @@ public:
   */
  template<class Iterator>
  void set_data( Iterator data , c_ModParam issuePMod = eNoBlck ,
-                c_ModParam issueAMod = eModBlck ) {
+                c_ModParam issueAMod = eNoBlck ) {
   for( size_t i = 0 ; i < data_mappings.size() ; ++i )
    data_mappings[ i ]->set_data( data , issuePMod , issueAMod );
  }
