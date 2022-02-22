@@ -346,6 +346,23 @@ public:
 
 /*--------------------------------------------------------------------------*/
 
+ /// returns the sense of the Objective of the StochasticBlock
+ /** This function returns the sense of the Objective of the StochasticBlock,
+  * which is defined to be the sense of the Objective of its inner Block. If
+  * this StochasticBlock has no inner Block, this function returns
+  * Objective::eMin.
+  *
+  * @return the sense of the Objective of the inner Block of this
+  *         StochasticBlock. */
+
+ int get_objective_sense() const override {
+  if( auto inner_block = get_inner_block() )
+   return inner_block->get_objective_sense();
+  return Objective::eMin;
+ }
+
+/*--------------------------------------------------------------------------*/
+
  /// returns the vector of pointers to SimpleDataMappingBase
  /** This function returns the vector of pointers to SimpleDataMappingBase
   * that characterizes the data that can be modified through a call to
