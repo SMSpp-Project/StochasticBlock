@@ -80,11 +80,23 @@ void StochasticBlock::add_Modification( sp_Mod mod ,
 }
 
 /*--------------------------------------------------------------------------*/
-/*------- METHODS FOR LOADING, PRINTING & SAVING THE StochasticBlock -------*/
+/*----------- METHODS FOR PRINTING & SAVING THE StochasticBlock ------------*/
 /*--------------------------------------------------------------------------*/
 
-void StochasticBlock::serialize( netCDF::NcGroup & group ) const {
+void StochasticBlock::print( std::ostream & output , char vlvl ) const
+{
+ output << std::endl << "StochasticBlock with ";
 
+ if( v_Block.empty() )
+  output << "no inner Block";
+ else
+  output << "the inner Block " << v_Block.front() << std::endl;
+ }
+
+/*--------------------------------------------------------------------------*/
+
+void StochasticBlock::serialize( netCDF::NcGroup & group ) const
+{
  Block::serialize( group );
 
  group.putAtt( "type" , "StochasticBlock" );
@@ -93,26 +105,15 @@ void StochasticBlock::serialize( netCDF::NcGroup & group ) const {
  if( ! v_Block.empty() ) {
   assert( v_Block.size() == 1 );
   inner_block = v_Block.front();
- }
+  }
 
  if( inner_block ) {
   auto inner_block_group = group.addGroup( "Block" );
   inner_block->serialize( inner_block_group );
- }
+  }
 
  SimpleDataMappingBase::serialize( group , data_mappings , inner_block );
-}
-
-/*--------------------------------------------------------------------------*/
-
-void StochasticBlock::print( std::ostream &output ) const {
- output << std::endl << "StochasticBlock with ";
-
- if( v_Block.empty() )
-  output << "no inner Block";
- else
-  output << "the inner Block " << v_Block.front() << std::endl;
-}
+ }
 
 /*--------------------------------------------------------------------------*/
 /*-------------------- End File StochasticBlock.cpp ------------------------*/

@@ -6,12 +6,7 @@
  * Header file for the StochasticBlock class, which derives from Block and is
  * meant to turn any Block into its stochastic version.
  *
- * \version 0.1
- *
- * \date 27 - 02 - 2020
- *
  * \author Rafael Durbano Lobato \n
- *         Operations Research Group \n
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  *
@@ -130,8 +125,8 @@ namespace SMSpp_di_unipi_it
  * object would be called to consider a particular scenario.
  */
 
-class StochasticBlock : public Block {
-
+class StochasticBlock : public Block
+{
 /*--------------------------------------------------------------------------*/
 /*----------------------- PUBLIC PART OF THE CLASS -------------------------*/
 /*--------------------------------------------------------------------------*/
@@ -159,6 +154,11 @@ public:
   if( inner_block )
    v_Block.push_back( inner_block );
  }
+
+/*--------------------------------------------------------------------------*/
+ /// load the StochasticBlock out of an istream - not implemented yet
+
+ void load( std::istream & input , char frmt = 0 ) override {}
 
 /*--------------------------------------------------------------------------*/
  /// de-serialize a StochasticBlock out of netCDF::NcGroup
@@ -243,22 +243,23 @@ public:
   this->data_mappings = std::move( data_mappings );
  }
 
-/**@} ----------------------------------------------------------------------*/
+/** @} ---------------------------------------------------------------------*/
 /*-------------------- Methods for handling Modification -------------------*/
 /*--------------------------------------------------------------------------*/
 /** @name Methods for handling Modification
  *  @{ */
 
-/*--------------------------------------------------------------------------*/
+ void add_Modification( sp_Mod mod , Observer::ChnlName chnl = 0 ) override;
 
- virtual void add_Modification( sp_Mod mod , Observer::ChnlName chnl = 0 )
-  override;
-
-/**@} ----------------------------------------------------------------------*/
+/** @} ---------------------------------------------------------------------*/
 /*------------ METHODS FOR Saving THE DATA OF THE StochasticBlock ----------*/
 /*--------------------------------------------------------------------------*/
 /** @name Saving the data of the StochasticBlock
  *  @{ */
+
+ /// prints the StochasticBlock onto an ostream
+ 
+ void print( std::ostream & output , char vlvl = 0 ) const override;
 
 /*--------------------------------------------------------------------------*/
  /// serialize a StochasticBlock into a netCDF::NcGroup
@@ -398,12 +399,6 @@ protected:
 /*--------------------------------------------------------------------------*/
 /*-------------------------- PROTECTED METHODS -----------------------------*/
 /*--------------------------------------------------------------------------*/
-
- virtual void print( std::ostream &output ) const override;
-
-/*--------------------------------------------------------------------------*/
-
- virtual void load( std::istream &input ) override {}
 
 /*--------------------------------------------------------------------------*/
 /*---------------------------- PROTECTED FIELDS  ---------------------------*/
