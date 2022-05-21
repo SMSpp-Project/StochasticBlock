@@ -258,7 +258,7 @@ public:
  *  @{ */
 
  /// prints the StochasticBlock onto an ostream
- 
+
  void print( std::ostream & output , char vlvl = 0 ) const override;
 
 /*--------------------------------------------------------------------------*/
@@ -347,11 +347,11 @@ public:
 
 /*--------------------------------------------------------------------------*/
 
- /// returns the sense of the Objective of the StochasticBlock
- /** This function returns the sense of the Objective of the StochasticBlock,
+ /// returns the sense of the Objective of this StochasticBlock
+ /** This function returns the sense of the Objective of this StochasticBlock,
   * which is defined to be the sense of the Objective of its inner Block. If
   * this StochasticBlock has no inner Block, this function returns
-  * Objective::eMin.
+  * Objective::eUndef.
   *
   * @return the sense of the Objective of the inner Block of this
   *         StochasticBlock. */
@@ -359,7 +359,7 @@ public:
  int get_objective_sense() const override {
   if( auto inner_block = get_inner_block() )
    return inner_block->get_objective_sense();
-  return Objective::eMin;
+  return Objective::eUndef;
  }
 
 /*--------------------------------------------------------------------------*/
