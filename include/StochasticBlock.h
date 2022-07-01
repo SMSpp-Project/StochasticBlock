@@ -6,12 +6,7 @@
  * Header file for the StochasticBlock class, which derives from Block and is
  * meant to turn any Block into its stochastic version.
  *
- * \version 0.1
- *
- * \date 27 - 02 - 2020
- *
  * \author Rafael Durbano Lobato \n
- *         Operations Research Group \n
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  *
@@ -130,8 +125,8 @@ namespace SMSpp_di_unipi_it
  * object would be called to consider a particular scenario.
  */
 
-class StochasticBlock : public Block {
-
+class StochasticBlock : public Block
+{
 /*--------------------------------------------------------------------------*/
 /*----------------------- PUBLIC PART OF THE CLASS -------------------------*/
 /*--------------------------------------------------------------------------*/
@@ -159,6 +154,11 @@ public:
   if( inner_block )
    v_Block.push_back( inner_block );
  }
+
+/*--------------------------------------------------------------------------*/
+ /// load the StochasticBlock out of an istream - not implemented yet
+
+ void load( std::istream & input , char frmt = 0 ) override {}
 
 /*--------------------------------------------------------------------------*/
  /// de-serialize a StochasticBlock out of netCDF::NcGroup
@@ -243,22 +243,23 @@ public:
   this->data_mappings = std::move( data_mappings );
  }
 
-/**@} ----------------------------------------------------------------------*/
+/** @} ---------------------------------------------------------------------*/
 /*-------------------- Methods for handling Modification -------------------*/
 /*--------------------------------------------------------------------------*/
 /** @name Methods for handling Modification
  *  @{ */
 
-/*--------------------------------------------------------------------------*/
+ void add_Modification( sp_Mod mod , Observer::ChnlName chnl = 0 ) override;
 
- virtual void add_Modification( sp_Mod mod , Observer::ChnlName chnl = 0 )
-  override;
-
-/**@} ----------------------------------------------------------------------*/
+/** @} ---------------------------------------------------------------------*/
 /*------------ METHODS FOR Saving THE DATA OF THE StochasticBlock ----------*/
 /*--------------------------------------------------------------------------*/
 /** @name Saving the data of the StochasticBlock
  *  @{ */
+
+ /// prints the StochasticBlock onto an ostream
+
+ void print( std::ostream & output , char vlvl = 0 ) const override;
 
 /*--------------------------------------------------------------------------*/
  /// serialize a StochasticBlock into a netCDF::NcGroup
@@ -300,7 +301,7 @@ public:
   */
  void set_data( const std::vector< double > & data ,
                 c_ModParam issuePMod = eNoBlck ,
-                c_ModParam issueAMod = eModBlck ) {
+                c_ModParam issueAMod = eNoBlck ) {
   for( size_t i = 0 ; i < data_mappings.size() ; ++i )
    data_mappings[ i ]->set_data( data.begin() , issuePMod , issueAMod );
  }
@@ -321,7 +322,7 @@ public:
   */
  template<class Iterator>
  void set_data( Iterator data , c_ModParam issuePMod = eNoBlck ,
-                c_ModParam issueAMod = eModBlck ) {
+                c_ModParam issueAMod = eNoBlck ) {
   for( size_t i = 0 ; i < data_mappings.size() ; ++i )
    data_mappings[ i ]->set_data( data , issuePMod , issueAMod );
  }
@@ -343,6 +344,23 @@ public:
 /*--------------------------------------------------------------------------*/
 /** @name Reading the data of the StochasticBlock
     @{ */
+
+/*--------------------------------------------------------------------------*/
+
+ /// returns the sense of the Objective of this StochasticBlock
+ /** This function returns the sense of the Objective of this StochasticBlock,
+  * which is defined to be the sense of the Objective of its inner Block. If
+  * this StochasticBlock has no inner Block, this function returns
+  * Objective::eUndef.
+  *
+  * @return the sense of the Objective of the inner Block of this
+  *         StochasticBlock. */
+
+ int get_objective_sense() const override {
+  if( auto inner_block = get_inner_block() )
+   return inner_block->get_objective_sense();
+  return Objective::eUndef;
+ }
 
 /*--------------------------------------------------------------------------*/
 
@@ -381,12 +399,6 @@ protected:
 /*--------------------------------------------------------------------------*/
 /*-------------------------- PROTECTED METHODS -----------------------------*/
 /*--------------------------------------------------------------------------*/
-
- virtual void print( std::ostream &output ) const override;
-
-/*--------------------------------------------------------------------------*/
-
- virtual void load( std::istream &input ) override {}
 
 /*--------------------------------------------------------------------------*/
 /*---------------------------- PROTECTED FIELDS  ---------------------------*/

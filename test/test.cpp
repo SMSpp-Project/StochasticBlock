@@ -114,7 +114,7 @@ public:
 
 protected:
 
- void load( std::istream & input ) override {}
+ void load( std::istream & input , char frmt ) override {}
 
 private:
  std::vector< int > int_data;
