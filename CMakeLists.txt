@@ -22,7 +22,7 @@
 cmake_minimum_required(VERSION 3.12)
 cmake_policy(VERSION 3.12)
 project(StochasticBlock
-        VERSION 0.4.1
+        VERSION 0.4.2
         DESCRIPTION "SMS++ StochasticBlock module"
         HOMEPAGE_URL https://gitlab.com/smspp/stochasticblock
         LANGUAGES C CXX)
