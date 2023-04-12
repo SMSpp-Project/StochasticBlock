@@ -4,13 +4,7 @@
 #                                                                            #
 #   makefile of test (for StochasticBlock)                                   #
 #                                                                            #
-#                                VERSION 1.00                                #
-#                               11 - 07 - 2021                               #
-#                                                                            #
-#                              Implementation by:                            #
-#                                                                            #
 #                              Antonio Frangioni                             #
-#                           Operations Research Group                        #
 #                          Dipartimento di Informatica                       #
 #                              Universita' di Pisa                           #
 #                                                                            #

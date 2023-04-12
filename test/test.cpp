@@ -2,14 +2,9 @@
 /*-------------------- File tests_BendersBFunction.cpp ---------------------*/
 /*--------------------------------------------------------------------------*/
 /** @file
- * Main for testing StochasticBlock
- *
- * \version 0.10
- *
- * \date 28 - 09 - 2020
+ * Main for testing StochasticBlock.
  *
  * \author Rafael Durbano Lobato \n
- *         Operations Research Group \n
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  *
