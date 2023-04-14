@@ -4,12 +4,7 @@
 /** @file
  * Implementation of the StochasticBlock class.
  *
- * \version 0.10
- *
- * \date 13 - 03 - 2020
- *
  * \author Rafael Durbano Lobato \n
- *         Operations Research Group \n
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  *

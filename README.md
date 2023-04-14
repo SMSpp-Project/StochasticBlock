@@ -60,7 +60,6 @@ conduct, and the process for submitting merge requests to us.
 ### Lead Authors
 
 - **Rafael Durbano Lobato**  
-  *Operations Research Group*  
   Dipartimento di Informatica  
   Università di Pisa
 
