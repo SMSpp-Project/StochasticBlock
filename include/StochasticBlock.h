@@ -210,7 +210,7 @@ public:
       ( ! destroy_previous_block ) )
    return; // the given Block is already here; silently return
 
-  if( destroy_previous_block && ! v_Block.empty() ) {
+  if( destroy_previous_block && ( ! v_Block.empty() ) ) {
    assert( v_Block.size() == 1 );
    delete v_Block.front();
   }
