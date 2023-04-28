@@ -71,7 +71,7 @@ void StochasticBlock::add_Modification( sp_Mod mod ,
                                         Observer::ChnlName chnl ) {
  // TODO
  if( anyone_there() )
-  Block::add_Modification( std::make_shared<NBModification>( this ) );
+  Block::add_Modification( std::make_shared< NBModification >( this ) );
 }
 
 /*--------------------------------------------------------------------------*/

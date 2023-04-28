@@ -222,7 +222,7 @@ public:
    block->set_f_Block( this );
 
  if( anyone_there() )
-  add_Modification( std::make_shared<NBModification>( this ) );
+  add_Modification( std::make_shared< NBModification >( this ) );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -320,7 +320,7 @@ public:
   * @param issueAMod Decides if and how an "abstract Modification" is issued,
   *        as described in Observer::make_par().
   */
- template<class Iterator>
+ template< class Iterator >
  void set_data( Iterator data , c_ModParam issuePMod = eNoBlck ,
                 c_ModParam issueAMod = eNoBlck ) {
   for( size_t i = 0 ; i < data_mappings.size() ; ++i )
@@ -335,7 +335,7 @@ public:
   *
   * @param data_mapping The SimpleDataMappingBase to be added.
   */
- void add_data_mapping( std::unique_ptr<SimpleDataMappingBase> data_mapping ) {
+ void add_data_mapping( std::unique_ptr< SimpleDataMappingBase > data_mapping ) {
   data_mappings.push_back( std::move( data_mapping ) );
  }
 
