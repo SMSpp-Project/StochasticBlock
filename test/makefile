@@ -57,7 +57,7 @@ include $(StcBlkSDR)/makefile
 # object files
 MOBJ =  $(SMS++OBJ) $(StcBlkOBJ)
 
-# libreries
+# libraries
 MLIB =  $(SMS++LIB) $(StcBlkLIB)
 
 $(DIR)/$(NAME): $(MOBJ) $(DIR)/test.o
