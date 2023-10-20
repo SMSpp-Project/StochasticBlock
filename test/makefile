@@ -69,7 +69,7 @@ $(DIR)/$(NAME): $(MOBJ) $(DIR)/test.o
 MINC =  $(SMS++INC) $(StcBlkINC)
 
 # includes
-MH =     $(SMS++H) $(StcBlkH)
+MH =    $(SMS++H) $(StcBlkH)
 
 # compile command
 
