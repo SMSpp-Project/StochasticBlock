@@ -32,7 +32,7 @@
 
 StcBlkOBJ = $(StcBlkSDR)/obj/StochasticBlock.o 
 
-StcBlkINC = -I$(StcBlkSDR)/include/
+StcBlkINC = -I$(StcBlkSDR)/include
 
 StcBlkH   = $(StcBlkSDR)/include/StochasticBlock.h 
 
