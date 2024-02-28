@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added 
+
+### Changed 
+
+### Fixed 
+
+## [0.4.3] - 2024-02-28
+
+### Changed 
+
+- adapted to new CMake / makefile organisation
+
 ## [0.4.2] - 2022-07-01
 
 ### Added
