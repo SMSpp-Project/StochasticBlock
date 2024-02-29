@@ -7,17 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added 
+### Added
 
-### Changed 
+### Changed
 
-### Fixed 
+### Fixed
 
-## [0.4.3] - 2024-02-28
+## [0.4.3] - 2024-02-29
 
-### Changed 
+### Changed
 
-- adapted to new CMake / makefile organisation
+- Adapt to new CMake / makefile organisation
 
 ## [0.4.2] - 2022-07-01
 
@@ -64,7 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - First test release.
 
-[Unreleased]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.2...develop
+[Unreleased]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.3...develop
+[0.4.3]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.2...0.4.3
 [0.4.2]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.1...0.4.2
 [0.4.1]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.0...0.4.1
 [0.4.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.3.0...0.4.0
