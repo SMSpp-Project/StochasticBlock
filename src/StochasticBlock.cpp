@@ -8,7 +8,7 @@
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  *
- * Copyright &copy; by Rafael Durbano Lobato
+ * \copyright &copy; by Rafael Durbano Lobato
  */
 /*--------------------------------------------------------------------------*/
 /*---------------------------- IMPLEMENTATION ------------------------------*/
@@ -71,7 +71,7 @@ void StochasticBlock::add_Modification( sp_Mod mod ,
                                         Observer::ChnlName chnl ) {
  // TODO
  if( anyone_there() )
-  Block::add_Modification( std::make_shared<NBModification>( this ) );
+  Block::add_Modification( std::make_shared< NBModification >( this ) );
 }
 
 /*--------------------------------------------------------------------------*/

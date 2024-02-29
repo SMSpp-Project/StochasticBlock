@@ -15,13 +15,14 @@
 #          keep it in mind when editing it.                                   #
 #                                                                             #
 #                              Niccolo' Iardella                              #
+#                                Donato Meoli                                 #
 #                         Dipartimento di Informatica                         #
 #                             Universita' di Pisa                             #
 # --------------------------------------------------------------------------- #
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.19)
 cmake_policy(VERSION 3.12)
 project(StochasticBlock
-        VERSION 0.4.2
+        VERSION 0.4.3
         DESCRIPTION "SMS++ StochasticBlock module"
         HOMEPAGE_URL https://gitlab.com/smspp/stochasticblock
         LANGUAGES C CXX)
@@ -117,7 +118,7 @@ install(TARGETS ${modName}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # Install the headers
-install(DIRECTORY include/
+install(DIRECTORY include
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${modNamespace})
 
 # Install the auto-generated configuration header (see above).

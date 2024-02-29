@@ -30,21 +30,21 @@
 
 # macros to be exported - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-StcBlkOBJ = $(StcBlkSDR)obj/StochasticBlock.o 
+StcBlkOBJ = $(StcBlkSDR)/obj/StochasticBlock.o 
 
-StcBlkINC = -I$(StcBlkSDR)include/
+StcBlkINC = -I$(StcBlkSDR)/include
 
-StcBlkH   = $(StcBlkSDR)include/StochasticBlock.h 
+StcBlkH   = $(StcBlkSDR)/include/StochasticBlock.h 
 
 # clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 clean::
-	rm -f $(StcBlkOBJ) $(StcBlkSDR)*~
+	rm -f $(StcBlkOBJ) $(StcBlkSDR)/*~
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
-$(StcBlkOBJ): $(StcBlkSDR)src/StochasticBlock.cpp $(StcBlkH) $(SMS++OBJ)
-	$(CC) -c $(StcBlkSDR)src/StochasticBlock.cpp -o $@ $(StcBlkINC) \
+$(StcBlkOBJ): $(StcBlkSDR)/src/StochasticBlock.cpp $(StcBlkH) $(SMS++OBJ)
+	$(CC) -c $(StcBlkSDR)/src/StochasticBlock.cpp -o $@ $(StcBlkINC) \
 	$(SMS++INC) $(SW)
 
 ########################## End of makefile ###################################

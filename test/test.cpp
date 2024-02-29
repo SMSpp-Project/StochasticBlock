@@ -8,7 +8,7 @@
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  *
- * Copyright &copy; by Rafael Durbano Lobato
+ * \copyright &copy; by Rafael Durbano Lobato
  */
 
 /*--------------------------------------------------------------------------*/
@@ -123,7 +123,7 @@ SMSpp_insert_in_factory_cpp_1( DummyBlock );
 /*------------------------- AUXILIARY FUNCTIONS ----------------------------*/
 /*--------------------------------------------------------------------------*/
 
-template<class T>
+template< class T >
 struct Iter;
 
 template<>
@@ -141,12 +141,12 @@ struct FunctionType;
 
 template< class T >
 struct FunctionType< Subset , T > {
- using type = Block::FunctionType< typename Iter<T>::type , Subset && , bool >;
+ using type = Block::FunctionType< typename Iter< T >::type , Subset && , bool >;
 };
 
 template< class T >
 struct FunctionType< Range , T > {
- using type = Block::FunctionType< typename Iter<T>::type , Range >;
+ using type = Block::FunctionType< typename Iter< T >::type , Range >;
 };
 
 template< class S , class T >
