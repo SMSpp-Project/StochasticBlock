@@ -44,12 +44,15 @@
  * from the results of the previous stage, general multi-stage scenarios where
  * the random variables depend on the entire previous history, and so on. In
  * many cases the user is not concerned with these details, and therefore they
- * can just program agaist the [MultiStage]ScenarioGenerator interface.
+ * can just program against the [MultiStage]ScenarioGenerator interface.
  *
- * \author Antonio Frangioni \n Dipartimento di Informatica \n Universita' di
- *         Pisa \n
+ * \author Antonio Frangioni \n
+ *         Dipartimento di Informatica \n
+ *         Universita' di Pisa \n
  *
- * \author Benoit Tran \n Dipartimento di Informatica \n Universita' di Pisa \n
+ * \author Benoit Tran \n
+ *         Dipartimento di Informatica \n
+ *         Universita' di Pisa \n
  *
  * \copyright &copy; by Antonio Frangioni
  */
@@ -491,8 +494,7 @@ class ScenarioGenerator
   * current scenario and can be read [see get_current_scenario()] and
   * get_current_scenario_probability()] right away. */
 
- [[nodiscard]] virtual void init_representative_pool(
-						    ScenarioIndex size ) = 0;
+ [[nodiscard]] virtual void init_representative_pool( ScenarioIndex size ) = 0;
 
 /*--------------------------------------------------------------------------*/
  /// read the data of the current scenario
