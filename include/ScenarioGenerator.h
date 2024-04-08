@@ -69,8 +69,8 @@
 /*--------------------------------------------------------------------------*/
 
 #include "SMSTypedefs.h"
-#include <span> // To be added in SMSTypedefs.h includes of the std library?
 
+#include <span> // To be added in SMSTypedefs.h includes of the std library?
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/

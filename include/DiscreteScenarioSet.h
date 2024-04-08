@@ -1,7 +1,8 @@
 #ifndef __DiscreteScenarioSet
 #define __DiscreteScenarioSet
 
-#include "ScenarioGenerator.h" 
+#include "ScenarioGenerator.h"
+
 #include <vector>
 #include <random>
 
@@ -31,7 +32,7 @@ protected:
     // Internal methods
 
     /* 
-        NEED DESIGN DISCUSSION WITH ANTONIO, (see todo.md not comitted)
+        NEED DESIGN DISCUSSION WITH ANTONIO, (see todo.md not committed)
         virtual void deserialize_scenarios( const netCDF::NcGroup & group ) = 0;
     */
 private:
@@ -53,7 +54,7 @@ private:
 
     void update_sampleSize(ScenarioIndex size){
         if (size > nbScenarios) {
-            throw std::out_of_range("The desired sample size is greater than the number of avaible number of different scenarios");
+            throw std::out_of_range("The desired sample size is greater than the number of available number of different scenarios");
         }
         sampleSize = size;
     }
