@@ -51,7 +51,7 @@ ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario(void) {
     scenarioPool.getVar({currentScenarioIndex, 0}, {1, scenarioSize}, scenarioData.data());
 
     // Convert the current scenario to std::span and return
-    return std::span<const double>(scenarioData);
+    return std::span< const double >( scenarioData );
 }
 
 double DiscreteScenarioSet::get_current_scenario_probability(void) {

@@ -71,6 +71,7 @@
 #include "SMSTypedefs.h"
 
 #include <span> // To be added in SMSTypedefs.h includes of the std library?
+                // but it requires cxx_std_20
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
@@ -471,7 +472,7 @@ class ScenarioGenerator
   * current scenario and can be read [see get_current_scenario()] and
   * get_current_scenario_probability()] right away. */
 
- [[nodiscard]] virtual void init_random_pool( ScenarioIndex size ) = 0;
+ virtual void init_random_pool( ScenarioIndex size ) = 0;
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
  /// generate a "representative" pool of given size
@@ -494,7 +495,7 @@ class ScenarioGenerator
   * current scenario and can be read [see get_current_scenario()] and
   * get_current_scenario_probability()] right away. */
 
- [[nodiscard]] virtual void init_representative_pool( ScenarioIndex size ) = 0;
+ virtual void init_representative_pool( ScenarioIndex size ) = 0;
 
 /*--------------------------------------------------------------------------*/
  /// read the data of the current scenario

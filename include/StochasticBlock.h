@@ -2,7 +2,6 @@
 /*---------------------- File StochasticBlock.h ----------------------------*/
 /*--------------------------------------------------------------------------*/
 /** @file
- *
  * Header file for the StochasticBlock class, which derives from Block and is
  * meant to turn any Block into its stochastic version.
  *
