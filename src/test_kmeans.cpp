@@ -32,7 +32,7 @@ void testKmeans() {
         std::cout << "Scenario " << i << ": Cluster " << labels[i] << std::endl;
     }
 
-    // Now centers contains your cluster centers
+    // Output the centers
     for (const auto& center : centers) {
         std::cout << "Center: " << center.transpose() << std::endl;
     }
