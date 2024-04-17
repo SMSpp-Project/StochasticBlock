@@ -114,7 +114,7 @@ namespace SMSpp_di_unipi_it
 
     /// K-Means clustering function
     /** Naïve implementation of Lloyd's algorithm to solve the kmeans 
-     * clustering problem. Return the centers of the clusters.
+     * clustering problem. Return the centers of the clusters and labels of each point.
      * Could greatly benefit from better heuristics (in the centers initialization)
      * or in the stopping criteria.*/
 
