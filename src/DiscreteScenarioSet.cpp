@@ -1,72 +1,119 @@
+/*--------------------------------------------------------------------------*/
+/*-------------------- File DiscreteScenarioSet.cpp ------------------------*/
+/*--------------------------------------------------------------------------*/
+/** @file
+ * Class DiscreteScenarioSet that is an implementation of ScenarioGenerator 
+ * suited to the case where the input distribution is contained in a netCDF file
+ * as a collection of vectors. Associated with the header file 
+ * DiscreteScenarioSet.h
+ *
+ * \author Antonio Frangioni \n Dipartimento di Informatica \n Universita' di
+ *         Pisa \n
+ *
+ * \author Benoit Tran \n Dipartimento di Informatica \n Universita' di Pisa \n
+ *
+ * \copyright &copy; by Antonio Frangioni
+ */
+
+/*--------------------------------------------------------------------------*/
+/*------------------------------ INCLUDES ----------------------------------*/
+/*--------------------------------------------------------------------------*/
+
 #include "DiscreteScenarioSet.h"
+#include "Kmeans.cpp"
+
 #include <stdexcept> // For standard exceptions
 
-namespace SMSpp_di_unipi_it {
+/*--------------------------------------------------------------------------*/
+/*----------------------------- NAMESPACE ----------------------------------*/
+/*--------------------------------------------------------------------------*/
 
-// Information is contained in a netCDF file, by default will assume that the
-// user want to generate a single scenario. Optionally, the user can precise the
-// desired sample size with the second variable "size".
-DiscreteScenarioSet::DiscreteScenarioSet(const std::string& file){
-        ScenarioGenerator::deserialize(file);
+/// namespace for the Structured Modeling System++ (SMS++)
+namespace SMSpp_di_unipi_it {
+/*--------------------------------------------------------------------------*/
+/*--------------------- CLASS DiscreteScenarioSet --------------------------*/
+/*--------------------------------------------------------------------------*/
+/*--------------------------- GENERAL NOTES --------------------------------*/
+/*--------------------------------------------------------------------------*/
+
+/// Concrete implementation of ScenarioGenerator
+DiscreteScenarioSet::DiscreteScenarioSet(){
         set_seed(1337);
 }
 
+/// Destructor
 DiscreteScenarioSet::~DiscreteScenarioSet() {
-    // Destructor implementation 
 }
-
+    
+/// Implementation for setting the seed of the pseudo-random number generator
 void DiscreteScenarioSet::set_seed(unsigned long seed) {
-    // Implementation for setting the seed of the pseudo-random number generator
-    this->seed = seed;
+    rng.seed(seed);
 }
 
 
+/// Function to select a random subset from the input scenario pool
+/** The function init_random_pool selects randomly a few scenarios among the 
+ * ones that were deserialized from the input. It saves a subset of 
+ * ScenarioIndex-es into an internal variable called scenarioIndexes.*/
 void DiscreteScenarioSet::init_random_pool(ScenarioIndex size) {
-    // Implementation for initializing a scenarioPool
-    update_sampleSize(size); // also asserts that size < nbScenarios
+    update_poolSize(size);
 
-    // The pool is made of size Scenario-s among the nbScenarios in scenarioPool
-    generateRandomSubset(seed, nbScenarios, size); 
+    // Update in-place ScenarioIndexes
+    generateRandomSubset(nbScenarios, size); 
 }
 
+/// Function to compute a finite set of representative scenario
+/** The function init_representative_pool(ScenarioIndex size) computes a set of 
+ * scenarios that approximates the input set of scenarios according to some 
+ * optimization criterium. 
+ * 
+ * By default, a native (and naive) implementation of kmeans clustering is used.
+ * 
+ * First transform every scenario, contained in a boost::multi_array<double,2>,
+ * into an Eigen::VectorXd. Transformed using Eigen::Map, 
+ * */
 void DiscreteScenarioSet::init_representative_pool(ScenarioIndex size) {
-    /* Implementation for initializing a representative scenarioPool.
+    update_poolSize(size);
 
-    I wanted to do kmeans clustering. Native implementation in kmeans.cpp (not
-    commited) or should I use OpenCV library for optimized implementation?
-    */
-   update_sampleSize(size); // also asserts that size < NbScenarios
-}
-
-ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario(void) {
-    /* 
-    Implementation for retrieving the current scenario. Ensure that
-    currentScenarioIndex is within bounds.
-    */
-    if (currentScenarioIndex >= sampleSize) {
-        throw std::out_of_range("Current scenario index is out of range.");
+    // Convert every input scenario into an Eigen::VectorXd
+    PoolMap eigenSet;
+    eigenSet.reserve(nbScenarios);
+    for (size_t i = 0; i < scenarioSet.shape()[0]; i++)
+    {
+        eigenSet.emplace_back(Eigen::Map<Eigen::VectorXd>(&scenarioSet[i][0],
+         scenarioSize));
     }
 
-    // Query the current scenario in the buffer scenarioData
-    scenarioPool.getVar({currentScenarioIndex, 0}, {1, scenarioSize}, scenarioData.data());
+    // Updates first rows of scenarioSet with contains the cluster barycenters
+    kMeans(size, eigenSet);
 
-    // Convert the current scenario to std::span and return
-    return std::span< const double >( scenarioData );
+    // The representative scenarios are now the first rows of scenarioSet
+    scenarioIndexes.resize(size);  
+    std::iota(scenarioIndexes.begin(), scenarioIndexes.end(), 0);
+}
+
+
+/// Function for retrieving the current scenario.
+/** Checks that the internal variable currentScenarioIndex is within bounds,
+ * then converts the currentScenarioIndex-th row of the scenario pool as a 
+ * Scenario, that is as a std::span< const double >. */
+ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario(void) {
+    if (currentScenarioIndex >= poolSize) {
+        throw std::out_of_range("Current scenario index is out of range.");
+    }
+    return Scenario( &scenarioSet[currentScenarioIndex][0],
+     get_scenario_size() );
 }
 
 double DiscreteScenarioSet::get_current_scenario_probability(void) {
-    // Implementation for retrieving the probability of the current scenario
-    // Ensure that currentScenarioIndex is within bounds
-    if (currentScenarioIndex >= scenarioProbabilities.size()) {
+    if (currentScenarioIndex >= poolSize) {
         throw std::out_of_range("Current scenario index is out of range.");
     }
     return scenarioProbabilities[currentScenarioIndex];
 }
 
 bool DiscreteScenarioSet::next_scenario(void) {
-    // Implementation for moving to the next scenario Check if there is a next
-    // scenario and update currentScenarioIndex accordingly
-    if (currentScenarioIndex + 1 < sampleSize) {
+    if (currentScenarioIndex < poolSize - 1) {
         currentScenarioIndex++;
         return true; // Successfully moved to the next scenario
     }
@@ -78,66 +125,38 @@ ScenarioGenerator::ScenarioSize DiscreteScenarioSet::get_scenario_size(void) {
     return scenarioSize;
 }
 
-void DiscreteScenarioSet::deserialize(const netCDF::NcGroup& group) {
-    // Implementation for deserializing a DiscreteScenarioSet from a
-    // netCDF::NcGroup 
-
+/// deserialize Scenarios from a netCDF::NcGroup
+/** Save the Scenarios contained in a netCDF::NcGroup into the internal variable 
+ * boost::multi_array< double, 2 > scenarioPool. Optionally, if weights for the 
+ * scenarios are provided then save them as well into a std::vector< double >, 
+ * otherwise assume uniform weights. */
+void DiscreteScenarioSet::deserialize( const netCDF::NcGroup& group ) {
+    // Compute the two dimensions of the scenarioPool
     ::SMSpp_di_unipi_it::deserialize_dim( group , "NumberScenarios" ,
                                     nbScenarios , false );
 
     ::SMSpp_di_unipi_it::deserialize_dim( group , "ScenarioSize" ,
                                         scenarioSize , false );
 
-    /*
-        NEED DESIGN DISCUSSION WITH ANTONIO, (see todo.md not comitted)
-        deserialize_scenarios( group );
-    */
-   scenarioPool = group.getVar("Scenarios");
-
+    // Deserialize the Scenarios inside the scenarioPool
+    scenarioSet.resize(boost::extents[nbScenarios][scenarioSize]);
+    ::SMSpp_di_unipi_it::deserialize( group, "Scenarios" , scenarioSet, true,
+     false);
 
     // If weights are not present, assume uniform weights
-    try{
-    ::SMSpp_di_unipi_it::deserialize_dim( group , "ScenarioProbabilities" , scenarioProbabilities, true );
-    } catch (const std::invalid_argument &e){
+    if ( !::SMSpp_di_unipi_it::deserialize( group , "ScenarioProbabilities" ,
+     scenarioSize, scenarioProbabilities )){
         scenarioProbabilities.resize(scenarioSize, 1.0 / scenarioSize);
     }
 }
 
-/* 
-    NEED DESIGN DISCUSSION WITH ANTONIO, (see todo.md not comitted)
-
-    // Internal method implementations
-
-    void DiscreteScenarioSet::deserialize_scenarios( const netCDF::NcGroup & group ) {
-        // Gather the input scenarios in the scenarioPool
-        scenarioPool.resize( nbScenarios , std::vector< double >( scenarioSize ) );
-
-        auto scenarios_var = group.getVar( "Scenarios" );
-
-        if( scenarios_var.isNull() )
-        throw( std::invalid_argument
-                ( "ScenarioSet::deserialize_scenarios: 'Scenarios' "
-                    "variable has not been provided." ) );
-
-        auto dims = scenarios_var.getDims();
-
-        if( ( dims.size() != 2 ) || ( dims[ 0 ].getSize() != nbScenarios ) ||
-            ( dims[ 1 ].getSize() != scenarioSize ) )
-
-        throw( std::logic_error
-                ( "ScenarioSet::deserialize_scenarios: 'Scenarios' must be a two-"
-                    "dimensional array whose first and second dimensions have sizes "
-                    "'NumberScenarios' and 'ScenarioSize', respectively." ) );
-        for( decltype(scenarioPool)::size_type i = 0 ; i < scenarioPool.size() ; ++i )
-        scenarios_var.getVar( { i , 0 } , { 1 , scenarioPool[ i ].size() } ,
-                                scenarioPool[ i ].data() );
-    }
-*/
-
-// Additional functions
-
-
-// Factory registration. Why doesn't it work?
-// SMSpp_insert_in_factory_cpp_0("DiscreteScenarioSet");
+/*--------------------------------------------------------------------------*/
+/*-------------------------- FACTORY MANAGEMENT ----------------------------*/
+/*--------------------------------------------------------------------------*/
+SMSpp_insert_in_factory_cpp_0(DiscreteScenarioSet);
 
 } // namespace SMSpp_di_unipi_it
+
+/*--------------------------------------------------------------------------*/
+/*------------------ End file DiscreteScenarioSet.cpp ----------------------*/
+/*--------------------------------------------------------------------------*/
