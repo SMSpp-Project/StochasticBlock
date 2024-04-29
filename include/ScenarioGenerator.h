@@ -46,13 +46,10 @@
  * many cases the user is not concerned with these details, and therefore they
  * can just program against the [MultiStage]ScenarioGenerator interface.
  *
- * \author Antonio Frangioni \n
- *         Dipartimento di Informatica \n
- *         Universita' di Pisa \n
+ * \author Antonio Frangioni \n Dipartimento di Informatica \n Universita' di
+ *         Pisa \n
  *
- * \author Benoit Tran \n
- *         Dipartimento di Informatica \n
- *         Universita' di Pisa \n
+ * \author Benoit Tran \n Dipartimento di Informatica \n Universita' di Pisa \n
  *
  * \copyright &copy; by Antonio Frangioni
  */
@@ -72,9 +69,8 @@
 
 #include <span> // To be added in SMSTypedefs.h includes of the std library?
                 // but it requires cxx_std_20
-
 /*--------------------------------------------------------------------------*/
-/*----------------------------- NAMESPACE ----------------------------------*/
+/*----------------------------- NAMESPACE ----------------------------------*/  
 /*--------------------------------------------------------------------------*/
 
 /// namespace for the Structured Modeling System++ (SMS++)
@@ -268,17 +264,27 @@ class ScenarioGenerator
   * i.e., without any reference to any specific ScenarioGenerator. */
 
 [[nodiscard]] static ScenarioGenerator* deserialize(const std::string& filename) {
-    try {
-      // Relies on netCDF API to handle is_open() check
-      netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
+  try {
+    // Relies on netCDF API to handle is_open() check
+    /*
+      might need to change filename into a cstring, if it works, let antonio knows
+    */
+    netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
 
-      return( ScenarioGenerator::new_ScenarioGenerator( dataFile ) );
-    }
-    catch (netCDF::exceptions::NcException& e) {
-        std::cerr << "Error opening or processing netCDF file: " << e.what() << std::endl;
-    }
+    return( ScenarioGenerator::new_ScenarioGenerator( dataFile ) );
+  }
+  catch (netCDF::exceptions::NcException& e) {
+      std::cerr << "Error opening or processing netCDF file: " << e.what() << std::endl;
+  }
+  catch( std::exception & e ) {
+   std::cerr << "error " << e.what() << " in deserialize" << std::endl;
+   }
+  catch( ... ) {
+   std::cerr << "unknown error in deserialize" << std::endl;
+  }
     return nullptr;
 }
+
 
 
 /*--------------------------------------------------------------------------*/
@@ -291,7 +297,7 @@ class ScenarioGenerator
   * The method works with two different kinds of netCDF::NcGroup:
   *
   * - A "direct" group that contains at least the string attribute "type"; this
-  *   is used it in the factory to construct an "empty" :ScenarioGenerator of
+  *   is used in the factory to construct an "empty" :ScenarioGenerator of
   *   that type [see new_ScenarioGenerator( std::string & )], and then the
   *   method deserialize( netCDF::NcGroup ) of the newly minted
   *   :ScenarioGenerator is invoked (with argument \p group) to finish the work.
@@ -472,7 +478,7 @@ class ScenarioGenerator
   * current scenario and can be read [see get_current_scenario()] and
   * get_current_scenario_probability()] right away. */
 
- virtual void init_random_pool( ScenarioIndex size ) = 0;
+  virtual void init_random_pool( ScenarioIndex size ) = 0;
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
  /// generate a "representative" pool of given size
@@ -495,7 +501,8 @@ class ScenarioGenerator
   * current scenario and can be read [see get_current_scenario()] and
   * get_current_scenario_probability()] right away. */
 
- virtual void init_representative_pool( ScenarioIndex size ) = 0;
+  virtual void init_representative_pool(
+						    ScenarioIndex size ) = 0;
 
 /*--------------------------------------------------------------------------*/
  /// read the data of the current scenario
@@ -511,8 +518,6 @@ class ScenarioGenerator
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
  /// return the probability associated to the current scenario
- /** Does it always make sense??
-  */
  
  [[nodiscard]] virtual double get_current_scenario_probability( void )  = 0;
 
