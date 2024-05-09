@@ -693,7 +693,7 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
 
  virtual ~MultiStageScenarioGenerator() = default; 
 
-/** @} ---------------------------------------------------------------------*/
+/** @} -----------------------------------------------------F----------------*/
 /*- METHODS FOR READING THE STATIC DATA OF THE MultiStageScenarioGenerator -*/
 /*--------------------------------------------------------------------------*/
 /** @name Reading the static data of the MultiStageScenarioGenerator

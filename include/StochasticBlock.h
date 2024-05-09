@@ -2,6 +2,7 @@
 /*---------------------- File StochasticBlock.h ----------------------------*/
 /*--------------------------------------------------------------------------*/
 /** @file
+ *
  * Header file for the StochasticBlock class, which derives from Block and is
  * meant to turn any Block into its stochastic version.
  *
@@ -352,13 +353,13 @@ public:
   * this StochasticBlock has no inner Block, this function returns
   * Objective::eUndef.
   *
-  * @return the sense of the Objective of the inner Block of this
+  * @return The sense of the Objective of the inner Block of this
   *         StochasticBlock. */
 
  int get_objective_sense() const override {
   if( auto inner_block = get_inner_block() )
-   return inner_block->get_objective_sense();
-  return Objective::eUndef;
+   return( inner_block->get_objective_sense() );
+  return( Objective::eUndef );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -373,7 +374,7 @@ public:
 
  const std::vector< std::unique_ptr< SimpleDataMappingBase > > &
  get_data_mappings() const {
-  return data_mappings;
+  return( data_mappings );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -386,7 +387,7 @@ public:
   */
 
  Block * get_inner_block() const {
-  return v_Block.empty() ? nullptr : v_Block.front();
+  return( v_Block.empty() ? nullptr : v_Block.front() );
  }
 
 /**@} ----------------------------------------------------------------------*/

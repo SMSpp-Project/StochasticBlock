@@ -1,9 +1,9 @@
 /*--------------------------------------------------------------------------*/
 /*-------------------- File DiscreteScenarioSet.h --------------------------*/
 /*--------------------------------------------------------------------------*/
-/** @file 
- * Header file for the *concrete* class DiscreteScenarioSet that is an 
- * implementation of ScenarioGenerator suited to the case where the input 
+/** @file
+ * Header file for the *concrete* class DiscreteScenarioSet that is an
+ * implementation of ScenarioGenerator suited to the case where the input
  * distribution is contained in a netCDF file as a collection of vectors.
  *
  * \author Antonio Frangioni \n Dipartimento di Informatica \n Universita' di
@@ -19,7 +19,7 @@
 /*--------------------------------------------------------------------------*/
 
 #ifndef __DiscreteScenarioSet
-    #define __DiscreteScenarioSet
+#define __DiscreteScenarioSet
 /* self-identification: #endif at the end of the file */
 
 /*--------------------------------------------------------------------------*/
@@ -28,8 +28,8 @@
 
 #include "ScenarioGenerator.h"
 
-#include <vector>
-#include <random>
+#include <Eigen/Dense>
+#include <random> // not in SMSTypedefs.h
 #include <span>
 
 /*--------------------------------------------------------------------------*/
@@ -45,27 +45,45 @@ namespace SMSpp_di_unipi_it
 /*--------------------------- GENERAL NOTES --------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-/// DiscreteScenarioSet to sample from a collection of scenarios
-/** DiscreteScenarioSet is an implementation of the ScenarioGenerator class.
- * As such, it gives methods to sample from an input distribution and manipulate
- * a scenarioPool. 
- * 
- * In the specific context of DiscreteScenarioSet, the distribution to sample 
- * from is assumed to be a discrete probability distribution characterized 
- * by a collection of scenarios. Scenarios are assumed to be contained in a 
- * netCDF file and DiscreteScenarioSet gives method to deserialize the scenarios
- * from the netCDF file.
- * 
- * The deserialized scenario are stored in a boost::multi_array< double, 2 >.*/
+  /// DiscreteScenarioSet to sample from a collection of scenarios
+  /** DiscreteScenarioSet is an implementation of the ScenarioGenerator class.
+   * As such, it gives methods to sample from an input distribution and manipulate
+   * a scenarioPool.
+   *
+   * In the specific context of DiscreteScenarioSet, the distribution to sample
+   * from is assumed to be a discrete probability distribution characterized
+   * by a collection of scenarios. Scenarios are assumed to be contained in a
+   * netCDF file and DiscreteScenarioSet gives method to deserialize the scenarios
+   * from the netCDF file. The deserialized scenario are stored in a
+   * boost::multi_array< double, 2 >.
+   *
+   * DiscreteScenarioSet considers that the (deserialized) pool can be handled
+   * by two distinct approaches: the first draws a *subset* of the input
+   * scenarioPool, while the second *constructs* a set of representative scenarios
+   * from the input. Several functions thus have two different behaviours,
+   * wether or not the pool is initialized by the first or second method.
+   *
+   * The method get_current_scenario() allows the user to query one element in
+   * the pool, whether the first or second method was used.
+   *
+   * The first method outputs scenarios that are part of the input, so the pool
+   * is simply caracterized by the set of indexes of the drawn scenarios. See
+   * init_random_pool(...).
+   *
+   * The second method outputs scenarios that are different that the
+   * ones that were inputed. By default, DiscreteScenarioSet uses a native
+   * implementation of kmeans clustering. In that case, another container is
+   * created to hold the constructed scenarios. See
+   * init_representative_pool(...).
+   * */
 
-class DiscreteScenarioSet : public ScenarioGenerator
-{
+  class DiscreteScenarioSet : public ScenarioGenerator
+  {
 /*--------------------------------------------------------------------------*/
 /*----------------------- PUBLIC PART OF THE CLASS -------------------------*/
 /*--------------------------------------------------------------------------*/
 
-public:
-
+  public:
 /*--------------------------------------------------------------------------*/
 /*---------------------------- PUBLIC TYPES --------------------------------*/
 /*--------------------------------------------------------------------------*/
@@ -73,17 +91,37 @@ public:
      *  @{ */
 
     /// Container for the deserialized scenario pool
-    /** Every scenario is assumed to have the same dimension. As the number of 
+    /** Every scenario is assumed to have the same dimension. As the number of
      * scenario becomes known whenever we deserialize the data, the scenario
      * pool is of known size at this point. Hence the choice to store it inside
-     * a boost::multi_array.*/
+     * a boost::multi_array. See the function init_random_pool()*/
     using DiscreteScenarioPool = boost::multi_array<double, 2>;
+
+    /// Container for the representative pool
+    /** The representative pool is made of Eigen::VectorXd for ease of linear
+     * algebra manipulations. See the function init_representative_pool().*/
+    using DiscreteRepresentativePool = std::vector<Eigen::VectorXd>;
+
+    /// type Point for Eigen::VectorXd
+    /** For ease of linear algebra manipulations, we use Eigen::VectorXd to
+     * hold a scenario. As scenarios are assumed to be present in memory
+     * already (as boost::multi_array< double, 2 >), they are converted into
+     * Eigen::VectorXd using Eigen::Map. */
+    using Point = Eigen::Map<Eigen::VectorXd>;
+
+    /// Container for the centers and the points to be clustered
+    /** Lightweight container for a collection of scenarios represented as
+     * Eigen::VectorXd. */
+    using PoolMap = std::vector<Eigen::Map<Eigen::VectorXd>>;
 
 /** @} ---------------------------------------------------------------------*/
 /*-------------------------- PUBLIC VARIABLES ------------------------------*/
 /*--------------------------------------------------------------------------*/
     /** @name Public variables
      *  @{ */
+
+    /// Current index in the pool
+    ScenarioIndex currentScenarioIndex{0};
 
     /// Number of different scenarios in the scenario pool
     ScenarioIndex nbScenarios;
@@ -94,20 +132,38 @@ public:
     /// Container for Scenario-s
     DiscreteScenarioPool scenarioSet;
 
-    // Pool size
+    /// Container for representative pool of scenarios
+    DiscreteRepresentativePool representativePool;
+
+    /// Pool size
+    /** The variable poolSize is initialized when
+     * init_representative_pool(size_t size) or init_rando_pool(size_t size) is
+     * used. */
     ScenarioIndex poolSize = 0;
 
     /// Indexes of the pool
     std::vector<ScenarioIndex> scenarioIndexes;
 
-    /// Probabilities of scenarios
+    /// Probabilities of input scenarios
     std::vector<double> scenarioProbabilities;
+
+    /// Probabilities of scenarios inside the pool
+    /** No matter the chosen method to make the pool, poolProbabilities is
+     * the vector of associated probability weights. It is different from
+     * scenarioProbabilities which is the vector of probability weights
+     * of the input scenarios which is in general a different set than the
+     * pool. */
+    std::vector<double> poolProbabilities;
+
+    /// holder for the sum of the weights inside the random pool
+    /** Variable which holds the sum of the weights of the scenarios that were
+     * chosen to be part of the random pool, see init_random_pool(...).
+     *  This variable is set back to 0.0 if the representative pool is used,
+     * see init_representative_pool(...). */
+    double sumPoolWeights;
 
     /// Random generator
     std::mt19937 rng;
-
-    /// Current index in the pool
-    ScenarioIndex currentScenarioIndex {0}; 
 
 /** @} ---------------------------------------------------------------------*/
 /*----------- CONSTRUCTING AND DESTRUCTING DiscreteScenarioSet -------------*/
@@ -118,205 +174,154 @@ public:
     DiscreteScenarioSet();
 
     /// deserialize a discrete distribution from a netCDF group
-    /** Implementation of the "third-level" pure virtual function deserialize of 
+    /** Implementation of the "third-level" pure virtual function deserialize of
      * ScenarioGenerator.h. Assumes that there is a two-dimensional variable
-     *  \p Scenario contained inside a netCDF NcGroup. One dimension corresponds 
-     * to the scenarioIndex and the other is the dimension component as a 
-     * scenario is represented as a big vector in an euclidean space R^d. We 
-     * deserialize it into a boost::multi_array< double, 2 > as the two 
-     * dimensions become known once the file has been read.*/
+     *  \p Scenario contained inside a netCDF NcGroup. One dimension NumberScenarios
+     * corresponds to the number of input scenarios caracterizing the input discrete
+     * probability distrubition. The second dimension ScenarioSize is the dimension
+     * of the euclidean space (R^d) representing a single scenario. We
+     * deserialize the scenarios into a boost::multi_array< double, 2 > as the two
+     * dimensions become known once the file has been read.
+     *
+     * The scenarios are associated with another variable ScenarioProbabilities.
+     * If ScenarioProbabilities is present in the group then it is saved in a
+     * std::vector< double > called scenarioProbabilities. If ScenarioProbabilities
+     * is *not* present in the group then uniform weights are assumed, that is,
+     * scenarioProbabilities is a vector of size nbScenarios where each component
+     * is equal to 1.0 / nbScenarios.*/
     void deserialize(const netCDF::NcGroup &group) override;
 
-    virtual ~DiscreteScenarioSet() = default;
+    virtual ~DiscreteScenarioSet();
 
-    // Implementing pure virtual methods from ScenarioGenerator
+/** @} ---------------------------------------------------------------------*/
+/*-------------- METHODS INHERITED FROM ScenarioGenerator.h ----------------*/
+/*--------------------------------------------------------------------------*/
+    /** @name Functions inherited from ScenarioGenerator.h
+     *  @{ */
+
     void set_seed(unsigned long seed) override;
+
+    /// Function to select a random subset from the input scenario pool
+    /** The function init_random_pool selects randomly a few scenarios among the
+     * ones that were deserialized from the input. It saves a subset of indices
+     * in the variable scenarioIndexes. */
     void init_random_pool(ScenarioIndex sampleSize) override;
+
+    /// Function to compute a finite set of representative scenario
+    /** The function init_representative_pool(ScenarioIndex size) computes a set
+     * of scenarios that approximates the input set of scenarios according to 
+     * some optimization criterium.
+     *
+     * By default, in DiscreteScenarioSet a native (and naive) implementation of
+     * kmeans clustering is used.
+     *
+     * Kmeans splits the input scenarios into size clusters. Each of the 
+     * clusters has a (bary)center and each scenario is associated a label, 
+     * which is its nearest center.
+     *
+     * Knowing the clusters centers and the labels, the representativePool is
+     * made of the centers. The std::vector< double > proabilityPool, is such
+     * that each component p_i is equal to
+     *  p_i = sum(input_weights_with_label_equal_to_i).
+     */
     void init_representative_pool(ScenarioIndex sampleSize) override;
+
+    /// Function for retrieving the current scenario.
+    /** Checks that the internal variable currentScenarioIndex is within bounds,
+     * then converts the currentScenarioIndex-th row of the scenario pool as a
+     * Scenario, that is as a std::span< const double >.
+     *
+     * If a subset of the scenarioSet has been used, we output the scenario
+     * as a span the scenarioIndex[currentScenarioIndex]-th row of the
+     * scenarioSet.
+     *
+     * If we use a representativePool, we output the scenario as a span the
+     * currentScenarioIndex-th component of the representativePool. */
     Scenario get_current_scenario(void) override;
+
+    /// Function to query the probability weight of the current scenario
+    /** When sampling a pool, what are the weights of the drawn scenarios?
+     * When using get_scenario_probabilities, we return "the" probability weight
+     * inside the pool and not the input probability weight.
+     * Similar question when constructing a representative pool.
+     *
+     * Choices made:
+     * 1) Case subset of input. Take the input weight and normalize it, that is
+     * given a scenario with an input_weight, we compute its new_weight by:
+     *  "new_weight = input_weight / sum(input_weights_in_the_pool)".
+     * 2) Case constructing representative scenarios. For kmeans clustering,
+     *  the "pool weight" should be the proportion of points affected to the
+     * center.
+     *
+     * In the first case, after scaling, we return the currentScenarioIndex-th
+     * input_weight from the deserialized data in scenarioProbabilities.
+     * In the second case, we return the currentScenarioIndex-th element of the
+     * std::vector< double > poolProbabilities that is constructed with
+     * representative scenarios.
+     * */
     double get_current_scenario_probability(void) override;
+
+    /// Move currentScenarioIndex to the next scenario
+    /** Wether the pool has been sampled from the input via init_random_pool(...)
+     * or constructed from the input via init_representative_pool(...), the 
+     * function next_scenario() behaves the same: it increments by 1 the 
+     * currentScenarioIndex if there is still a scenario left in the pool and 
+     * return true, otherwise it returns false.*/
     bool next_scenario(void) override;
+
+    /// return the dimension of the scenarios
+    /** Every scenario (vector in some euclidean space R^d) is assumed to have 
+     * the same dimension. The dimension has been saved in scenarioSize when
+     * deserializing the input discrete distribution. */
     ScenarioSize get_scenario_size(void) override;
 
+    /** @} ---------------------------------------------------------------------*/
+    /*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
+    /*--------------------------------------------------------------------------*/
 
-/** @} ---------------------------------------------------------------------*/
-/*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
-/*--------------------------------------------------------------------------*/
-
-private:
-
-/** @} ---------------------------------------------------------------------*/
-/*-------------------- HELPER METHODS OF THE CLASS -------------------------*/
-/*--------------------------------------------------------------------------*/
+  private:
+    /*--------------------------------------------------------------------------*/
+    /*-------------------- HELPER METHODS OF THE CLASS -------------------------*/
+    /*--------------------------------------------------------------------------*/
     /** @name helper methods of the class
      * Miscallenous functions
      * @{ */
 
     /// update the variable poolSize
-    /** The first time a size for the pool has been given, update the 
-     * variable poolSize accordingly. Also checks that the desired poolSize 
-     * is less than the total number of available scenarios. */
-   void update_poolSize(ScenarioIndex size) {
-        if (size > nbScenarios)
-        {
-            throw std::out_of_range("The desired sample size is greater than "
-            "the number of available number of different scenarios");
-        }
-        poolSize = size; 
-   }
-
-    /// Draw k elements among n
-    /** The function generateRandomSubset draws k elements among n by use of 
-     * the std::shuffle function and the internal rng. The chosen indexes are
-     * moved into scenarioIndexes and these indexes characterize the 
-     * scenarioPool used by the class DiscreteScenarioSet. */
-    void generateRandomSubset(size_t n, size_t k)
-    {
-        if (k > n)
-        {
-            throw std::invalid_argument("k must be less or equal than n");
-        }
-        // elements = [1,2, ..., n]
-        std::vector<ScenarioIndex> elements(n);
-        std::iota(elements.begin(), elements.end(), 0);
-
-        // Shuffle the elements randomly using our rng
-        std::shuffle(elements.begin(), elements.end(), rng);
-
-        // Move the first k elements into scenarioIndexes
-        scenarioIndexes.resize(k);  
-        std::move(elements.begin(), elements.end(), 
-            scenarioIndexes.begin());
-    }
-
-/** @} ---------------------------------------------------------------------*/
-/*------------------------- Kmeans clustering ------------------------------*/
-/*--------------------------------------------------------------------------*/
-
-    /** @name Kmeans clustering
-     * 
-     * Naive implementation from scratch of Lloyd's algorithm to solve the 
-     * kmeans optimization problem. There are better existing librairies that 
-     * are known to be robust and efficient to solve the kmeans optimization 
-     * problem. The following implementation is simply here as a helper for
-     * DiscreteScenarioSet to avoid additional dependencies with external
-     * librairires.
+    /** The first time a size for the pool has been given, update the
+     * variable poolSize accordingly. Also ensures that the desired
+     * poolSize is possible, that is, it should be less or equal than the
+     * number of input scenarios.
      *
-     * @{ */
-
-    /// private type Point for Eigen::VectorXd
-    /** For ease of linear algebra manipulations, we will work with 
-     * Eigen::VectorXd, which stands morally for a scenario.
-     * However, we will use the term Point to refer to a scenario represented 
-     * as an Eigen::VectorXd.  
-     * 
-     * ?? Maybe a term like Eigen_scenario instead of Point is clearer ??
+     * We normalize the weights of each scenario in the pool so that their 
+     * weights sum up to one. That is, we have
+     *  new_weight = input_weight / sum(input_weights_of_pool_scenarios),
+     * where input_weight refer to the weight of a given scenario contained in
+     * the vector scenarioProbabilities.
+     *
+     * So for the use of get_current_scenario_probability(), we
+     * save in memory sumPoolWeight, equal to the sum of the input weights of 
+     * the scenarios chosen to be part of the pool.
      * */
-    using Point = Eigen::Map<Eigen::VectorXd>;
+    void update_poolSize(ScenarioIndex size);
 
-    /// Container type for the centers and the points to be clustered
-    /** Lightweight container for a collection of scenarios represented as
-     * Eigen::VectorXd. */
-    using PoolMap = std::vector<Eigen::Map<Eigen::VectorXd>>;
+    /// empty the representativePool of scenarios
+    /** Function to clear the internal representativePool. */
+    void empty_representativePool();
 
-    /// euclidean distance
-    /** Computes the euclidean distance between two Eigen::VectorXd. */
-    double euclideanDistance(const Eigen::VectorXd &vec1,
-     const Eigen::VectorXd &vec2)
-    {
-        return (vec1 - vec2).norm();
-    }
+    /// "empty" the random pool
+    /** As the random pool of DiscreteScenarioSet is simply a subset of indices
+     * scenarioIndexes, we clear scenarioIndexes. */
+    void empty_randomPool();
 
-    /// (Costly) function to find the index of the nearest center to a point
-    int nearestCenterIndex(const Eigen::VectorXd &point,
-     const std::vector<Point> &centers)
-    {
-        double minDistance = std::numeric_limits<double>::max();
-        int index = 0;
-        for (size_t i = 0; i < centers.size(); i++)
-        {
-            double distance = euclideanDistance(point, centers[i]);
-            if (distance < minDistance)
-            {
-                minDistance = distance;
-                index = i;
-            }
-        }
-        return index;
-    }
-
-    /// K-Means clustering function
-    /** Naïve implementation of Lloyd's algorithm to solve the kmeans 
-     * clustering problem. Return the centers of the clusters.
-     * Could greatly benefit from better heuristics both in the centers 
-     * initialization and in the stopping criteria.*/
-    void kMeans(unsigned int k, PoolMap &pool) {
-
-        size_t n = pool.size(); // n = nbScenarios
-        std::vector<int> labels(n, 0);
-
-        // Initialize centers randomly
-        std::vector<Point> centers;
-        for (int i = 0; i < k; i++)
-        {
-            centers.push_back(pool[rand() % n]);
-        }
-
-        bool changed;
-        do
-        {
-            changed = false;
-
-            // Assign points to the nearest center
-            for (int i = 0; i < n; i++)
-            {
-                int newIndex = nearestCenterIndex(pool[i], centers);
-                if (labels[i] != newIndex)
-                {
-                    labels[i] = newIndex;
-                    changed = true;
-                }
-            }
-
-            // Update centers by computing barycenter of each Voronoi cell
-            std::vector<int> counts(k, 0);
-            for (auto &center : centers)
-            {
-                center.setZero();
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                Point &center = centers[labels[i]];
-
-                for (size_t j = 0; j < get_scenario_size(); j++)
-                {
-                    center[j] += pool[i][j];
-                }
-                counts[labels[i]]++;
-            }
-
-            for (int i = 0; i < k; i++)
-            {
-                for (size_t j = 0; j < get_scenario_size(); j++)
-                {
-                    centers[i][j] /= counts[i];
-                }
-            }
-        } while (changed);
-
-        // Replace the first size rows of scenarioSet with the cluster centers
-        for (size_t i = 0; i < centers.size(); ++i) {
-            std::copy(centers[i].data(), centers[i].data() +
-                get_scenario_size(), scenarioSet[i].begin());
-        }
-    }
+    /// function to check if the representativePool of scenarios is empty
+    bool isempty_rep_set();
 
     // Macro for the factory
     SMSpp_insert_in_factory_h;
 
     /** @} */
-};
+  };
 } // end( namespace SMSpp_di_unipi_it )
 
 #endif // __DiscreteScenarioSet
@@ -324,3 +329,4 @@ private:
 /*--------------------------------------------------------------------------*/
 /*------------------- End file DiscreteScenarioSet.h -----------------------*/
 /*--------------------------------------------------------------------------*/
+
