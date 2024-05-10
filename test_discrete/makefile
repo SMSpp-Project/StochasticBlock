@@ -73,7 +73,7 @@ MH =    $(SMS++H) $(StcBlkH)
 
 # compile command
 
-$(DIR)/test.o: $(DIR)/test_discrete.cpp $(MH)
+$(DIR)/test_discrete.o: $(DIR)/test_discrete.cpp $(MH)
 	$(CC) -c $*.cpp -o $@ $(MINC) $(SW)
 
 ############################ End of makefile #################################
