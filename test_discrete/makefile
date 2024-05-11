@@ -11,7 +11,7 @@
 ##############################################################################
 
 # module name
-NAME = StochasticBlock_test
+NAME = StochasticBlock_test_discrete
 
 # basic directory
 DIR = .
