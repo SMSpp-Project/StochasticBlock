@@ -138,6 +138,29 @@ void test_deserialize()
     }
 }
 
+// Unit test of the static function kMeans and its helper functions
+void test_euclideanDistance() {
+    Eigen::VectorXd vec1(3);
+    Eigen::VectorXd vec2(3);
+
+    // Test 1: Zero vectors
+    vec1 << 0, 0, 0;
+    vec2 << 0, 0, 0;
+    assert(std::abs(euclideanDistance(vec1, vec2) - 0) < 1e-9);
+
+    // Test 2: Positive elements
+    vec1 << 1, 2, 3;
+    vec2 << 4, 5, 6;
+    assert(std::abs(euclideanDistance(vec1, vec2) - sqrt(27)) < 1e-9);
+
+    // More tests can be added here...
+}
+
+ void test_kmeans()
+ {
+
+ }
+
 /*--------------------------------------------------------------------------*/
 /*------------------------------- MAIN -------------------------------------*/
 /*--------------------------------------------------------------------------*/

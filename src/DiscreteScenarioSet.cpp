@@ -175,7 +175,7 @@ static void generateRandomSubset(size_t n, size_t k,
 
 void DiscreteScenarioSet::update_poolSize(ScenarioIndex size)
 {
-  if (size > nbScenarios)
+  if (size > nbScenarios) // indirectly protects if input size is negative
   {
     throw std::out_of_range("The desired sample size is greater than "
                             "the number of available number of different "
@@ -222,7 +222,8 @@ void DiscreteScenarioSet::init_representative_pool(ScenarioIndex size)
 {
   empty_randomPool();
   update_poolSize(size);
-  poolProbabilities.resize(size);
+  poolProbabilities.clear();
+  poolProbabilities.resize(size, 0);
 
   // Convert every input scenario into an Eigen::VectorXd
   PoolMap eigenSet;
