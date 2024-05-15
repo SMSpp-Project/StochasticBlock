@@ -118,6 +118,55 @@ static void kMeans(unsigned int k, DiscreteScenarioSet::PoolMap &pool,
 }
 
 /*--------------------------------------------------------------------------*/
+/*-------------------- HELPER METHODS OF THE CLASS -------------------------*/
+/*--------------------------------------------------------------------------*/
+
+// Get for nbScenarios
+const ScenarioGenerator::ScenarioIndex&
+ DiscreteScenarioSet::get_nbScenarios() const
+{
+  return nbScenarios;
+}
+
+// Get for scenarioSize
+const ScenarioGenerator::ScenarioSize&
+ DiscreteScenarioSet::get_scenarioSize() const
+{
+  return scenarioSize;
+}
+
+void DiscreteScenarioSet::empty_representativePool()
+{
+  representativePool.clear();
+  representativePool.shrink_to_fit();
+  poolProbabilities.clear();
+  poolProbabilities.shrink_to_fit();
+}
+
+bool DiscreteScenarioSet::isempty_representativePool() const
+{
+  return representativePool.empty();
+}
+
+void DiscreteScenarioSet::empty_randomPool()
+{
+  scenarioIndexes.clear();
+  scenarioIndexes.shrink_to_fit();
+}
+
+
+void DiscreteScenarioSet::set_poolSize(ScenarioIndex size)
+{
+  if (size > nbScenarios) // indirectly protects if input size is negative
+  {
+    throw std::out_of_range("The desired sample size is greater than "
+                            "the number of available number of different "
+                            "scenarios");
+  }
+  poolSize = size;
+}
+
+/*--------------------------------------------------------------------------*/
 /*--------------------- CLASS DiscreteScenarioSet --------------------------*/
 /*--------------------------------------------------------------------------*/
 
@@ -173,34 +222,12 @@ static void generateRandomSubset(size_t n, size_t k,
   std::move(elem.begin(), elem.begin() + k, std::back_inserter(ind));
 }
 
-void DiscreteScenarioSet::update_poolSize(ScenarioIndex size)
-{
-  if (size > nbScenarios) // indirectly protects if input size is negative
-  {
-    throw std::out_of_range("The desired sample size is greater than "
-                            "the number of available number of different "
-                            "scenarios");
-  }
-  poolSize = size;
-}
-
-void DiscreteScenarioSet::empty_representativePool()
-{
-  representativePool.clear();
-  representativePool.shrink_to_fit();
-}
-
-void DiscreteScenarioSet::empty_randomPool()
-{
-  scenarioIndexes.clear();
-  scenarioIndexes.shrink_to_fit();
-  sumPoolWeights = 0.0;
-}
-
 void DiscreteScenarioSet::init_random_pool(ScenarioIndex size)
 {
   empty_representativePool();
-  update_poolSize(size);
+  sumPoolWeights = 0.0;
+  set_poolSize(size);
+  currentScenarioIndex = 0;
 
   // the pool will be made of a subset of the input scenarios
   scenarioIndexes.resize(size);
@@ -214,31 +241,29 @@ void DiscreteScenarioSet::init_random_pool(ScenarioIndex size)
   {
     sumPoolWeights += scenarioProbabilities[scenarioIndexes[i]];
   }
-
-  currentScenarioIndex = 0;
 }
 
 void DiscreteScenarioSet::init_representative_pool(ScenarioIndex size)
 {
   empty_randomPool();
-  update_poolSize(size);
-  poolProbabilities.clear();
+  set_poolSize(size);
+  currentScenarioIndex = 0;
   poolProbabilities.resize(size, 0);
 
   // Convert every input scenario into an Eigen::VectorXd
   PoolMap eigenSet;
-  eigenSet.reserve(nbScenarios);
-  for (size_t i = 0; i < scenarioSet.shape()[0]; i++)
+  eigenSet.reserve(get_nbScenarios());
+  for (size_t i = 0; i < get_nbScenarios(); i++)
   {
     eigenSet.emplace_back(Eigen::Map<Eigen::VectorXd>(&scenarioSet[i][0],
-                                                      scenarioSize));
+                                                      get_scenarioSize()));
   }
 
   // Initialize the representativePool, using a random subset of input scenari
   representativePool.reserve(size);
   std::vector<ScenarioIndex> rand_ind;
 
-  generateRandomSubset(nbScenarios, size, rand_ind, rng);
+  generateRandomSubset(get_nbScenarios(), size, rand_ind, rng);
   for (auto i : rand_ind)
   {
     representativePool.push_back(Eigen::VectorXd(eigenSet[i]));
@@ -254,14 +279,6 @@ void DiscreteScenarioSet::init_representative_pool(ScenarioIndex size)
   {
     poolProbabilities[labels[j]] += scenarioProbabilities[j];
   }
-
-  currentScenarioIndex = 0;
-}
-
-/// Bool function to check is the representative set is empty
-bool DiscreteScenarioSet::isempty_rep_set()
-{
-  return representativePool.empty();
 }
 
 ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario(void)
@@ -271,7 +288,7 @@ ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario(void)
     throw std::out_of_range("Current scenario index is out of range.");
   }
 
-  if (isempty_rep_set())
+  if (isempty_representativePool())
   {
     // transform the scenarioIndexes[currentScenarioIndex]-th row of
     // scenarioSet into a span< const double >
@@ -293,7 +310,7 @@ double DiscreteScenarioSet::get_current_scenario_probability(void)
   {
     throw std::out_of_range("Current scenario index is out of range.");
   }
-  if (isempty_rep_set())
+  if (isempty_representativePool())
   {
     return scenarioProbabilities[currentScenarioIndex] / sumPoolWeights;
   }
@@ -302,6 +319,7 @@ double DiscreteScenarioSet::get_current_scenario_probability(void)
     return poolProbabilities[currentScenarioIndex];
   }
 }
+
 
 bool DiscreteScenarioSet::next_scenario(void)
 {
@@ -329,6 +347,7 @@ DiscreteScenarioSet::DiscreteScenarioSet()
 DiscreteScenarioSet::~DiscreteScenarioSet()
 {
 }
+
 
 /** @} ---------------------------------------------------------------------*/
 /*-------------------------- FACTORY MANAGEMENT ----------------------------*/

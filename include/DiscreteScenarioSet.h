@@ -115,57 +115,6 @@ namespace SMSpp_di_unipi_it
     using PoolMap = std::vector<Eigen::Map<Eigen::VectorXd>>;
 
 /** @} ---------------------------------------------------------------------*/
-/*-------------------------- PUBLIC VARIABLES ------------------------------*/
-/*--------------------------------------------------------------------------*/
-    /** @name Public variables
-     *  @{ */
-
-    /// Current index in the pool
-    ScenarioIndex currentScenarioIndex{0};
-
-    /// Number of different scenarios in the scenario pool
-    ScenarioIndex nbScenarios;
-
-    /// Size of a scenario
-    ScenarioSize scenarioSize;
-
-    /// Container for Scenario-s
-    DiscreteScenarioPool scenarioSet;
-
-    /// Container for representative pool of scenarios
-    DiscreteRepresentativePool representativePool;
-
-    /// Pool size
-    /** The variable poolSize is initialized when
-     * init_representative_pool(size_t size) or init_rando_pool(size_t size) is
-     * used. */
-    ScenarioIndex poolSize = 0;
-
-    /// Indexes of the pool
-    std::vector<ScenarioIndex> scenarioIndexes;
-
-    /// Probabilities of input scenarios
-    std::vector<double> scenarioProbabilities;
-
-    /// Probabilities of scenarios inside the pool
-    /** No matter the chosen method to make the pool, poolProbabilities is
-     * the vector of associated probability weights. It is different from
-     * scenarioProbabilities which is the vector of probability weights
-     * of the input scenarios which is in general a different set than the
-     * pool. */
-    std::vector<double> poolProbabilities;
-
-    /// holder for the sum of the weights inside the random pool
-    /** Variable which holds the sum of the weights of the scenarios that were
-     * chosen to be part of the random pool, see init_random_pool(...).
-     *  This variable is set back to 0.0 if the representative pool is used,
-     * see init_representative_pool(...). */
-    double sumPoolWeights;
-
-    /// Random generator
-    std::mt19937 rng;
-
-/** @} ---------------------------------------------------------------------*/
 /*----------- CONSTRUCTING AND DESTRUCTING DiscreteScenarioSet -------------*/
 /*--------------------------------------------------------------------------*/
     /** @name Constructing and destructing DiscreteScenarioSet
@@ -275,20 +224,106 @@ namespace SMSpp_di_unipi_it
      * deserializing the input discrete distribution. */
     ScenarioSize get_scenario_size(void) override;
 
-    /** @} ---------------------------------------------------------------------*/
-    /*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
-    /*--------------------------------------------------------------------------*/
+/** @} ---------------------------------------------------------------------*/
+/*--------------------- GETTERS  FOR PRIVATE FIELDS ------------------------*/
+/*--------------------------------------------------------------------------*/
+    /** @name Getters for some private fields
+     *  @{ */
+
+    /// get a reference to nbScenarios
+    const ScenarioIndex& get_nbScenarios() const;
+
+    /// get a reference to scenarioSize
+    const ScenarioSize& get_scenarioSize() const;
+/** @} ---------------------------------------------------------------------*/
+/*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
+/*--------------------------------------------------------------------------*/
 
   private:
-    /*--------------------------------------------------------------------------*/
-    /*-------------------- HELPER METHODS OF THE CLASS -------------------------*/
-    /*--------------------------------------------------------------------------*/
+
+/*--------------------------------------------------------------------------*/
+/*--------------------------- PRIVATE FIELDS -------------------------------*/
+/*--------------------------------------------------------------------------*/
+    /** @name Private fields
+     *  @{ */
+
+    /// Current index in the pool
+    ScenarioIndex currentScenarioIndex{0};
+
+    /// Number of different scenarios in the scenario pool
+    ScenarioIndex nbScenarios;
+
+    /// Size of a scenario
+    ScenarioSize scenarioSize;
+
+    /// Container for Scenario-s
+    DiscreteScenarioPool scenarioSet;
+
+    /// Pool size
+    /** The variable poolSize is initialized when
+     * init_representative_pool(size_t size) or init_rando_pool(size_t size) is
+     * used. */
+    ScenarioIndex poolSize = 0;
+
+    /// Probabilities of input scenarios
+    std::vector<double> scenarioProbabilities;
+
+    /// Random generator
+    std::mt19937 rng;
+
+/** @} ---------------------------------------------------------------------*/
+/*--------------------- FIELDS FOR REPRESENTATIVE POOL ---------------------*/
+/*--------------------------------------------------------------------------*/
+    /** @name Fields for the representative pool
+       * When the scenario pool is made of representative scenarios that 
+       * are in general different from the input scenarios, the scenario pool
+       * has its own container of type DiscreteRepresentativePool with 
+       * associated vector of probability weights poolProbabilities.
+     * @{ */
+
+    /// Container for representative pool of scenarios
+    DiscreteRepresentativePool representativePool;
+
+    /// Probabilities of scenarios inside the pool
+    /** No matter the chosen method to make the pool, poolProbabilities is
+     * the vector of associated probability weights. It is different from
+     * scenarioProbabilities which is the vector of probability weights
+     * of the input scenarios which is in general a different set than the
+     * pool. */
+    std::vector<double> poolProbabilities;
+
+
+/** @} ---------------------------------------------------------------------*/
+/*------------------------- FIELDS FOR RANDOM POOL -------------------------*/
+/*--------------------------------------------------------------------------*/
+    /** @name Fields for the random pool
+       * When the scenario pool is made of random scenarios that 
+       * are for a subset of the input scenarios contained in the scenario pool
+       * is characterized by a std::vector< ScenarioIndex > and the probability
+       * weights can be deduced from the input weights saved in 
+       * scenarioProbabilities and the sumPoolWeights of the scenarios that 
+       * belong to the scenario pool.
+     * @{ */
+
+    /// holder for the sum of the weights inside the random pool
+    /** Variable which holds the sum of the weights of the scenarios that were
+     * chosen to be part of the random pool, see init_random_pool(...).
+     *  This variable is set back to 0.0 if the representative pool is used,
+     * see init_representative_pool(...). */
+    double sumPoolWeights;
+
+    /// Indexes of the pool
+    std::vector<ScenarioIndex> scenarioIndexes;
+
+/** @} ---------------------------------------------------------------------*/
+/*-------------------- HELPER METHODS OF THE CLASS -------------------------*/
+/*--------------------------------------------------------------------------*/
     /** @name helper methods of the class
      * Miscallenous functions
      * @{ */
 
     /// update the variable poolSize
-    /** The first time a size for the pool has been given, update the
+    /** Whenever a size for the pool has been given, update the
      * variable poolSize accordingly. Also ensures that the desired
      * poolSize is possible, that is, it should be less or equal than the
      * number of input scenarios.
@@ -303,7 +338,8 @@ namespace SMSpp_di_unipi_it
      * save in memory sumPoolWeight, equal to the sum of the input weights of 
      * the scenarios chosen to be part of the pool.
      * */
-    void update_poolSize(ScenarioIndex size);
+    void set_poolSize(ScenarioIndex size);
+
 
     /// empty the representativePool of scenarios
     /** Function to clear the internal representativePool. */
@@ -311,11 +347,12 @@ namespace SMSpp_di_unipi_it
 
     /// "empty" the random pool
     /** As the random pool of DiscreteScenarioSet is simply a subset of indices
-     * scenarioIndexes, we clear scenarioIndexes. */
+     * scenarioIndexes, we clear scenarioIndexes. The variable sumPoolWeights
+     * if initialized to 0.0 as */
     void empty_randomPool();
 
     /// function to check if the representativePool of scenarios is empty
-    bool isempty_rep_set();
+    bool isempty_representativePool() const;
 
     // Macro for the factory
     SMSpp_insert_in_factory_h;

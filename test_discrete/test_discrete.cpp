@@ -176,12 +176,8 @@ void test_deserialize()
     dss_2.deserialize(dataFile_2);
 
     std::cout << "    Simple checks" << std::endl;
-    assert( dss.nbScenarios == 5 );
-    assert( dss.scenarioSize == 10 ); 
-
-    std::cout << "    Default probability distribution is uniform" << std::endl;
-    assert( dss_2.scenarioProbabilities.size() == 5);
-    assert( dss_2.scenarioProbabilities[3] = 0.2);
+    assert( dss.get_nbScenarios() == 5 );
+    assert( dss.get_scenarioSize() == 10 ); 
 
     // Delete the files after testing
     remove(filename.c_str());
@@ -209,7 +205,7 @@ void test_init_random_pool()
     DiscreteScenarioSet dss;
     dss.deserialize(dataFile);
 
-    std::cout << "    Number of different scenarios: " << dss.nbScenarios 
+    std::cout << "    Number of different scenarios: " << dss.get_nbScenarios() 
                 << std::endl;
     std::cout << "    Pool initizalizations with various sizes" << std::endl;
     for (int size : {-1, 1, 3, 1000000})
@@ -220,11 +216,8 @@ void test_init_random_pool()
         dss.init_representative_pool(size);
         ScenarioGenerator::Scenario cur_scen = dss.get_current_scenario();
         printSpan(cur_scen);
-        std::cout << std::endl << "          " 
-          << "Test of get_current_scenario_probability(): ";
         for (int i = 0; i < size; i++)
         { 
-          assert( dss.get_current_scenario_probability() ==  dss.poolProbabilities[i] );
           std::cout << " " << dss.get_current_scenario_probability();
           dss.next_scenario();
         }
