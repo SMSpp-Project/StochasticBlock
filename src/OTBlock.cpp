@@ -198,8 +198,7 @@ NStaticTransPlan = dynTP > NTransPlan ? 0 : NTransPlan - dynTP;
   std::copy( vecC.begin() , vecC.begin() + m , vecC.begin() );
   }
 
- // allocate transport plan variables - - - - - - - - - - - - - - - - - - - - - - - - -
-
+ // allocate transport plan variables - - - - - - - - - - - - - - - - - - - - 
  generate_abstract_variables();
 
  // the arcs whose cost is infinite have to be closed
@@ -464,19 +463,19 @@ void OTBlock::generate_abstract_variables( Configuration *stvv )
   return;           // nothing to do
 
  if( HasStaticTransPlan() ) {
-  x.resize( get_NStaticTransPlan() );
-  for( auto & var : x )
+  staticTP.resize( get_NStaticTransPlan() );
+  for( auto & var : staticTP )
    var.is_positive( true , eNoBlck );
 
-  add_static_variable( x );
+  add_static_variable( staticTP );
   }
 
  if( MayHaveDynTransPlan() ) {
-  dx.resize( get_NTransPlan() - get_NStaticTransPlan() );
-  for( auto & var : dx )
+  dynamicTP.resize( get_NTransPlan() - get_NStaticTransPlan() );
+  for( auto & var : dynamicTP )
    var.is_positive( true , eNoBlck );
 
-  add_dynamic_variable( dx );
+  add_dynamic_variable( dynamicTP );
   } 
 
  AR |= HasVar;
@@ -3703,28 +3702,5 @@ OTSolution * OTSolution::clone( bool empty ) const
  }  // end( OTSolution::clone )
 
 /*--------------------------------------------------------------------------*/
-/*----------------------- End File OTBlock.cpp ----------------------------*/
+/*----------------------- End File OTBlock.cpp -----------------------------*/
 /*--------------------------------------------------------------------------*/
-
-
-/*
-Read:
-- Block.h
-  - Variable.h
-
-  - Constraint.h
-
-  - Objective.h
-
-  - Solver.h 
-
-- ScenarioReduction.h
-  - Encode the continuous scenario reduction problem
-
-  - The SolutionScenarioReduction should give \pi, value, Q support, Q weights  
-
-  - Have a Solver that takes the ScenarioReduction Block, a SolutionScenarioRed
-    and solves the DiscreteScenarioReduction problem
-
-
-*/

@@ -519,7 +519,7 @@ public:
    return( i );
 
   i = get_NStaticTransPlan();
-  for( auto dxi = dx.begin() ; dxi != dx.end() ; ++i , ++dxi )
+  for( auto dxi = .begin() ; dxi != dynamicTP.end() ; ++i , ++dxi )
    if( &(*dxi) == static_cast< const ColVariable * >( var ) )
     return( i );
 
@@ -1343,7 +1343,7 @@ public:
  double f_cond_lower;            ///< conditional lower bound, can be -INF
  double f_cond_upper;            ///< conditional upper bound, can be +INF
  
- std::vector< ColVariable > staticTP;          ///< the static TP variables
+ std::vector< ColVariable > staticTP;   ///< the static TP variables
  std::vector< FRowConstraint> massP;    ///< static TP mass constraints on P
  std::vector< FRowConstraint> massP;    ///< static TP mass constraints on Q
  std::vector< LB0Constraint > UB;       ///< the static bound constraints
@@ -1444,7 +1444,7 @@ public:
 /*--------------------------------------------------------------------------*/
 
  int p2i_x_s( const Variable * var ) const {
-  return( std::distance( x.data() ,
+  return( std::distance( stati.data() ,
 			 static_cast< const ColVariable * >( var ) ) );
   }
 
@@ -1814,7 +1814,7 @@ class OTSolution : public Solution {
 #endif  /* OTBlock.h included */
 
 /*--------------------------------------------------------------------------*/
-/*------------------------- End File OTBlock.h ----------------------------*/
+/*------------------------- End File OTBlock.h -----------------------------*/
 /*--------------------------------------------------------------------------*/
 
 /*
