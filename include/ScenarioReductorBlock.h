@@ -197,11 +197,11 @@ typedef double TNumber;                     ///< type of transport plan componen
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /// type to hold the atoms of a probability distribution
-typedef std::vector< double > Atom;
-typedef const Atom c_Atom;
+typedef double ANumber; 
+typedef const ANumber c_ANumber;
 
-typedef std::vector< Atom > Vec_Atoms;
-typedef const Vec_Atoms c_Vec_Atoms;
+typedef boost::multi_array< ANumber, 2 > Mat_ANumber;
+typedef const Mat_ANumber c_Mat_ANumber;
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 /// type to hold the weights of each atom of a probability distribution
@@ -264,7 +264,7 @@ virtual ~ScenarioReductorBlock() { guts_of_destructor(); }
  void load( Index n,
             Index m,
             Index dim,
-            c_Vec_Atoms & atoms,
+            c_Mat_ANumber & atoms,
             c_Vec_WNumber & weights,
             Index k = 2 );
 
@@ -289,12 +289,12 @@ virtual ~ScenarioReductorBlock() { guts_of_destructor(); }
  void load( Index n,
             Index m,
             Index dim,
-            c_Vec_Atoms && atoms,
+            c_Mat_ANumber && atoms,
             c_Vec_WNumber && weights,
             Index k = 2 );
 
 /*--------------------------------------------------------------------------*/
- /// load instance from txt file  
+ /// load instance from .txt file  
  /** Loads a ScenarioReductorBlock out of std::istream. The format is the
   * following, with each element being separated by whitespaces and possibly
   * comments:
@@ -316,6 +316,31 @@ virtual ~ScenarioReductorBlock() { guts_of_destructor(); }
   * issued. */
 
  void load( std::istream & input , char frmt = 0 ) override;
+
+/*--------------------------------------------------------------------------*/
+ /// extends Block::deserialize( netCDF::NcGroup )
+ /** Extends Block::deserialize( netCDF::NcGroup ) to the specific format of
+  * a ScenarioReductorBlock. Besides what is managed by serialize() method of 
+  * the base Block class, the group should contains the following:
+  *
+  * - the dimension "N" containing the number of atoms of the probability 
+  *   distribution P
+  *
+  * - the dimension "M" containing the desired number of atoms of the 
+  *   probability distribution Q
+  * 
+  * - the dimension "dim" containing the dimension of the atoms' associated
+  *   euclidean space
+  *
+  * - the variable ""
+  *
+  * - the variable "Profits", of type double and indexed over the dimension
+  *   "NItems"; the i-th entry of the variable is assumed to contain the 
+  *   profit of the i-th item;
+  * 
+  * All dimensions and variables are mandatory. */
+
+ void deserialize( const netCDF::NcGroup & group ) override;
 
 /** @} ---------------------------------------------------------------------*/
 /*---------- METHODS FOR READING THE DATA OF ScenarioReductorBlock ---------*/
@@ -353,7 +378,7 @@ virtual ~ScenarioReductorBlock() { guts_of_destructor(); }
  Index M;               ///< the maximum number of atoms of Q
  Index k;               ///< the order of the Wasserstein distance
  Index dim;             ///< dimension of the atoms' space
- Vec_Atoms atomsP;      ///< vector holding the atoms of P
+ Mat_ANumber atomsP;      ///< vector holding the atoms of P
  Vec_WNumber weightsP;  ///< vector holding the weights of P
 
 // Abstract representation related fields

@@ -94,7 +94,7 @@ SMSpp_insert_in_factory_cpp_1( ScenarioReductorBlock );
 void ScenarioReductorBlock::load( Index n,
                                   Index m,
                                   Index dim,
-                                  c_Vec_Atoms & atoms,
+                                  c_Mat_ANumber & atoms,
                                   c_Vec_WNumber & weights,
                                   Index k = 2 )
 {
@@ -116,7 +116,7 @@ void ScenarioReductorBlock::load( Index n,
  load( n,
        m,
        dim,
-       Vec_Atoms( atoms ),
+       Mat_ANumber( atoms ),
        Vec_WNumber( weights ),
        k );
 
@@ -127,7 +127,7 @@ void ScenarioReductorBlock::load( Index n,
  void ScenarioReductorBlock::load(  Index n,
                                     Index m,
                                     Index dim,
-                                    c_Vec_Atoms && atoms,
+                                    c_Mat_ANumber && atoms,
                                     c_Vec_WNumber && weights,
                                     Index k = 2 )
 {
@@ -193,6 +193,7 @@ void ScenarioReductorBlock::load( std::istream & input , char frmt )
  if( ! ( input >> eatcomments >> D ) )
   throw( std::invalid_argument( "error reading the dimension" ) );
  this->dim = D;
+ atomsP.resize(boost::extents[n][dim]);
 
  // read Wasserstein order
  Index k;
@@ -203,7 +204,6 @@ void ScenarioReductorBlock::load( std::istream & input , char frmt )
  // read atoms
  for( Index i = 0 ; i < get_N() ; ++i )
   {
-    atomsP[i].resize(D);
     for( Index d = 0 ; d < get_dim() ; ++d )
     {
       if( ! ( input >> eatcomments >> atomsP[i][d] ) )
@@ -224,6 +224,42 @@ void ScenarioReductorBlock::load( std::istream & input , char frmt )
   add_Modification( std::make_shared< NBModification >( this ) );
 
  } // end( BinaryKnapsackBlock::load( istream ) )
+
+/*--------------------------------------------------------------------------*/
+void ScenarioReductorBlock::deserialize( const netCDF::NcGroup & group )
+{
+ // erase previous instance, if any
+ if( get_N() )
+  guts_of_destructor();
+
+ // read N
+::deserialize_dim(group, "N", N);
+
+ // read M
+::deserialize_dim(group, "M", M);
+
+
+// read dim
+::deserialize_dim(group, "dim", dim);
+
+// read AtomsP
+atomsP.resize(boost::extents[get_N()][get_dim()]);
+::deserialize(group, "atomsP", atomsP, true, false);
+
+// read weightsP, if not present, assume uniform weights
+  if (!::deserialize(group, "weightsP", get_N(), weightsP))
+  {
+    weightsP.resize(get_N(), 1.0 / get_N());
+  }
+
+
+ generate_abstract_variables();
+
+ // call the method of Block
+ // inside this the NBModification, the "nuclear option",  is issued
+ Block::deserialize( group );
+
+ }  // end( ScenarioReductorBlock::deserialize )
 
 /*--------------------------------------------------------------------------*/
 /*------------------------- Methods for R3 Blocks --------------------------*/
