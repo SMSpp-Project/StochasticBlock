@@ -45,7 +45,7 @@ Configure and build the library with:
 mkdir build
 cd build
 cmake ..
-make
+cmake --build .
 ```
 
 The library has the same configuration options of
@@ -54,7 +54,7 @@ The library has the same configuration options of
 Optionally, install the library in the system with:
 
 ```sh
-sudo make install
+cmake --install .
 ```
 
 ### Usage with CMake
