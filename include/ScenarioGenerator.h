@@ -46,12 +46,15 @@
  * many cases the user is not concerned with these details, and therefore they
  * can just program against the [MultiStage]ScenarioGenerator interface.
  *
- * \author Antonio Frangioni \n Dipartimento di Informatica \n Universita' di
- *         Pisa \n
+ * \author Antonio Frangioni \n
+ *         Dipartimento di Informatica \n
+ *         Universita' di Pisa \n
  *
- * \author Benoit Tran \n Dipartimento di Informatica \n Universita' di Pisa \n
+ * \author Benoit Tran \n
+ *         Dipartimento di Informatica \n
+ *         Universita' di Pisa \n
  *
- * \copyright &copy; by Antonio Frangioni
+ * \copyright &copy; by Antonio Frangioni and Benoit Tran
  */
 /*--------------------------------------------------------------------------*/
 /*----------------------------- DEFINITIONS --------------------------------*/
@@ -101,7 +104,7 @@ namespace SMSpp_di_unipi_it {
  * instant (stages) are defined. Then, a scenario ( x_0 , ... , x_{T-1} ) is a
  * realization of a finite horizon stochastic process ( X_0 , ... , X_{T-1} ),
  * where for each 0 <= t <= T - 1, the random variable X_t has values in some
- * euclidean space R^(d_t). The base class makes no assumption on the "internal
+ * Euclidean space R^(d_t). The base class makes no assumption on the "internal
  * structure" of x_t, which can in general be the composition of different
  * random variables (say, a pair ( c , a ) where c is the vector c[ j ] denoting
  * the cost of a given commodity at a predetermined set of locations j \in J,
@@ -284,8 +287,6 @@ class ScenarioGenerator
   }
     return nullptr;
 }
-
-
 
 /*--------------------------------------------------------------------------*/
  /// de-serialize a :ScenarioGenerator out of an netCDF::NcGroup, returns it
@@ -625,7 +626,7 @@ class ScenarioGenerator
  * > 0 of time instant (stages) are defined and a scenario ( x_0 , ... , x_{T-1}
  * ) is a realization of a finite horizon stochastic process ( X_0 , ... ,
  * X_{T-1} ), where for each 0 <= t <= T - 1, the random variable X_t has values
- * in some euclidean space R^(d_t). The base class makes no assumption on the
+ * in some Euclidean space R^(d_t). The base class makes no assumption on the
  * "internal structure" of x_t, which is just a vector of appropriate length
  * d_t, whose internal structure is supposed to be fixed and known to the user.
  *

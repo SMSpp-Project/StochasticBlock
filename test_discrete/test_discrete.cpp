@@ -43,14 +43,14 @@ std::mt19937 rng;
 class CoutSuppressor {
 public:
   CoutSuppressor(bool verbose) : verbose(verbose) {
-    if (!verbose) {
+    if( ! verbose ) {
         // Redirect std::cout to a null stream if not verbose
         old_buf = std::cout.rdbuf(null_buf.rdbuf());
     }
   }
 
   ~CoutSuppressor() {
-    if (!verbose) {
+    if( ! verbose ) {
         // Restore std::cout's original stream buffer
         std::cout.rdbuf(old_buf);
     }
@@ -58,7 +58,7 @@ public:
 
   template<typename T>
   CoutSuppressor& operator<<(const T& data) {
-      if (verbose) {
+      if( verbose ) {
           std::cout << data;
       }
       return *this;
@@ -89,7 +89,7 @@ void simpleNetCDF(const std::string& filename, bool probas) {
   constant vector 1/5 */
   NcVar probVar = dataFile.addVar("ScenarioProbabilities", ncDouble,
     scenarioDim);
-  if (probas)
+  if( probas )
   {
     std::vector<double> probabilities(scenarioDim.getSize(),
     1.0 / scenarioDim.getSize());
@@ -107,8 +107,8 @@ double lower, double upper)
     std::vector<double> result;
     while (result.size() < size) {
         double number = d(gen);
-        if (number >= lower && number <= upper) {
-            result.push_back(number);
+        if( ( number >= lower ) && ( number <= upper ) ) {
+            result.push_back( number );
         }
     }
     return result;
@@ -244,7 +244,7 @@ int main(int argc, char** argv) {
   // In the absence of the -verbose command, suppress all std::cout
   bool verbose = false; 
   for (int i = 1; i < argc; ++i) {
-    if (std::string(argv[i]) == "-verbose") {
+    if( std::string( argv[ i ] ) == "-verbose" ) {
         verbose = true;
     }
   }

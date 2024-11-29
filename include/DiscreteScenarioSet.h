@@ -6,12 +6,15 @@
  * implementation of ScenarioGenerator suited to the case where the input
  * distribution is contained in a netCDF file as a collection of vectors.
  *
- * \author Antonio Frangioni \n Dipartimento di Informatica \n Universita' di
- *         Pisa \n
+ * \author Antonio Frangioni \n
+ *         Dipartimento di Informatica \n
+ *         Universita' di Pisa \n
  *
- * \author Benoit Tran \n Dipartimento di Informatica \n Universita' di Pisa \n
+ * \author Benoit Tran \n
+ *         Dipartimento di Informatica \n
+ *         Universita' di Pisa \n
  *
- * \copyright &copy; by Antonio Frangioni
+ * \copyright &copy; by Antonio Frangioni and Benoit Tran
  */
 
 /*--------------------------------------------------------------------------*/
@@ -20,7 +23,7 @@
 
 #ifndef __DiscreteScenarioSet
 #define __DiscreteScenarioSet
-/* self-identification: #endif at the end of the file */
+                      /* self-identification: #endif at the end of the file */
 
 /*--------------------------------------------------------------------------*/
 /*------------------------------ INCLUDES ----------------------------------*/
@@ -29,7 +32,7 @@
 #include "ScenarioGenerator.h"
 
 #include <Eigen/Dense>
-#include <random> // not in SMSTypedefs.h
+#include <random>
 #include <span>
 
 /*--------------------------------------------------------------------------*/
@@ -53,25 +56,25 @@ namespace SMSpp_di_unipi_it
    * In the specific context of DiscreteScenarioSet, the distribution to sample
    * from is assumed to be a discrete probability distribution characterized
    * by a collection of scenarios. Scenarios are assumed to be contained in a
-   * netCDF file and DiscreteScenarioSet gives method to deserialize the scenarios
-   * from the netCDF file. The deserialized scenario are stored in a
+   * netCDF file, and DiscreteScenarioSet gives method to deserialize the scenarios
+   * from the netCDF file. The deserialized scenarios are stored in a
    * boost::multi_array< double, 2 >.
    *
    * DiscreteScenarioSet considers that the (deserialized) pool can be handled
    * by two distinct approaches: the first draws a *subset* of the input
    * scenarioPool, while the second *constructs* a set of representative scenarios
-   * from the input. Several functions thus have two different behaviours,
-   * wether or not the pool is initialized by the first or second method.
+   * from the input. Several functions thus have two different behaviors,
+   * whether the pool is initialized by the first or second method.
    *
    * The method get_current_scenario() allows the user to query one element in
    * the pool, whether the first or second method was used.
    *
    * The first method outputs scenarios that are part of the input, so the pool
-   * is simply caracterized by the set of indexes of the drawn scenarios. See
+   * is simply characterized by the set of indexes of the drawn scenarios. See
    * init_random_pool(...).
    *
    * The second method outputs scenarios that are different that the
-   * ones that were inputed. By default, DiscreteScenarioSet uses a native
+   * ones that were inputted. By default, DiscreteScenarioSet uses a native
    * implementation of kmeans clustering. In that case, another container is
    * created to hold the constructed scenarios. See
    * init_representative_pool(...).
@@ -92,8 +95,8 @@ namespace SMSpp_di_unipi_it
 
     /// Container for the deserialized scenario pool
     /** Every scenario is assumed to have the same dimension. As the number of
-     * scenario becomes known whenever we deserialize the data, the scenario
-     * pool is of known size at this point. Hence the choice to store it inside
+     * scenarios becomes known whenever we deserialize the data, the scenario
+     * pool is of known size at this point. Hence, the choice to store it inside
      * a boost::multi_array. See the function init_random_pool()*/
     using DiscreteScenarioPool = boost::multi_array<double, 2>;
 
@@ -126,16 +129,16 @@ namespace SMSpp_di_unipi_it
     /** Implementation of the "third-level" pure virtual function deserialize of
      * ScenarioGenerator.h. Assumes that there is a two-dimensional variable
      *  \p Scenario contained inside a netCDF NcGroup. One dimension NumberScenarios
-     * corresponds to the number of input scenarios caracterizing the input discrete
-     * probability distrubition. The second dimension ScenarioSize is the dimension
-     * of the euclidean space (R^d) representing a single scenario. We
+     * corresponds to the number of input scenarios characterizing the input discrete
+     * probability distribution. The second dimension ScenarioSize is the dimension
+     * of the Euclidean space (R^d) representing a single scenario. We
      * deserialize the scenarios into a boost::multi_array< double, 2 > as the two
      * dimensions become known once the file has been read.
      *
      * The scenarios are associated with another variable ScenarioProbabilities.
-     * If ScenarioProbabilities is present in the group then it is saved in a
+     * If ScenarioProbabilities is present in the group, then it is saved in a
      * std::vector< double > called scenarioProbabilities. If ScenarioProbabilities
-     * is *not* present in the group then uniform weights are assumed, that is,
+     * is *not* present in the group, then uniform weights are assumed, that is,
      * scenarioProbabilities is a vector of size nbScenarios where each component
      * is equal to 1.0 / nbScenarios.*/
     void deserialize(const netCDF::NcGroup &group) override;
@@ -165,11 +168,11 @@ namespace SMSpp_di_unipi_it
      * kmeans clustering is used.
      *
      * Kmeans splits the input scenarios into size clusters. Each of the 
-     * clusters has a (bary)center and each scenario is associated a label, 
+     * clusters has a (bary)center, and each scenario is associated with a label,
      * which is its nearest center.
      *
-     * Knowing the clusters centers and the labels, the representativePool is
-     * made of the centers. The std::vector< double > proabilityPool, is such
+     * Knowing the cluster centers and the labels, the representativePool is
+     * made of the centers. The std::vector< double > proabilityPool is such
      * that each component p_i is equal to
      *  p_i = sum(input_weights_with_label_equal_to_i).
      */
@@ -186,7 +189,7 @@ namespace SMSpp_di_unipi_it
      *
      * If we use a representativePool, we output the scenario as a span the
      * currentScenarioIndex-th component of the representativePool. */
-    Scenario get_current_scenario(void) override;
+    Scenario get_current_scenario( void ) override;
 
     /// Function to query the probability weight of the current scenario
     /** When sampling a pool, what are the weights of the drawn scenarios?
@@ -199,7 +202,7 @@ namespace SMSpp_di_unipi_it
      * given a scenario with an input_weight, we compute its new_weight by:
      *  "new_weight = input_weight / sum(input_weights_in_the_pool)".
      * 2) Case constructing representative scenarios. For kmeans clustering,
-     *  the "pool weight" should be the proportion of points affected to the
+     *  the "pool weight" should be the proportion of points affected by the
      * center.
      *
      * In the first case, after scaling, we return the currentScenarioIndex-th
@@ -208,21 +211,21 @@ namespace SMSpp_di_unipi_it
      * std::vector< double > poolProbabilities that is constructed with
      * representative scenarios.
      * */
-    double get_current_scenario_probability(void) override;
+    double get_current_scenario_probability( void ) override;
 
     /// Move currentScenarioIndex to the next scenario
-    /** Wether the pool has been sampled from the input via init_random_pool(...)
+    /** Weather the pool has been sampled from the input via init_random_pool(...)
      * or constructed from the input via init_representative_pool(...), the 
      * function next_scenario() behaves the same: it increments by 1 the 
      * currentScenarioIndex if there is still a scenario left in the pool and 
      * return true, otherwise it returns false.*/
-    bool next_scenario(void) override;
+    bool next_scenario( void ) override;
 
     /// return the dimension of the scenarios
-    /** Every scenario (vector in some euclidean space R^d) is assumed to have 
+    /** Every scenario (vector in some Euclidean space R^d) is assumed to have
      * the same dimension. The dimension has been saved in scenarioSize when
      * deserializing the input discrete distribution. */
-    ScenarioSize get_scenario_size(void) override;
+    ScenarioSize get_scenario_size( void ) override;
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- GETTERS  FOR PRIVATE FIELDS ------------------------*/
@@ -288,7 +291,7 @@ namespace SMSpp_di_unipi_it
     /** No matter the chosen method to make the pool, poolProbabilities is
      * the vector of associated probability weights. It is different from
      * scenarioProbabilities which is the vector of probability weights
-     * of the input scenarios which is in general a different set than the
+     * of the input scenarios, which is in general a different set than the
      * pool. */
     std::vector<double> poolProbabilities;
 
@@ -331,7 +334,7 @@ namespace SMSpp_di_unipi_it
      * We normalize the weights of each scenario in the pool so that their 
      * weights sum up to one. That is, we have
      *  new_weight = input_weight / sum(input_weights_of_pool_scenarios),
-     * where input_weight refer to the weight of a given scenario contained in
+     * where input_weight refers to the weight of a given scenario contained in
      * the vector scenarioProbabilities.
      *
      * So for the use of get_current_scenario_probability(), we

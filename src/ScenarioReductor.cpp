@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------*/
-/*-------------------------- File ScenarioReductorBlock.cpp -----------------------------*/
+/*------------------- File ScenarioReductorBlock.cpp -----------------------*/
 /*--------------------------------------------------------------------------*/
 /** @file
  * Implementation of the ScenarioReductorBlock class.
@@ -96,7 +96,7 @@ void ScenarioReductorBlock::load( Index n,
                                   Index dim,
                                   c_Mat_ANumber & atoms,
                                   c_Vec_WNumber & weights,
-                                  Index k = 2 )
+                                  Index k )
 {
  // Sanity checks 
 
@@ -108,7 +108,7 @@ void ScenarioReductorBlock::load( Index n,
 
  for (int i{0}; i < n; i++)
  {
-  if( atoms[i].size() != dim )
+  if( atoms[ i ].size() != dim )
     throw( std::invalid_argument( "The given dimension is wrong" ) );
  }
  
@@ -129,7 +129,7 @@ void ScenarioReductorBlock::load( Index n,
                                     Index dim,
                                     c_Mat_ANumber && atoms,
                                     c_Vec_WNumber && weights,
-                                    Index k = 2 )
+                                    Index k )
 {
 // Sanity checks 
 
@@ -139,15 +139,16 @@ void ScenarioReductorBlock::load( Index n,
  if( weights.size() != n )
   throw( std::invalid_argument( "Vector of weights of the wrong size" ) );
 
- for (int i{0}; i < n; i++)
+ for( int i{0} ; i < n ; i++ )
  {
-  if( atoms[i].size() != dim )
+  if( atoms[ i ].size() != dim )
     throw( std::invalid_argument( "The given dimension is wrong" ) );
  }
 
  // Erase previous instance, if any
- if( get_N() )
-  guts_of_destructor();
+ if( get_N() ) {
+  // guts_of_destructor(); TODO fixme
+ }
 
  // Initialize physical fields of ScenarioReductorBlock
  this->N = n;
@@ -155,8 +156,8 @@ void ScenarioReductorBlock::load( Index n,
  this->dim = dim;
  this->k = k;
  
- atomsP = std::move(atoms);
- weightsP = std::move(weightsP);
+ atomsP = std::move( atoms );
+ weightsP = std::move( weightsP );
  
  generate_abstract_variables();
 
@@ -169,8 +170,9 @@ void ScenarioReductorBlock::load( Index n,
 void ScenarioReductorBlock::load( std::istream & input , char frmt )
 {
  // erase previous instance, if any
- if( get_N() )
-  guts_of_destructor();
+ if( get_N() ) {
+  // guts_of_destructor(); TODO fixme
+ }
 
  // read problem data
  Index n;
@@ -178,10 +180,10 @@ void ScenarioReductorBlock::load( std::istream & input , char frmt )
   throw( std::invalid_argument( "error reading number of atoms of P" ) );
 
  this->N = n;
- atomsP.resize( n );
+ // atomsP.resize( n ); TODO fixme
  weightsP.resize( n );
 
- // read desired output size
+ // read the desired output size
  Index m;
  if( ! ( input >> eatcomments >> m ) )
   throw( std::invalid_argument( "error reading number of desired atoms of Q" ) );
@@ -206,7 +208,7 @@ void ScenarioReductorBlock::load( std::istream & input , char frmt )
   {
     for( Index d = 0 ; d < get_dim() ; ++d )
     {
-      if( ! ( input >> eatcomments >> atomsP[i][d] ) )
+      if( ! ( input >> eatcomments >> atomsP[ i ][ d ] ) )
         throw( std::invalid_argument( "error reading the atomsP" ) );
     }
   }
@@ -229,34 +231,32 @@ void ScenarioReductorBlock::load( std::istream & input , char frmt )
 void ScenarioReductorBlock::deserialize( const netCDF::NcGroup & group )
 {
  // erase previous instance, if any
- if( get_N() )
-  guts_of_destructor();
+ if( get_N() ) {
+  // guts_of_destructor();  TODO fixme
+ }
 
  // read N
-::deserialize_dim(group, "N", N);
+ ::deserialize_dim(group, "N", N);
 
  // read M
-::deserialize_dim(group, "M", M);
+ ::deserialize_dim(group, "M", M);
 
+ // read dim
+ ::deserialize_dim(group, "dim", dim);
 
-// read dim
-::deserialize_dim(group, "dim", dim);
+ // read AtomsP
+ atomsP.resize(boost::extents[get_N()][get_dim()]);
+ ::deserialize(group, "atomsP", atomsP, true, false);
 
-// read AtomsP
-atomsP.resize(boost::extents[get_N()][get_dim()]);
-::deserialize(group, "atomsP", atomsP, true, false);
-
-// read weightsP, if not present, assume uniform weights
-  if (!::deserialize(group, "weightsP", get_N(), weightsP))
-  {
-    weightsP.resize(get_N(), 1.0 / get_N());
-  }
-
+ // read weightsP, if not present, assume uniform weights
+ if( ! ::deserialize( group , "weightsP" , get_N() , weightsP ) ) {
+  weightsP.resize( get_N() , 1.0 / get_N() );
+ }
 
  generate_abstract_variables();
 
  // call the method of Block
- // inside this the NBModification, the "nuclear option",  is issued
+ // inside this the NBModification, the "nuclear option", is issued
  Block::deserialize( group );
 
  }  // end( ScenarioReductorBlock::deserialize )

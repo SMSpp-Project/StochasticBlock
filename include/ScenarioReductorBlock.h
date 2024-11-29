@@ -59,7 +59,7 @@ namespace SMSpp_di_unipi_it
 /** @defgroup ScenarioReductorBlock_TYPES ScenarioReductorBlock-related types
  *  @{ */
 
-/** @}  end( group( ScenarioReductorBlock_TYPES ) ) */ 
+/** @} end( group( ScenarioReductorBlock_TYPES ) ) */
 
 /*--------------------------------------------------------------------------*/
 /*------------------------------- CLASSES ----------------------------------*/
@@ -235,7 +235,9 @@ explicit ScenarioReductorBlock( Block *father = nullptr )
 
 /// destructor of ScenarioReductorBlock: deletes the abstract representation
 
-virtual ~ScenarioReductorBlock() { guts_of_destructor(); }
+virtual ~ScenarioReductorBlock() {
+ // guts_of_destructor(); TODO fixme
+}
 
 /** @} ---------------------------------------------------------------------*/
 /*-------------------------- OTHER INITIALIZATIONS -------------------------*/
@@ -253,7 +255,7 @@ virtual ~ScenarioReductorBlock() { guts_of_destructor(); }
 * 
 * - M   number of desired atoms in probability distribution Q
 *
-* - dim number of dimensions of the euclidean space in which the atoms live
+* - dim number of dimensions of the Euclidean space in which the atoms live
 *
 * - k   order of the considered k-Wasserstein distance between P and Q
 *
@@ -278,7 +280,7 @@ virtual ~ScenarioReductorBlock() { guts_of_destructor(); }
 * 
 * - M   number of desired atoms in probability distribution Q
 *
-* - dim number of dimensions of the euclidean space in which the atoms live
+* - dim number of dimensions of the Euclidean space in which the atoms live
 *
 * - k   order of the considered k-Wasserstein distance between P and Q
 *
@@ -303,7 +305,7 @@ virtual ~ScenarioReductorBlock() { guts_of_destructor(); }
   *
   * - M number of desired atoms of Q
   * 
-  * - dim number of dimensions of the euclidean space in which the atoms live
+  * - dim number of dimensions of the Euclidean space in which the atoms live
   *
   * - for i = 1 to N; for d = 1 to dim; d-th component of the i-th atom of P
   *
@@ -330,7 +332,7 @@ virtual ~ScenarioReductorBlock() { guts_of_destructor(); }
   *   probability distribution Q
   * 
   * - the dimension "dim" containing the dimension of the atoms' associated
-  *   euclidean space
+  *   Euclidean space
   *
   * - the variable ""
   *
