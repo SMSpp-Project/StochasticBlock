@@ -44,15 +44,15 @@ using namespace SMSpp_di_unipi_it;
  * librairires. */
 
 /* Computes the euclidean distance between two Eigen::VectorXd. */
-static double euclideanDistance(const Eigen::VectorXd &vec1,
-                                const Eigen::VectorXd &vec2)
+static double euclideanDistance( const Eigen::VectorXd & vec1 ,
+                                 const Eigen::VectorXd & vec2 )
 {
-  return (vec1 - vec2).norm();
+  return( vec1 - vec2 ).norm();
 }
 
 /// (Costly) function to find the index of the nearest center to a point
-static int nearestCenterIndex(const Eigen::VectorXd &point,
-                      DiscreteScenarioSet::DiscreteRepresentativePool & centers )
+static int nearestCenterIndex( const Eigen::VectorXd & point,
+                               DiscreteScenarioSet::DiscreteRepresentativePool & centers )
 {
   double minDistance = std::numeric_limits< double >::max();
   int index = 0;
@@ -68,12 +68,12 @@ static int nearestCenterIndex(const Eigen::VectorXd &point,
   return index;
 }
 
-static void kMeans(unsigned int k, DiscreteScenarioSet::PoolMap & pool ,
-                   DiscreteScenarioSet::DiscreteRepresentativePool & centers ,
-                   std::vector< int > & labels )
+static void kMeans( unsigned int k , DiscreteScenarioSet::PoolMap & pool ,
+                    DiscreteScenarioSet::DiscreteRepresentativePool & centers ,
+                    std::vector< int > & labels )
 {
   size_t n = pool.size() ; // n = nbScenarios
-  unsigned int scenariosize = pool[0].size();
+  unsigned int scenariosize = pool[ 0 ].size();
   std::vector< double > counts;
   counts.resize( k );
 
@@ -158,7 +158,7 @@ void DiscreteScenarioSet::empty_randomPool()
 }
 
 
-void DiscreteScenarioSet::set_poolSize(ScenarioIndex size )
+void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
 {
   if( size > nbScenarios ) // indirectly protects if input size is negative
   {
@@ -173,20 +173,20 @@ void DiscreteScenarioSet::set_poolSize(ScenarioIndex size )
 /*--------------------- CLASS DiscreteScenarioSet --------------------------*/
 /*--------------------------------------------------------------------------*/
 
-void DiscreteScenarioSet::deserialize(const netCDF::NcGroup & group )
+void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
 {
   // Compute the two dimensions of the scenarioPool
-  ::deserialize_dim(group, "NumberScenarios", nbScenarios , false );
+  ::deserialize_dim( group , "NumberScenarios" , nbScenarios , false );
 
-  ::deserialize_dim(group, "ScenarioSize", scenarioSize , false );
+  ::deserialize_dim( group , "ScenarioSize" , scenarioSize , false );
 
   // Deserialize the Scenarios inside the scenarioPool
-  scenarioSet.resize(boost::extents[nbScenarios][scenarioSize]);
-  ::deserialize(group, "Scenarios" , scenarioSet , true , false );
+  scenarioSet.resize( boost::extents[ nbScenarios ][ scenarioSize ] );
+  ::deserialize( group , "Scenarios" , scenarioSet , true , false );
 
   // If weights are not present, assume uniform weights
   if( ! ::deserialize( group , "ScenarioProbabilities",
-                        nbScenarios , scenarioProbabilities ) )
+                       nbScenarios , scenarioProbabilities ) )
   {
     scenarioProbabilities.resize( nbScenarios , 1.0 / nbScenarios );
   }
@@ -213,7 +213,7 @@ static void generateRandomSubset( size_t n , size_t k ,
   }
   // elem = [1,2, ..., n]
   std::vector< ScenarioGenerator::ScenarioIndex > elem( n );
-  std::iota(elem.begin(), elem.end(), 0);
+  std::iota( elem.begin() , elem.end() , 0 );
 
   // Shuffle elem randomly using our rng
   std::shuffle( elem.begin() , elem.end() , rng );
@@ -252,7 +252,7 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex size )
 
   // Convert every input scenario into an Eigen::VectorXd
   PoolMap eigenSet;
-  eigenSet.reserve(get_nbScenarios());
+  eigenSet.reserve( get_nbScenarios() );
   for( size_t i = 0 ; i < get_nbScenarios() ; i++ )
   {
     eigenSet.emplace_back( Eigen::Map< Eigen::VectorXd >( & scenarioSet[ i ][ 0 ],
@@ -299,8 +299,8 @@ ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
   {
     // transform the currentScenarioIndex-th element of representativePool
     // into a span< const double >
-    return Scenario(representativePool[currentScenarioIndex].data(),
-                    get_scenario_size());
+    return Scenario( representativePool[ currentScenarioIndex ].data(),
+                     get_scenario_size() );
   }
 }
 

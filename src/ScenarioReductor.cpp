@@ -106,7 +106,7 @@ void ScenarioReductorBlock::load( Index n,
  if( weights.size() != n )
   throw( std::invalid_argument( "Vector of weights of the wrong size" ) );
 
- for (int i{0}; i < n; i++)
+ for( int i{0} ; i < n ; i++ )
  {
   if( atoms[ i ].size() != dim )
     throw( std::invalid_argument( "The given dimension is wrong" ) );
@@ -195,7 +195,7 @@ void ScenarioReductorBlock::load( std::istream & input , char frmt )
  if( ! ( input >> eatcomments >> D ) )
   throw( std::invalid_argument( "error reading the dimension" ) );
  this->dim = D;
- atomsP.resize(boost::extents[n][dim]);
+ atomsP.resize( boost::extents[ n ][ dim ] );
 
  // read Wasserstein order
  Index k;
@@ -236,17 +236,17 @@ void ScenarioReductorBlock::deserialize( const netCDF::NcGroup & group )
  }
 
  // read N
- ::deserialize_dim(group, "N", N);
+ ::deserialize_dim( group , "N" , N );
 
  // read M
- ::deserialize_dim(group, "M", M);
+ ::deserialize_dim( group , "M" , M );
 
  // read dim
- ::deserialize_dim(group, "dim", dim);
+ ::deserialize_dim( group , "dim" , dim );
 
  // read AtomsP
- atomsP.resize(boost::extents[get_N()][get_dim()]);
- ::deserialize(group, "atomsP", atomsP, true, false);
+ atomsP.resize( boost::extents[ get_N() ][ get_dim() ] );
+ ::deserialize( group , "atomsP" , atomsP , true , false );
 
  // read weightsP, if not present, assume uniform weights
  if( ! ::deserialize( group , "weightsP" , get_N() , weightsP ) ) {
