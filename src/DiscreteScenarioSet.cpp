@@ -37,13 +37,13 @@ using namespace SMSpp_di_unipi_it;
 /*------------------------- Kmeans clustering ------------------------------*/
 /*--------------------------------------------------------------------------*/
 /* Naive implementation from scratch of Lloyd's algorithm to solve the
- * kmeans optimization problem. There are better existing librairies that
- * are known to be robust and efficient to solve the kmeans optimization
+ * k-means optimization problem. There are better-existing libraries that
+ * are known to be robust and efficient to solve the k-means optimization
  * problem. The following implementation is simply here as a helper for
  * DiscreteScenarioSet to avoid additional dependencies with external
- * librairires. */
+ * libraries. */
 
-/* Computes the euclidean distance between two Eigen::VectorXd. */
+/* Computes the Euclidean distance between two Eigen::VectorXd. */
 static double euclideanDistance( const Eigen::VectorXd & vec1 ,
                                  const Eigen::VectorXd & vec2 )
 {
@@ -161,11 +161,9 @@ void DiscreteScenarioSet::empty_randomPool()
 void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
 {
   if( size > nbScenarios ) // indirectly protects if input size is negative
-  {
-    throw std::out_of_range("The desired sample size is greater than "
-                            "the number of available number of different "
-                            "scenarios");
-  }
+    throw( std::out_of_range("The desired sample size is greater than "
+                             "the number of available number of different "
+                             "scenarios") );
   poolSize = size;
 }
 
@@ -190,7 +188,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   {
     scenarioProbabilities.resize( nbScenarios , 1.0 / nbScenarios );
   }
-  // maybe instead consider empty if not given and change accordingly
+  // maybe instead, consider empty if not given and change accordingly
 }
 
 // Implementation for setting the seed of the pseudo-random number generator
@@ -209,7 +207,7 @@ static void generateRandomSubset( size_t n , size_t k ,
 {
   if( k > n )
   {
-    throw std::invalid_argument("k must be less or equal than n");
+    throw( std::invalid_argument("k must be less or equal than n") );
   }
   // elem = [1,2, ..., n]
   std::vector< ScenarioGenerator::ScenarioIndex > elem( n );
@@ -269,7 +267,7 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex size )
     representativePool.push_back( Eigen::VectorXd( eigenSet[ i ] ) );
   }
 
-  // Lloyd's algo for kmeans clustering problem
+  // Lloyd's algo for k-means clustering problem
   // updates in-place representativePool and labels
   std::vector< int > labels( nbScenarios , 0 );
   kMeans( size , eigenSet , representativePool , labels );
@@ -284,11 +282,9 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex size )
 ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
 {
   if( currentScenarioIndex >= poolSize )
-  {
-    throw std::out_of_range("Current scenario index is out of range.");
-  }
+    throw( std::out_of_range("Current scenario index is out of range.") );
 
-  if( isempty_representativePool())
+  if( isempty_representativePool() )
   {
     // transform the scenarioIndexes[currentScenarioIndex]-th row of
     // scenarioSet into a span< const double >
@@ -307,19 +303,13 @@ ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
 double DiscreteScenarioSet::get_current_scenario_probability( void )
 {
   if( currentScenarioIndex >= poolSize )
-  {
-    throw std::out_of_range("Current scenario index is out of range.");
-  }
-  if( isempty_representativePool())
-  {
-    return( scenarioProbabilities[ currentScenarioIndex ] / sumPoolWeights );
-  }
-  else
-  {
-    return( poolProbabilities[ currentScenarioIndex ] );
-  }
-}
+    throw( std::out_of_range( "Current scenario index is out of range." ) );
 
+  if( isempty_representativePool() )
+    return( scenarioProbabilities[ currentScenarioIndex ] / sumPoolWeights );
+
+  return( poolProbabilities[ currentScenarioIndex ] );
+}
 
 bool DiscreteScenarioSet::next_scenario( void )
 {
@@ -344,10 +334,7 @@ DiscreteScenarioSet::DiscreteScenarioSet()
 }
 
 /// Destructor
-DiscreteScenarioSet::~DiscreteScenarioSet()
-{
-}
-
+DiscreteScenarioSet::~DiscreteScenarioSet() {}
 
 /** @} ---------------------------------------------------------------------*/
 /*-------------------------- FACTORY MANAGEMENT ----------------------------*/

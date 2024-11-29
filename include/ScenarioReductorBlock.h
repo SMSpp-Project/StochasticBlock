@@ -135,7 +135,7 @@ namespace SMSpp_di_unipi_it
  * CSR optimization problem.
  * 
  * TODO:
- * For now only the case of the euclidean norm is considered. Should extend
+ * For now only the case of the Euclidean norm is considered. Should extend
  * ScenarioReductorBLock to arbitrary cost functions. Important use cases for
  * such extension are the Fortet-Mourier metric and the problem-dependant cost
  * of Bertsimas and Mundru. It should be the matter of changing the Function

@@ -75,7 +75,7 @@ namespace SMSpp_di_unipi_it
    *
    * The second method outputs scenarios that are different that the
    * ones that were inputted. By default, DiscreteScenarioSet uses a native
-   * implementation of kmeans clustering. In that case, another container is
+   * implementation of k-means clustering. In that case, another container is
    * created to hold the constructed scenarios. See
    * init_representative_pool(...).
    * */
@@ -98,24 +98,24 @@ namespace SMSpp_di_unipi_it
      * scenarios becomes known whenever we deserialize the data, the scenario
      * pool is of known size at this point. Hence, the choice to store it inside
      * a boost::multi_array. See the function init_random_pool()*/
-    using DiscreteScenarioPool = boost::multi_array<double, 2>;
+    using DiscreteScenarioPool = boost::multi_array< double , 2 >;
 
     /// Container for the representative pool
     /** The representative pool is made of Eigen::VectorXd for ease of linear
      * algebra manipulations. See the function init_representative_pool().*/
-    using DiscreteRepresentativePool = std::vector<Eigen::VectorXd>;
+    using DiscreteRepresentativePool = std::vector< Eigen::VectorXd >;
 
     /// type Point for Eigen::VectorXd
     /** For ease of linear algebra manipulations, we use Eigen::VectorXd to
      * hold a scenario. As scenarios are assumed to be present in memory
      * already (as boost::multi_array< double, 2 >), they are converted into
      * Eigen::VectorXd using Eigen::Map. */
-    using Point = Eigen::Map<Eigen::VectorXd>;
+    using Point = Eigen::Map< Eigen::VectorXd >;
 
     /// Container for the centers and the points to be clustered
     /** Lightweight container for a collection of scenarios represented as
      * Eigen::VectorXd. */
-    using PoolMap = std::vector<Eigen::Map<Eigen::VectorXd>>;
+    using PoolMap = std::vector< Eigen::Map< Eigen::VectorXd > >;
 
 /** @} ---------------------------------------------------------------------*/
 /*----------- CONSTRUCTING AND DESTRUCTING DiscreteScenarioSet -------------*/
@@ -165,7 +165,7 @@ namespace SMSpp_di_unipi_it
      * to some optimization criterium.
      *
      * By default, in DiscreteScenarioSet a native (and naive) implementation of
-     * kmeans clustering is used.
+     * k-means clustering is used.
      *
      * Kmeans splits the input scenarios into size clusters. Each of the 
      * clusters has a (bary)center, and each scenario is associated with a label,
@@ -201,7 +201,7 @@ namespace SMSpp_di_unipi_it
      * 1) Case subset of input. Take the input weight and normalize it, that is
      * given a scenario with an input_weight, we compute its new_weight by:
      *  "new_weight = input_weight / sum(input_weights_in_the_pool)".
-     * 2) Case constructing representative scenarios. For kmeans clustering,
+     * 2) Case constructing representative scenarios. For k-means clustering,
      *  the "pool weight" should be the proportion of points affected by the
      * center.
      *

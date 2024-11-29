@@ -44,9 +44,9 @@ void StochasticBlock::deserialize( const netCDF::NcGroup & group ) {
 
   auto inner_block = new_Block( inner_block_group, this );
   if( ! inner_block )
-   throw std::logic_error( "StochasticBlock::deserialize: the 'Block' "
-                           "group is present but its description is "
-                           "incomplete." );
+   throw( std::logic_error( "StochasticBlock::deserialize: the 'Block' "
+                            "group is present but its description is "
+                            "incomplete." ) );
   set_inner_block( inner_block );
  }
 
