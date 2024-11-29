@@ -61,7 +61,7 @@ public:
       if( verbose ) {
           std::cout << data;
       }
-      return *this;
+      return( *this );
   }
 
 private:
@@ -111,7 +111,7 @@ double lower, double upper)
             result.push_back( number );
         }
     }
-    return result;
+    return( result );
 }
 
 void randomNetCDF(const std::string& filename) {
@@ -261,5 +261,5 @@ int main(int argc, char** argv) {
   // This message will always print
   std::cout << "Test_discret done" << std::endl;
 
-  return 0;
+  return( 0 );
 }

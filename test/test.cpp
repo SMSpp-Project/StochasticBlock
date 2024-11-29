@@ -57,13 +57,13 @@ public:
  template< class T >
  typename std::enable_if< std::is_same_v< T , int > ,
                           std::vector< T > & >::type get_data() {
-  return int_data;
+  return( int_data );
  }
 
  template< class T >
  typename std::enable_if< std::is_same_v< T , double > ,
                           std::vector< T > & >::type get_data() {
-  return dbl_data;
+  return( dbl_data );
  }
 
  template< class T >
@@ -151,8 +151,8 @@ struct FunctionType< Range , T > {
 
 template< class S , class T >
 auto get_method() {
- return Block::get_method< typename FunctionType< S , T >::type >
-  ( "DummyBlock::set_data" );
+ return( Block::get_method< typename FunctionType< S , T >::type >
+  ( "DummyBlock::set_data" ) );
 }
 
 /*--------------------------------------------------------------------------*/
@@ -168,7 +168,7 @@ Subset build( int size , int total_size ) {
  std::shuffle( set.begin() , set.end() , random_engine );
  set.resize( size );
  std::sort( set.begin() , set.end() );
- return set;
+ return( set );
 }
 
 template<>
@@ -176,7 +176,7 @@ Range build( int size , int total_size ) {
  assert( size <= total_size );
  std::uniform_int_distribution< int > begin_dist( 0 , total_size - size );
  auto begin = begin_dist( random_engine );
- return Range( begin , begin + size );
+ return( Range( begin , begin + size ) );
 }
 
 /*--------------------------------------------------------------------------*/
@@ -188,12 +188,12 @@ template<>
 Subset build_sequential( int size , int offset ) {
  Subset set( size );
  std::iota( set.begin() , set.end() , offset );
- return set;
+ return( set );
 }
 
 template<>
 Range build_sequential( int size , int offset ) {
- return Range( offset , size + offset );
+ return( Range( offset , size + offset ) );
 }
 
 /*--------------------------------------------------------------------------*/

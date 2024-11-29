@@ -65,7 +65,7 @@ static int nearestCenterIndex( const Eigen::VectorXd & point,
       index = i;
     }
   }
-  return index;
+  return( index );
 }
 
 static void kMeans( unsigned int k , DiscreteScenarioSet::PoolMap & pool ,
@@ -128,14 +128,14 @@ static void kMeans( unsigned int k , DiscreteScenarioSet::PoolMap & pool ,
 const ScenarioGenerator::ScenarioIndex&
  DiscreteScenarioSet::get_nbScenarios() const
 {
-  return nbScenarios;
+  return( nbScenarios );
 }
 
 // Get for scenarioSize
 const ScenarioGenerator::ScenarioSize&
  DiscreteScenarioSet::get_scenarioSize() const
 {
-  return scenarioSize;
+  return( scenarioSize );
 }
 
 void DiscreteScenarioSet::empty_representativePool()
@@ -148,7 +148,7 @@ void DiscreteScenarioSet::empty_representativePool()
 
 bool DiscreteScenarioSet::isempty_representativePool() const
 {
-  return representativePool.empty();
+  return( representativePool.empty() );
 }
 
 void DiscreteScenarioSet::empty_randomPool()
@@ -292,15 +292,15 @@ ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
   {
     // transform the scenarioIndexes[currentScenarioIndex]-th row of
     // scenarioSet into a span< const double >
-    return Scenario(&scenarioSet[scenarioIndexes[currentScenarioIndex]][0],
-                    get_scenario_size());
+    return( Scenario( & scenarioSet[scenarioIndexes[ currentScenarioIndex ]][ 0 ],
+                      get_scenario_size() ) );
   }
   else
   {
     // transform the currentScenarioIndex-th element of representativePool
     // into a span< const double >
-    return Scenario( representativePool[ currentScenarioIndex ].data(),
-                     get_scenario_size() );
+    return( Scenario( representativePool[ currentScenarioIndex ].data(),
+                      get_scenario_size() ) );
   }
 }
 
@@ -312,11 +312,11 @@ double DiscreteScenarioSet::get_current_scenario_probability( void )
   }
   if( isempty_representativePool())
   {
-    return scenarioProbabilities[currentScenarioIndex] / sumPoolWeights;
+    return( scenarioProbabilities[ currentScenarioIndex ] / sumPoolWeights );
   }
   else
   {
-    return poolProbabilities[currentScenarioIndex];
+    return( poolProbabilities[ currentScenarioIndex ] );
   }
 }
 
@@ -326,15 +326,15 @@ bool DiscreteScenarioSet::next_scenario( void )
   if( currentScenarioIndex < poolSize - 1 )
   {
     currentScenarioIndex++;
-    return true; // Successfully moved to the next scenario
+    return( true ); // Successfully moved to the next scenario
   }
-  return false; // No more scenario in scenarioPool to move to
+  return( false ); // No more scenario in scenarioPool to move to
 }
 
 /// Implementation for retrieving the size of a scenario
 ScenarioGenerator::ScenarioSize DiscreteScenarioSet::get_scenario_size( void )
 {
-  return scenarioSize;
+  return( scenarioSize );
 }
 
 /// Concrete implementation of ScenarioGenerator

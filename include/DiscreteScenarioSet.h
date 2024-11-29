@@ -157,12 +157,12 @@ namespace SMSpp_di_unipi_it
     /** The function init_random_pool selects randomly a few scenarios among the
      * ones that were deserialized from the input. It saves a subset of indices
      * in the variable scenarioIndexes. */
-    void init_random_pool(ScenarioIndex sampleSize) override;
+    void init_random_pool( ScenarioIndex sampleSize ) override;
 
     /// Function to compute a finite set of representative scenario
-    /** The function init_representative_pool(ScenarioIndex size) computes a set
-     * of scenarios that approximates the input set of scenarios according to 
-     * some optimization criterium.
+    /** The function init_representative_pool( ScenarioIndex size ) computes a
+     * set of scenarios that approximates the input set of scenarios according
+     * to some optimization criterium.
      *
      * By default, in DiscreteScenarioSet a native (and naive) implementation of
      * kmeans clustering is used.
@@ -172,11 +172,11 @@ namespace SMSpp_di_unipi_it
      * which is its nearest center.
      *
      * Knowing the cluster centers and the labels, the representativePool is
-     * made of the centers. The std::vector< double > proabilityPool is such
+     * made of the centers. The std::vector< double > probabilityPool is such
      * that each component p_i is equal to
      *  p_i = sum(input_weights_with_label_equal_to_i).
      */
-    void init_representative_pool(ScenarioIndex sampleSize) override;
+    void init_representative_pool( ScenarioIndex sampleSize ) override;
 
     /// Function for retrieving the current scenario.
     /** Checks that the internal variable currentScenarioIndex is within bounds,
@@ -238,6 +238,7 @@ namespace SMSpp_di_unipi_it
 
     /// get a reference to scenarioSize
     const ScenarioSize& get_scenarioSize() const;
+
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
 /*--------------------------------------------------------------------------*/
@@ -341,7 +342,7 @@ namespace SMSpp_di_unipi_it
      * save in memory sumPoolWeight, equal to the sum of the input weights of 
      * the scenarios chosen to be part of the pool.
      * */
-    void set_poolSize(ScenarioIndex size);
+    void set_poolSize( ScenarioIndex size );
 
 
     /// empty the representativePool of scenarios

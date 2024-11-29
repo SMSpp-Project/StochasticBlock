@@ -285,7 +285,7 @@ class ScenarioGenerator
   catch( ... ) {
    std::cerr << "unknown error in deserialize" << std::endl;
   }
-    return nullptr;
+    return( nullptr );
 }
 
 /*--------------------------------------------------------------------------*/
