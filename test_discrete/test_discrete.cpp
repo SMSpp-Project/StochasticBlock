@@ -81,7 +81,7 @@ void simpleNetCDF(const std::string& filename, bool probas) {
   NcDim dimensionDim = dataFile.addDim("ScenarioSize", 10);
   NcVar dataVar = dataFile.addVar("Scenarios", ncDouble, {scenarioDim,
     dimensionDim});
-  std::vector<double> scenarios(scenarioDim.getSize() * 
+  std::vector< double > scenarios(scenarioDim.getSize() *
     dimensionDim.getSize(), 0.5);
 
   /* if probVar not updated, it should be of size 0 and then the deserialize 
@@ -91,20 +91,23 @@ void simpleNetCDF(const std::string& filename, bool probas) {
     scenarioDim);
   if( probas )
   {
-    std::vector<double> probabilities(scenarioDim.getSize(),
-    1.0 / scenarioDim.getSize());
+    std::vector< double > probabilities(scenarioDim.getSize(),
+      1.0 / scenarioDim.getSize());
     probVar.putVar(probabilities.data());
   }
   dataVar.putVar(scenarios.data());
 }
 
-std::vector<double> TruncatedNormalVector(int size, double mean, double stddev, 
-double lower, double upper) 
+std::vector< double > TruncatedNormalVector( int size ,
+                                             double mean ,
+                                             double stddev ,
+                                             double lower ,
+                                             double upper )
 {
     std::mt19937 gen(rng());
     std::normal_distribution<> d(mean, stddev);
 
-    std::vector<double> result;
+    std::vector< double > result;
     while (result.size() < size) {
         double number = d(gen);
         if( ( number >= lower ) && ( number <= upper ) ) {
@@ -129,27 +132,22 @@ void randomNetCDF(const std::string& filename) {
   NcDim dimensionDim = dataFile.addDim("ScenarioSize", 10);
   NcVar dataVar = dataFile.addVar("Scenarios", ncDouble, {scenarioDim,
     dimensionDim});
-  std::vector<double> scenarios = TruncatedNormalVector(scenarioDim.getSize() * 
-    dimensionDim.getSize(), mean, stddev, -20.0, 20.0);
+  std::vector< double > scenarios = TruncatedNormalVector(scenarioDim.getSize() *
+    dimensionDim.getSize() , mean , stddev , -20.0 , 20.0 );
 
-
-  NcVar probVar = dataFile.addVar("ScenarioProbabilities", ncDouble,
-    scenarioDim);
-  std::vector<double> probabilities(scenarioDim.getSize(),
-  1.0 / scenarioDim.getSize());
-  probVar.putVar(probabilities.data());
-
+  NcVar probVar = dataFile.addVar( "ScenarioProbabilities" , ncDouble , scenarioDim );
+  std::vector< double > probabilities(scenarioDim.getSize() ,
+  1.0 / scenarioDim.getSize() );
+  probVar.putVar( probabilities.data() );
   dataVar.putVar(scenarios.data());
 }
 
 template<typename T> 
-void printSpan(std::span<T>& sp)
+void printSpan(std::span< T > & sp)
 {
   std::cout << "Cur. scen.: ";
   for (auto& val : sp)
-  {
     std::cout << val << " ";
-  }
 }
 
 /*--------------------------------------------------------------------------*/

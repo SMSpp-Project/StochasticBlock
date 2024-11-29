@@ -270,7 +270,7 @@ namespace SMSpp_di_unipi_it
     ScenarioIndex poolSize = 0;
 
     /// Probabilities of input scenarios
-    std::vector<double> scenarioProbabilities;
+    std::vector< double > scenarioProbabilities;
 
     /// Random generator
     std::mt19937 rng;
@@ -294,8 +294,7 @@ namespace SMSpp_di_unipi_it
      * scenarioProbabilities which is the vector of probability weights
      * of the input scenarios, which is in general a different set than the
      * pool. */
-    std::vector<double> poolProbabilities;
-
+    std::vector< double > poolProbabilities;
 
 /** @} ---------------------------------------------------------------------*/
 /*------------------------- FIELDS FOR RANDOM POOL -------------------------*/
@@ -317,7 +316,7 @@ namespace SMSpp_di_unipi_it
     double sumPoolWeights;
 
     /// Indexes of the pool
-    std::vector<ScenarioIndex> scenarioIndexes;
+    std::vector< ScenarioIndex > scenarioIndexes;
 
 /** @} ---------------------------------------------------------------------*/
 /*-------------------- HELPER METHODS OF THE CLASS -------------------------*/
