@@ -103,7 +103,7 @@ static void kMeans( unsigned int k , DiscreteScenarioSet::PoolMap & pool ,
     {
       Eigen::VectorXd &center = centers[ labels[ i ] ];
 
-      for( size_t j = 0; j < scenariosize; j++)
+      for( size_t j = 0 ; j < scenariosize ; j++ )
       {
         center[ j ] += pool[ i ][ j ];
       }
@@ -112,7 +112,7 @@ static void kMeans( unsigned int k , DiscreteScenarioSet::PoolMap & pool ,
 
     for( int i = 0 ; i < k ; i++ )
     {
-      for( size_t j = 0; j < scenariosize; j++)
+      for( size_t j = 0 ; j < scenariosize ; j++ )
       {
         centers[ i ][ j ] /= counts[ i ];
       }
@@ -156,7 +156,6 @@ void DiscreteScenarioSet::empty_randomPool()
   scenarioIndexes.clear();
   scenarioIndexes.shrink_to_fit();
 }
-
 
 void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
 {
@@ -257,7 +256,7 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex size )
                                                           get_scenarioSize() ) );
   }
 
-  // Initialize the representativePool, using a random subset of input scenari
+  // Initialize the representativePool, using a random subset of input scenario
   representativePool.reserve( size );
   std::vector< ScenarioIndex > rand_ind;
 
@@ -273,7 +272,7 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex size )
   kMeans( size , eigenSet , representativePool , labels );
 
   // compute the poolProbabilities from the labels and input weights
-  for( size_t j{0}; j < nbScenarios; j++)
+  for( size_t j{0} ; j < nbScenarios ; j++ )
   {
     poolProbabilities[labels[j]] += scenarioProbabilities[j];
   }
