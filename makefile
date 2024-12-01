@@ -31,13 +31,13 @@
 # macros to be exported - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 StcBlkOBJ = $(StcBlkSDR)/obj/DiscreteScenarioSet.o \
-	# $(StcBlkSDR)/obj/StochasticBlock.o
+	$(StcBlkSDR)/obj/StochasticBlock.o
 
 StcBlkINC = -I$(StcBlkSDR)/include
 
 StcBlkH   = $(StcBlkSDR)/include/ScenarioGenerator.h \
-	$(StcBlkSDR)/include/ScenarioGenerator.h \
-	# $(StcBlkSDR)/include/StochasticBlock.h
+	$(StcBlkSDR)/include/DiscreteScenarioSet.h \
+	$(StcBlkSDR)/include/StochasticBlock.h
 
 # clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -46,16 +46,16 @@ clean::
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
-# $(StcBlkSDR)/obj/StochasticBlock.o: $(StcBlkSDR)/src/StochasticBlock.cpp \
-# 	$(StcBlkH) $(SMS++OBJ)
-# 	$(CC) -c $(StcBlkSDR)/src/StochasticBlock.cpp -o $@ $(StcBlkINC) \
-# 	$(SMS++INC) $(SW)
+$(StcBlkSDR)/obj/StochasticBlock.o: $(StcBlkSDR)/src/StochasticBlock.cpp \
+	$(StcBlkSDR)/include/StochasticBlock.h $(SMS++OBJ)
+	$(CC) -c $(StcBlkSDR)/src/StochasticBlock.cpp -o $@ $(StcBlkINC) \
+	$(SMS++INC) $(SW)
 
 $(StcBlkSDR)/obj/DiscreteScenarioSet.o: \
 	$(StcBlkSDR)/src/DiscreteScenarioSet.cpp \
 	$(StcBlkSDR)/include/ScenarioGenerator.h \
-	$(StcBlkSDR)/include/DiscreteScenarioSet.h $(StcBlkH) $(SMS++OBJ)
-	$(CC) -c $(StcBlkSDR)/src/DiscreteScenarioSet.cpp -o $@ $(StcBlkINC) \
-	$(SMS++INC) $(SW)
+	$(StcBlkSDR)/include/DiscreteScenarioSet.h $(SMS++OBJ)
+	$(CC) -c $(StcBlkSDR)/src/DiscreteScenarioSet.cpp -o $@ \
+	$(StcBlkINC) $(SMS++INC) $(SW)
 
 ########################## End of makefile ###################################
