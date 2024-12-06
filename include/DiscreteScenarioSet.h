@@ -233,10 +233,10 @@ public:
  *  @{ */
 
  /// get a reference to nbScenarios
- const ScenarioIndex& get_nbScenarios() const;
+ const ScenarioIndex & get_nbScenarios() const;
 
  /// get a reference to scenarioSize
- const ScenarioSize& get_scenarioSize() const;
+ const ScenarioSize & get_scenarioSize() const;
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
@@ -310,7 +310,7 @@ private:
  /// holder for the sum of the weights inside the random pool
  /** Variable which holds the sum of the weights of the scenarios that were
   * chosen to be part of the random pool, see init_random_pool(...).
-  *  This variable is set back to 0.0 if the representative pool is used,
+  * This variable is set back to 0.0 if the representative pool is used,
   * see init_representative_pool(...). */
  double sumPoolWeights;
 
@@ -338,8 +338,7 @@ private:
   *
   * So for the use of get_current_scenario_probability(), we
   * save in memory sumPoolWeight, equal to the sum of the input weights of
-  * the scenarios chosen to be part of the pool.
-  * */
+  * the scenarios chosen to be part of the pool. */
  void set_poolSize( ScenarioIndex size );
 
  /// empty the representativePool of scenarios

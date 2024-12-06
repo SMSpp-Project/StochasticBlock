@@ -202,13 +202,13 @@ class ScenarioGenerator
 /** @name Constructing and destructing ScenarioGenerator
  *  @{ */
 
- /// constructor: initialise the few data structures of the base class
+ /// constructor: initialize the few data structures of the base class
  ScenarioGenerator( void ) { }
 
 /*--------------------------------------------------------------------------*/
- /// construct a :ScenarioGenerator of specific type using the factory
+ /// construct a :ScenarioGenerator of a specific type using the factory
  /** Use the ScenarioGenerator factory to construct a :ScenarioGenerator object
-  * of type specified by classname (a std::string with the name of the class
+  * of a type specified by classname (a std::string with the name of the class
   * inside). Note that the method is static because the factory is static, hence
   * it is to be called as
   *
@@ -266,7 +266,7 @@ class ScenarioGenerator
   *
   * i.e., without any reference to any specific ScenarioGenerator. */
 
-[[nodiscard]] static ScenarioGenerator* deserialize(const std::string& filename) {
+[[nodiscard]] static ScenarioGenerator* deserialize(const std::string & filename) {
   try {
     // Relies on netCDF API to handle is_open() check
     /*
@@ -276,7 +276,7 @@ class ScenarioGenerator
 
     return( ScenarioGenerator::new_ScenarioGenerator( dataFile ) );
   }
-  catch (netCDF::exceptions::NcException& e) {
+  catch (netCDF::exceptions::NcException & e) {
       std::cerr << "Error opening or processing netCDF file: " << e.what() << std::endl;
   }
   catch( std::exception & e ) {
@@ -303,13 +303,13 @@ class ScenarioGenerator
   *   method deserialize( netCDF::NcGroup ) of the newly minted
   *   :ScenarioGenerator is invoked (with argument \p group) to finish the work.
   *
-  * - An "indirect" group that just need to contain the single string attribute
+  * - An "indirect" group that just needs to contain the single string attribute
   *   "filename"; in this case, the attribute is used as argument for a call to
   *   deserialize( const std::string & ) that will extract the
   *   :ScenarioGenerator by the corresponding netCDF file.
   *
-  * In case \p group contains both "type" and "filename", the first takes the
-  * precedence (direct groups have precedence over indirect ones).
+  * In the case \p group contains both "type" and "filename", the first takes
+  * the precedence (direct groups have precedence over indirect ones).
   *
   * Note that this method is static (see the previous versions for comments
   * about it) and returns a pointer to ScenarioGenerator, hence it has to have a
@@ -387,9 +387,9 @@ class ScenarioGenerator
  /// returns the maximum number of scenarios that can be generated
  /** This method returns the support size of the random variable of the
   * ScenarioGenerator, i.e., the maximum number of different scenarios that it
-  * can ever output. This is done so that the user avoids to call the
+  * can ever output. This is done so that the user avoids calling the
   * init_*_pool() methods [see] with requiring too high a number of scenarios.
-  * In the case of the random variable being continuous the support size is
+  * In the case of the random variable being continuous, the support size is
   * (theoretically) infinite, so INFScenario is reported. This is done by the
   * base class implementation, so that the method only needs to be redefined by
   * derived classes implementing variables with finite support.
@@ -401,10 +401,10 @@ class ScenarioGenerator
 
 /*--------------------------------------------------------------------------*/
  /// returns the size of any scenario (length of the double vector)
- /** This method returns size of the double vector containing the data that
+ /** This method returns the size of the double vector containing the data that
   * specify the instantiation x_0 of the random variable X_0. This will be the
   * size of the std::span< const double > (Scenario) returned by
-  * get_current_scenario(), */
+  * get_current_scenario(). */
   
  [[nodiscard]] virtual ScenarioSize get_scenario_size( void ) = 0;
 
@@ -436,18 +436,18 @@ class ScenarioGenerator
  * ScenarioGenerator works based on the concept of "scenario pool". The user has
  * to request the (logical) creation of a finite set of scenarios that they can
  * then read. Scenario pools can be constructed differently with different aims
- * in mind (and a different cost). Once a scenario pool is initialised it can be
+ * in mind (and a different cost). Once a scenario pool is initialized, it can be
  * traversed by going through the scenarios in the pool one by one; at each
  * stage a current scenario is defined that can be read. Once the current
- * scenario is moved forward the previous current scenario is in principle no
+ * scenario is moved forward, the previous current scenario is in principle no
  * longer available.
  *
  * The user is supposedly incapable of differentiating the scenarios of the pool
  * from one another, which means that there is no assumption on the order in
- * which the scenarios of the pool is visited. Also, there should be no need to
- * re-visit a scenario once the user has been visited it and moved on, so "the
+ * which the scenarios of the pool are visited. Also, there should be no need to
+ * re-visit a scenario once the user has visited it and moved on, so "the
  * clock of the pool only moves forward" (if the user needs to look at more than
- * one scenario at the time they will have to save them in their own data
+ * one scenario at a time, they will have to save them in their own data
  * structure.
  *  @{ */
 
@@ -456,7 +456,7 @@ class ScenarioGenerator
   * the use of pseudo-random numbers. To guarantee reproducibility, the seed for
   * the pseudo-random generator can be set with this method. It is conceivable
   * that some "complicated" ScenarioGenerator may require more than one
-  * generator, if this is the case the method may have to be changed (but it is
+  * generator, if this is the case, the method may have to be changed (but it is
   * not impossible to use the same seed for all of them, or to use the seed
   * within a random number generator that is used to generate the seeds, so just
   * one seed may well be enough). */
@@ -491,9 +491,9 @@ class ScenarioGenerator
   * solved) that still "sees enough of the random variable to take good
   * decisions". This may be nontrivial, in particular if the underlying variable
   * is discrete in nature and therefore something like an Optimal Transport
-  * Problem need be solved. Thus, this method may have a nontrivial
-  * computational cost. Then, the decisions taken by such model can be evaluated
-  * with a simulation on a (much) larger number of "uniformly distributed"
+  * Problem needs to be solved. Thus, this method may have a nontrivial
+  * computational cost. Then, the decisions taken by such a model can be evaluated
+  * with a simulation on (much) larger number of "uniformly distributed"
   * scenarios [see init_random_pool()].
   *
   * \p size is the number of scenarios in the produced pool.
@@ -526,8 +526,8 @@ class ScenarioGenerator
  /// move the current scenario to the next scenario in the pool
  /** Tries to move forward the current scenario to the next scenario in the
   * pool, returns true if this succeeds, which should always happen if the
-  * number of scenarios in the pool seen so far is less than the size specified
-  * in init_*_pool(). Upon receiving a true response the user can call again
+  * number of scenarios in the pool seen so far is lower than the size specified
+  * in init_*_pool(). Upon receiving a true response, the user can call again
   * get_current_scenario[_probability]() to retrieve the data of the ew
   * scenario, knowing that any Scenario corresponding to the previous scenarios
   * seen has potentially been invalidated and should no longer be used. */
@@ -558,7 +558,7 @@ class ScenarioGenerator
  *
  * These methods allow derived classes to partake into static initialization
  * procedures performed once and for all at the start of the program. These are
- * typically related with factories.
+ * typically related to factories.
  * @{ */
 
  /// method encapsulating the Solver factory
@@ -573,14 +573,14 @@ class ScenarioGenerator
 
 /*--------------------------------------------------------------------------*/
  /// empty placeholder for class-specific static initialization
- /** The method static_initialization() is an empty placeholder which is made
+ /** The method static_initialization() is an empty placeholder that is made
   * available to derived classes that need to perform some class-specific static
   * initialization besides these of any :ScenarioGenerator class, i.e., the
   * management of the factory. This method is invoked by the
   * SMSpp_insert_in_factory_cpp_* macros [see SMSTypedefs.h] during the standard
   * initialization procedures. If a derived class needs to perform any static
-  * initialization it just have to do this into its version of this method; if
-  * not it just has nothing to do, as the (empty) method of the base class will
+  * initialization, it just has to do this into its version of this method; if
+  * not, it just has nothing to do, as the (empty) method of the base class will
   * be called.
   *
   * This mechanism has a potential drawback in that a redefined
@@ -589,7 +589,7 @@ class ScenarioGenerator
   * Y is derived from X that has to do nothing, and that therefore will not
   * define Y::static_initialization(): them, within the
   * SMSpp_insert_in_factory_cpp_* of Y, X::static_initialization() will be
-  * called again. This is not likely to happen to :ScenarioGenerator and it is
+  * called again. This is not likely to happen to :ScenarioGenerator, and it is
   * easily managed in case. */
 
  static void static_initialization( void ) {}
@@ -622,12 +622,12 @@ class ScenarioGenerator
  * abstract interface from the single-stage one, where the stochastic is a
  * single random variable X_0 (although in fact this can be the composition of
  * different random variables, but all of them taking values at the same instant
- * in time, to the the general framework of multistage problem where a number T
+ * in time, to the general framework of multistage problem where a number T
  * > 0 of time instant (stages) are defined and a scenario ( x_0 , ... , x_{T-1}
  * ) is a realization of a finite horizon stochastic process ( X_0 , ... ,
  * X_{T-1} ), where for each 0 <= t <= T - 1, the random variable X_t has values
  * in some Euclidean space R^(d_t). The base class makes no assumption on the
- * "internal structure" of x_t, which is just a vector of appropriate length
+ * "internal structure" of x_t, which is just a vector of the appropriate length
  * d_t, whose internal structure is supposed to be fixed and known to the user.
  *
  * In the following, at a stage 0 < t < T, we denote by H_t = ( X_0 = x0 , ... ,
@@ -637,23 +637,23 @@ class ScenarioGenerator
  * class will need to be able to draw for every t < T from the random variable
  * X_t | H_t. Yet, the class makes no specific assumption on how the variable
  * X_t depends on H_t. For instance, the case where each stage is a random
- * variable X_t independent from the past history H_t (i.e., X_t | H_t = X_t) is
+ * variable X_t independent of the past history H_t (i.e., X_t | H_t = X_t) is
  * one case, where a sensible implementation is just as a vector of
  * ScenarioGenerator *, one for each of the stages. Other possibilities exist,
  * e.g., the Markovian setting where each stage depends only from the results of
- * the previous stage (that is, in fact H_t = ( X_{t-1} = x_{t-1} )) up to the
+ * the previous stage (that is, in fact, H_t = ( X_{t-1} = x_{t-1} )) up to the
  * general one where the random variables depend on the entire history. The
- * interfaces strives to avoid to distinguish those cases by having each stage
- * x_t generated / read only when its history H_t is clearly specified,
+ * interfaces strive to avoid distinguishing those cases by having each stage
+ * x_t generated / read-only when its history H_t is clearly specified,
  * irrespectively on what the dependency is.
  *
- * Basically, the class provide means for moving along (back and forth) the time
+ * Basically, the class provides means for moving along (back and forth) the time
  * dimension of the variable, since once the stage t is known in the multistage
  * setting then a scenario x_t for that stage "looks a lot like" in the
  * single-stage case, which is why a large part of the interface can be
  * inherited from the base ScenarioGenerator.
  *
- * See the comments to the base ScenarioGenerator class for more details. */
+ * See the comments on the base ScenarioGenerator class for more details. */
 
 class MultiStageScenarioGenerator : public ScenarioGenerator
 {
@@ -685,7 +685,7 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
 /** @name Constructing and destructing ScenarioGenerator
  *  @{ */
 
- /// constructor: initialise the few data structures of the base class
+ /// constructor: initialize the few data structures of the base class
 
  MultiStageScenarioGenerator( void ) : ScenarioGenerator() {}
 
@@ -694,7 +694,7 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
 
  virtual ~MultiStageScenarioGenerator() = default; 
 
-/** @} -----------------------------------------------------F----------------*/
+/** @} ---------------------------------------------------------------------*/
 /*- METHODS FOR READING THE STATIC DATA OF THE MultiStageScenarioGenerator -*/
 /*--------------------------------------------------------------------------*/
 /** @name Reading the static data of the MultiStageScenarioGenerator
@@ -715,7 +715,7 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
  *
  * MultiStageScenarioGenerator inherits the concepts of "pool" and "current
  * scenario" from ScenarioGenerator and adds that of "current stage". The
- * current stage is initialised to t = 0 (first stage, with empty H_t) when the
+ * current stage is initialized to t = 0 (first stage, with empty H_t) when the
  * current scenario is (logically) created, i.e., right after the call to
  * init_*_pool() or that of next_scenario(), and either increased with
  * next_stage() or decreased by previous_stage(). Hence, when
@@ -745,11 +745,11 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
  * depend on H_t, in that the right number of branching in the scenario tree at
  * a node may depend on the whole path to the root. The design choice is
  * therefore that these more detailed information about how the scenario tree is
- * organized are depending on the specific derived class of
+ * organized depends on the specific derived class of
  * MultiStageScenarioGenerator and read together with its description in
  * deserialize(); hence, they cannot be changed on the fly. If this turns out to
- * be a problem than some Configuration will have to be used, but we'll cross
- * that bridge when (if) we'll come to it.
+ * be a problem, then some Configuration will have to be used, but we'll cross
+ * that bridge when (if) we come to it.
  *
  * Anyway, this fully justifies the return value of next_scenario(), since in
  * MultiStageScenarioGenerator, as opposed to its base class, it is not known
