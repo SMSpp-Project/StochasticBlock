@@ -266,7 +266,7 @@ class ScenarioGenerator
   *
   * i.e., without any reference to any specific ScenarioGenerator. */
 
-[[nodiscard]] static ScenarioGenerator* deserialize(const std::string & filename) {
+ [[nodiscard]] static ScenarioGenerator * deserialize(const std::string & filename) {
   try {
     // Relies on netCDF API to handle is_open() check
     /*
@@ -285,8 +285,8 @@ class ScenarioGenerator
   catch( ... ) {
    std::cerr << "unknown error in deserialize" << std::endl;
   }
-    return( nullptr );
-}
+  return( nullptr );
+  }
 
 /*--------------------------------------------------------------------------*/
  /// de-serialize a :ScenarioGenerator out of an netCDF::NcGroup, returns it
@@ -502,8 +502,7 @@ class ScenarioGenerator
   * current scenario and can be read [see get_current_scenario()] and
   * get_current_scenario_probability()] right away. */
 
-  virtual void init_representative_pool(
-						    ScenarioIndex size ) = 0;
+  virtual void init_representative_pool( ScenarioIndex size ) = 0;
 
 /*--------------------------------------------------------------------------*/
  /// read the data of the current scenario

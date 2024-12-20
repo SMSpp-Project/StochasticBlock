@@ -125,14 +125,14 @@ static void kMeans( unsigned int k , DiscreteScenarioSet::PoolMap & pool ,
 /*--------------------------------------------------------------------------*/
 
 // Get for nbScenarios
-const ScenarioGenerator::ScenarioIndex&
+const ScenarioGenerator::ScenarioIndex &
  DiscreteScenarioSet::get_nbScenarios() const
 {
   return( nbScenarios );
 }
 
 // Get for scenarioSize
-const ScenarioGenerator::ScenarioSize&
+const ScenarioGenerator::ScenarioSize &
  DiscreteScenarioSet::get_scenarioSize() const
 {
   return( scenarioSize );
@@ -142,6 +142,7 @@ void DiscreteScenarioSet::empty_representativePool()
 {
   representativePool.clear();
   representativePool.shrink_to_fit();
+
   poolProbabilities.clear();
   poolProbabilities.shrink_to_fit();
 }
@@ -160,9 +161,9 @@ void DiscreteScenarioSet::empty_randomPool()
 void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
 {
   if( size > nbScenarios ) // indirectly protects if input size is negative
-    throw( std::out_of_range("The desired sample size is greater than "
-                             "the number of available number of different "
-                             "scenarios") );
+    throw( std::out_of_range( "The desired sample size is greater than "
+                              "the number of available number of different "
+                              "scenarios." ) );
   poolSize = size;
 }
 
@@ -206,9 +207,9 @@ static void generateRandomSubset( size_t n , size_t k ,
 {
   if( k > n )
   {
-    throw( std::invalid_argument("k must be less or equal than n") );
+    throw( std::invalid_argument( "k must be less or equal than n." ) );
   }
-  // elem = [1,2, ..., n]
+  // elem = [ 1 , 2 , ... , n ]
   std::vector< ScenarioGenerator::ScenarioIndex > elem( n );
   std::iota( elem.begin() , elem.end() , 0 );
 
@@ -230,7 +231,7 @@ void DiscreteScenarioSet::init_random_pool( ScenarioIndex size )
   scenarioIndexes.resize( size );
 
   // Update in-place scenarioIndexes
-  generateRandomSubset( nbScenarios , size , scenarioIndexes, rng );
+  generateRandomSubset( nbScenarios , size , scenarioIndexes , rng );
 
   // Save the total probability weights of the pool in sumPoolWeights
   sumPoolWeights = 0.0;
@@ -281,7 +282,7 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex size )
 ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
 {
   if( currentScenarioIndex >= poolSize )
-    throw( std::out_of_range("Current scenario index is out of range.") );
+    throw( std::out_of_range( "Current scenario index is out of range." ) );
 
   if( isempty_representativePool() )
   {
@@ -290,13 +291,10 @@ ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
     return( Scenario( & scenarioSet[scenarioIndexes[ currentScenarioIndex ]][ 0 ],
                       get_scenario_size() ) );
   }
-  else
-  {
-    // transform the currentScenarioIndex-th element of representativePool
-    // into a span< const double >
-    return( Scenario( representativePool[ currentScenarioIndex ].data(),
-                      get_scenario_size() ) );
-  }
+  // transform the currentScenarioIndex-th element of representativePool
+  // into a span< const double >
+  return( Scenario( representativePool[ currentScenarioIndex ].data(),
+                    get_scenario_size() ) );
 }
 
 double DiscreteScenarioSet::get_current_scenario_probability( void )

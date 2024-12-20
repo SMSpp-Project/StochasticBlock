@@ -22,7 +22,7 @@
 /*--------------------------------------------------------------------------*/
 
 #ifndef __DiscreteScenarioSet
-#define __DiscreteScenarioSet
+ #define __DiscreteScenarioSet
                       /* self-identification: #endif at the end of the file */
 
 /*--------------------------------------------------------------------------*/
@@ -363,7 +363,7 @@ private:
 
  } // end( namespace SMSpp_di_unipi_it )
 
-#endif // __DiscreteScenarioSet
+#endif /* __DiscreteScenarioSet */
 
 /*--------------------------------------------------------------------------*/
 /*------------------- End file DiscreteScenarioSet.h -----------------------*/
