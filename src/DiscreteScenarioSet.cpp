@@ -34,6 +34,12 @@
 using namespace SMSpp_di_unipi_it;
 
 /*--------------------------------------------------------------------------*/
+/*-------------------------- FACTORY MANAGEMENT ----------------------------*/
+/*--------------------------------------------------------------------------*/
+
+SMSpp_insert_in_factory_cpp_0( DiscreteScenarioSet );
+
+/*--------------------------------------------------------------------------*/
 /*------------------------- Kmeans clustering ------------------------------*/
 /*--------------------------------------------------------------------------*/
 /* Naive implementation from scratch of Lloyd's algorithm to solve the
@@ -95,28 +101,21 @@ static void kMeans( unsigned int k , DiscreteScenarioSet::PoolMap & pool ,
 
     // Update centers by computing barycenter of each Voronoi cell
     for( auto & center : centers )
-    {
       center.setZero();
-    }
 
     for( int i = 0 ; i < n ; i++ )
     {
-      Eigen::VectorXd &center = centers[ labels[ i ] ];
+      Eigen::VectorXd & center = centers[ labels[ i ] ];
 
       for( size_t j = 0 ; j < scenariosize ; j++ )
-      {
         center[ j ] += pool[ i ][ j ];
-      }
+
       counts[ labels[ i ] ]++;
     }
 
     for( int i = 0 ; i < k ; i++ )
-    {
       for( size_t j = 0 ; j < scenariosize ; j++ )
-      {
         centers[ i ][ j ] /= counts[ i ];
-      }
-    }
   } while( changed );
 }
 
@@ -185,17 +184,12 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   // If weights are not present, assume uniform weights
   if( ! ::deserialize( group , "ScenarioProbabilities",
                        nbScenarios , scenarioProbabilities ) )
-  {
     scenarioProbabilities.resize( nbScenarios , 1.0 / nbScenarios );
-  }
   // maybe instead, consider empty if not given and change accordingly
 }
 
 // Implementation for setting the seed of the pseudo-random number generator
-void DiscreteScenarioSet::set_seed( unsigned long seed )
-{
-  rng.seed( seed );
-}
+void DiscreteScenarioSet::set_seed( unsigned long seed ) { rng.seed( seed ); }
 
 // Draw k elements among n
 /* The function generateRandomSubset draws k elements among n by use of
@@ -206,9 +200,8 @@ static void generateRandomSubset( size_t n , size_t k ,
                                   std::mt19937 & rng )
 {
   if( k > n )
-  {
     throw( std::invalid_argument( "k must be less or equal than n." ) );
-  }
+
   // elem = [ 1 , 2 , ... , n ]
   std::vector< ScenarioGenerator::ScenarioIndex > elem( n );
   std::iota( elem.begin() , elem.end() , 0 );
@@ -236,9 +229,7 @@ void DiscreteScenarioSet::init_random_pool( ScenarioIndex size )
   // Save the total probability weights of the pool in sumPoolWeights
   sumPoolWeights = 0.0;
   for( auto i{0} ; i < size ; i++ )
-  {
     sumPoolWeights += scenarioProbabilities[ scenarioIndexes[ i ] ];
-  }
 }
 
 void DiscreteScenarioSet::init_representative_pool( ScenarioIndex size )
@@ -252,10 +243,8 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex size )
   PoolMap eigenSet;
   eigenSet.reserve( get_nbScenarios() );
   for( size_t i = 0 ; i < get_nbScenarios() ; i++ )
-  {
     eigenSet.emplace_back( Eigen::Map< Eigen::VectorXd >( & scenarioSet[ i ][ 0 ],
                                                           get_scenarioSize() ) );
-  }
 
   // Initialize the representativePool, using a random subset of input scenario
   representativePool.reserve( size );
@@ -263,20 +252,16 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex size )
 
   generateRandomSubset( get_nbScenarios() , size , rand_ind , rng );
   for( auto i : rand_ind )
-  {
     representativePool.push_back( Eigen::VectorXd( eigenSet[ i ] ) );
-  }
 
   // Lloyd's algo for k-means clustering problem
   // updates in-place representativePool and labels
-  std::vector< int > labels( nbScenarios , 0 );
+  std::vector labels( nbScenarios , 0 );
   kMeans( size , eigenSet , representativePool , labels );
 
   // compute the poolProbabilities from the labels and input weights
   for( size_t j{0} ; j < nbScenarios ; j++ )
-  {
-    poolProbabilities[labels[j]] += scenarioProbabilities[j];
-  }
+    poolProbabilities[ labels[ j ] ] += scenarioProbabilities[ j ];
 }
 
 ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
@@ -288,7 +273,7 @@ ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
   {
     // transform the scenarioIndexes[currentScenarioIndex]-th row of
     // scenarioSet into a span< const double >
-    return( Scenario( & scenarioSet[scenarioIndexes[ currentScenarioIndex ]][ 0 ],
+    return( Scenario( & scenarioSet[ scenarioIndexes[ currentScenarioIndex ] ][ 0 ],
                       get_scenario_size() ) );
   }
   // transform the currentScenarioIndex-th element of representativePool
@@ -325,18 +310,10 @@ ScenarioGenerator::ScenarioSize DiscreteScenarioSet::get_scenario_size( void )
 }
 
 /// Concrete implementation of ScenarioGenerator
-DiscreteScenarioSet::DiscreteScenarioSet()
-{
-  set_seed( 1337 );
-}
+DiscreteScenarioSet::DiscreteScenarioSet() { set_seed( 1337 ); }
 
 /// Destructor
 DiscreteScenarioSet::~DiscreteScenarioSet() {}
-
-/** @} ---------------------------------------------------------------------*/
-/*-------------------------- FACTORY MANAGEMENT ----------------------------*/
-/*--------------------------------------------------------------------------*/
-SMSpp_insert_in_factory_cpp_0( DiscreteScenarioSet );
 
 /*--------------------------------------------------------------------------*/
 /*------------------ End file DiscreteScenarioSet.cpp ----------------------*/
