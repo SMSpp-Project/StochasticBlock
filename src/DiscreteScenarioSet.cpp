@@ -213,23 +213,22 @@ static void generateRandomSubset( size_t n , size_t k ,
   std::move( elem.begin() , elem.begin() + k , std::back_inserter( ind ) );
 }
 
-void DiscreteScenarioSet::init_random_pool( ScenarioIndex size )
+void DiscreteScenarioSet::init_random_pool(ScenarioIndex size)
 {
   empty_representativePool();
   sumPoolWeights = 0.0;
-  set_poolSize( size );
+  set_poolSize(size);
   currentScenarioIndex = 0;
 
-  // the pool will be made of a subset of the input scenarios
-  scenarioIndexes.resize( size );
+  scenarioIndexes.clear();
+  scenarioIndexes.reserve(size);  
 
-  // Update in-place scenarioIndexes
-  generateRandomSubset( nbScenarios , size , scenarioIndexes , rng );
+  generateRandomSubset(nbScenarios, size, scenarioIndexes, rng);
 
   // Save the total probability weights of the pool in sumPoolWeights
   sumPoolWeights = 0.0;
-  for( auto i{0} ; i < size ; i++ )
-    sumPoolWeights += scenarioProbabilities[ scenarioIndexes[ i ] ];
+  for(auto i{0}; i < size; i++)
+    sumPoolWeights += scenarioProbabilities[ scenarioIndexes[i] ];
 }
 
 void DiscreteScenarioSet::init_representative_pool( ScenarioIndex size )
@@ -288,7 +287,7 @@ double DiscreteScenarioSet::get_current_scenario_probability( void )
     throw( std::out_of_range( "Current scenario index is out of range." ) );
 
   if( isempty_representativePool() )
-    return( scenarioProbabilities[ currentScenarioIndex ] / sumPoolWeights );
+    return( scenarioProbabilities[ scenarioIndexes[currentScenarioIndex] ] / sumPoolWeights );
 
   return( poolProbabilities[ currentScenarioIndex ] );
 }
