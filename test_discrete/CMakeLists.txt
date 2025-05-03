@@ -13,10 +13,12 @@
 #                             Universita' di Pisa                             #
 # --------------------------------------------------------------------------- #
 
-add_executable(StochasticBlock_test_discrete test_discrete.cpp)
-target_link_libraries(StochasticBlock_test_discrete PRIVATE SMS++::StochasticBlock)
+# Comprehensive test suite for DiscreteScenarioSet
+add_executable(test_discretescenarioset test_discretescenarioset.cpp)
+target_link_libraries(test_discretescenarioset PRIVATE SMS++::StochasticBlock)
 
-add_test(NAME StochasticBlock_test_discrete
-        COMMAND StochasticBlock_test_discrete)
+# Register the test with CTest
+add_test(NAME test_discretescenarioset
+        COMMAND test_discretescenarioset)
 
 # --------------------------------------------------------------------------- #

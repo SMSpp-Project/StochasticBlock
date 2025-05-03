@@ -50,73 +50,89 @@ SMSpp_insert_in_factory_cpp_0( DiscreteScenarioSet );
  * libraries. */
 
 /* Computes the Euclidean distance between two Eigen::VectorXd. */
-static double euclideanDistance( const Eigen::VectorXd & vec1 ,
-                                 const Eigen::VectorXd & vec2 )
+[[nodiscard]] static double euclideanDistance(const Eigen::VectorXd& vec1,
+                                            const Eigen::VectorXd& vec2)
 {
-  return( vec1 - vec2 ).norm();
+  return (vec1 - vec2).norm();
 }
 
 /// (Costly) function to find the index of the nearest center to a point
-static int nearestCenterIndex( const Eigen::VectorXd & point,
-                               DiscreteScenarioSet::DiscreteRepresentativePool & centers )
+[[nodiscard]] static int nearestCenterIndex(const Eigen::VectorXd& point,
+                                           const DiscreteScenarioSet::DiscreteRepresentativePool& centers)
 {
-  double minDistance = std::numeric_limits< double >::max();
-  int index = 0;
-  for( size_t i = 0 ; i < centers.size() ; i++ )
-  {
-    double distance = euclideanDistance( point , centers[ i ] );
-    if( distance < minDistance )
-    {
-      minDistance = distance;
-      index = i;
+  // Use a structured binding to keep track of minimum distance and index
+  auto [minDistance, minIndex] = [&centers, &point]() {
+    double minDist = std::numeric_limits<double>::max();
+    int idx = 0;
+    
+    for (size_t i = 0; i < centers.size(); i++) {
+      double distance = euclideanDistance(point, centers[i]);
+      if (distance < minDist) {
+        minDist = distance;
+        idx = i;
+      }
     }
-  }
-  return( index );
+    
+    return std::make_pair(minDist, idx);
+  }();
+  
+  return minIndex;
 }
 
-static void kMeans( unsigned int k , DiscreteScenarioSet::PoolMap & pool ,
-                    DiscreteScenarioSet::DiscreteRepresentativePool & centers ,
-                    std::vector< int > & labels )
+static void kMeans(unsigned int k, DiscreteScenarioSet::PoolMap& pool,
+                  DiscreteScenarioSet::DiscreteRepresentativePool& centers,
+                  std::vector<int>& labels)
 {
-  size_t n = pool.size() ; // n = nbScenarios
-  unsigned int scenariosize = pool[ 0 ].size();
-  std::vector< double > counts;
-  counts.resize( k );
-
+  size_t n = pool.size(); // n = nbScenarios
+  unsigned int scenariosize = pool[0].size();
+  
   bool changed;
   do
   {
     changed = false;
 
     // Assign points to the nearest center
-    for( int i = 0 ; i < n ; i++ )
+    for (int i = 0; i < n; i++)
     {
-      int newIndex = nearestCenterIndex( pool[ i ], centers );
-      if( labels[ i ] != newIndex )
+      int newIndex = nearestCenterIndex(pool[i], centers);
+      if (labels[i] != newIndex)
       {
-        labels[ i ] = newIndex;
+        labels[i] = newIndex;
         changed = true;
       }
     }
 
     // Update centers by computing barycenter of each Voronoi cell
-    for( auto & center : centers )
+    // Use vectors of zeros for each center
+    for (auto& center : centers) {
       center.setZero();
-
-    for( int i = 0 ; i < n ; i++ )
+    }
+    
+    // Count points in each cluster
+    std::vector<int> counts(k, 0);
+    
+    // Sum all points in each cluster
+    for (int i = 0; i < n; i++)
     {
-      Eigen::VectorXd & center = centers[ labels[ i ] ];
-
-      for( size_t j = 0 ; j < scenariosize ; j++ )
-        center[ j ] += pool[ i ][ j ];
-
-      counts[ labels[ i ] ]++;
+      const int clusterIdx = labels[i];
+      Eigen::VectorXd& center = centers[clusterIdx];
+      
+      // Add the point to its cluster center
+      center += pool[i];
+      
+      // Increment count for this cluster
+      counts[clusterIdx]++;
     }
 
-    for( int i = 0 ; i < k ; i++ )
-      for( size_t j = 0 ; j < scenariosize ; j++ )
-        centers[ i ][ j ] /= counts[ i ];
-  } while( changed );
+    // Compute the average (barycenter) for each cluster
+    for (int i = 0; i < k; i++)
+    {
+      // Avoid division by zero
+      if (counts[i] > 0) {
+        centers[i] /= static_cast<double>(counts[i]);
+      }
+    }
+  } while (changed);
 }
 
 /*--------------------------------------------------------------------------*/
@@ -139,22 +155,44 @@ const ScenarioGenerator::ScenarioSize &
 
 void DiscreteScenarioSet::empty_representativePool()
 {
-  representativePool.clear();
-  representativePool.shrink_to_fit();
-
-  poolProbabilities.clear();
-  poolProbabilities.shrink_to_fit();
+  // Only clear the representativePool, not the original probabilities
+  // Use a scope-based approach with lambda for better organization
+  {
+    // We save a copy of the current probabilities
+    auto savedProbs = poolProbabilities;
+    
+    // Clear the pools
+    representativePool.clear();
+    representativePool.shrink_to_fit();
+    poolProbabilities.clear();
+    
+    // Restore the original probabilities if they exist
+    if (!savedProbs.empty()) {
+      poolProbabilities = std::move(savedProbs);
+    }
+  }
+  
+  // Update the pool type
+  if (currentPoolType == PoolType::Continuous) {
+    currentPoolType = PoolType::None;
+  }
 }
 
-bool DiscreteScenarioSet::isempty_representativePool() const
+[[nodiscard]] bool DiscreteScenarioSet::isempty_representativePool() const
 {
-  return( representativePool.empty() );
+  return representativePool.empty();
 }
 
-void DiscreteScenarioSet::empty_randomPool()
+void DiscreteScenarioSet::empty_discretePool()
 {
+  // Clear the indexes and free memory
   scenarioIndexes.clear();
   scenarioIndexes.shrink_to_fit();
+  
+  // Update the pool type
+  if (currentPoolType == PoolType::Discrete) {
+    currentPoolType = PoolType::None;
+  }
 }
 
 void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
@@ -172,9 +210,20 @@ void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
 
 void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
 {
+  // Reset state to properly handle multiple deserializations
+  currentPoolType = PoolType::None;
+  currentScenarioIndex = 0;
+  poolSize = 0;
+  sumPoolWeights = 0.0;
+
+  // Clear existing data
+  scenarioSet.resize(boost::extents[0][0]);
+  poolProbabilities.clear();
+  scenarioIndexes.clear();
+  representativePool.clear();
+  
   // Compute the two dimensions of the scenarioPool
   ::deserialize_dim( group , "NumberScenarios" , nbScenarios , false );
-
   ::deserialize_dim( group , "ScenarioSize" , scenarioSize , false );
 
   // Deserialize the Scenarios inside the scenarioPool
@@ -182,10 +231,18 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   ::deserialize( group , "Scenarios" , scenarioSet , true , false );
 
   // If weights are not present, assume uniform weights
-  if( ! ::deserialize( group , "ScenarioProbabilities",
-                       nbScenarios , scenarioProbabilities ) )
-    scenarioProbabilities.resize( nbScenarios , 1.0 / nbScenarios );
-  // maybe instead, consider empty if not given and change accordingly
+  // Use a lambda to create uniform weights when needed
+  auto createUniformWeights = [this]() {
+    // Create vector with uniform weights
+    return std::vector<double>(nbScenarios, 1.0 / nbScenarios);
+  };
+
+  // Load probabilities or create uniform ones
+  bool probsLoaded = ::deserialize(group, "poolProbabilities", nbScenarios, poolProbabilities);
+  
+  if (!probsLoaded || poolProbabilities.size() != nbScenarios) {
+    poolProbabilities = createUniformWeights();
+  }
 }
 
 // Implementation for setting the seed of the pseudo-random number generator
@@ -202,117 +259,339 @@ static void generateRandomSubset( size_t n , size_t k ,
   if( k > n )
     throw( std::invalid_argument( "k must be less or equal than n." ) );
 
-  // elem = [ 1 , 2 , ... , n ]
-  std::vector< ScenarioGenerator::ScenarioIndex > elem( n );
-  std::iota( elem.begin() , elem.end() , 0 );
+  // Clear the output container
+  ind.clear();
+  
+  // Special case: if k is 0, just return empty vector
+  if (k == 0) {
+    return;
+  }
 
-  // Shuffle elem randomly using our rng
-  std::shuffle( elem.begin() , elem.end() , rng );
-
-  // Move the first k ind into indexes
-  std::move( elem.begin() , elem.begin() + k , std::back_inserter( ind ) );
+  // Generate ordered indexes using C++20 ranges and views
+  ind.resize(k);
+  
+  // Create a vector with indexes 0 to n-1
+  auto indexes = [n]() {
+    std::vector<ScenarioGenerator::ScenarioIndex> result(n);
+    std::iota(result.begin(), result.end(), 0);
+    return result;
+  }();
+  
+  // Use standard library algorithm std::sample to randomly select k items from indexes
+  std::sample(indexes.begin(), indexes.end(), ind.begin(), k, rng);
 }
 
-void DiscreteScenarioSet::init_random_pool(ScenarioIndex size)
+void DiscreteScenarioSet::init_discrete_pool(ScenarioIndex size)
 {
   empty_representativePool();
   sumPoolWeights = 0.0;
   set_poolSize(size);
   currentScenarioIndex = 0;
+  currentPoolType = PoolType::Discrete;
 
   scenarioIndexes.clear();
-  scenarioIndexes.reserve(size);  
+  
+  // We resize instead of reserve to ensure the container has the correct size
+  if (size > 0) {
+    scenarioIndexes.resize(size);
+  }
 
   generateRandomSubset(nbScenarios, size, scenarioIndexes, rng);
 
   // Save the total probability weights of the pool in sumPoolWeights
+  // Using std::accumulate with lambda for better readability and safety
   sumPoolWeights = 0.0;
-  for(auto i{0}; i < size; i++)
-    sumPoolWeights += scenarioProbabilities[ scenarioIndexes[i] ];
+  
+  if (size > 0) {
+    sumPoolWeights = std::accumulate(scenarioIndexes.begin(), scenarioIndexes.end(), 0.0,
+      [this](double sum, ScenarioIndex index) -> double {
+        return sum + (index < poolProbabilities.size() ? poolProbabilities[index] : 0.0);
+      });
+  }
 }
 
-void DiscreteScenarioSet::init_representative_pool( ScenarioIndex size )
+void DiscreteScenarioSet::init_continuous_pool( ScenarioIndex size )
 {
-  empty_randomPool();
+  empty_discretePool();
   set_poolSize( size );
   currentScenarioIndex = 0;
+  currentPoolType = PoolType::Continuous;
+  
+  // Special case: handle size=0
+  if (size == 0) {
+    // Clear the representative pool and probabilities
+    representativePool.clear();
+    poolProbabilities.clear();
+    return;
+  }
+  
   poolProbabilities.resize( size , 0 );
 
-  // Convert every input scenario into an Eigen::VectorXd
-  PoolMap eigenSet;
-  eigenSet.reserve( get_nbScenarios() );
-  for( size_t i = 0 ; i < get_nbScenarios() ; i++ )
-    eigenSet.emplace_back( Eigen::Map< Eigen::VectorXd >( & scenarioSet[ i ][ 0 ],
-                                                          get_scenarioSize() ) );
+  // Viewing every input scenario into an Eigen::VectorXd using a lambda for clarity
+  auto createEigenSet = [this]() {
+    PoolMap result;
+    result.reserve(get_nbScenarios());
+    
+    for (size_t i = 0; i < get_nbScenarios(); i++) {
+      result.emplace_back(Eigen::Map<Eigen::VectorXd>(
+        &scenarioSet[i][0], get_scenarioSize()));
+    }
+    
+    return result;
+  };
+  
+  PoolMap eigenSet = createEigenSet();
 
-  // Initialize the representativePool, using a random subset of input scenario
-  representativePool.reserve( size );
-  std::vector< ScenarioIndex > rand_ind;
+  // Initialize the representativePool using a random subset of input scenarios
+  representativePool.reserve(size);
+  std::vector<ScenarioIndex> rand_ind;
 
-  generateRandomSubset( get_nbScenarios() , size , rand_ind , rng );
-  for( auto i : rand_ind )
-    representativePool.push_back( Eigen::VectorXd( eigenSet[ i ] ) );
+  generateRandomSubset(get_nbScenarios(), size, rand_ind, rng);
+  
+  // Use range-based for loop with structured binding for better readability
+  for (const auto& i : rand_ind) {
+    representativePool.push_back(Eigen::VectorXd(eigenSet[i]));
+  }
 
   // Lloyd's algo for k-means clustering problem
   // updates in-place representativePool and labels
-  std::vector labels( nbScenarios , 0 );
-  kMeans( size , eigenSet , representativePool , labels );
-
-  // compute the poolProbabilities from the labels and input weights
-  for( size_t j{0} ; j < nbScenarios ; j++ )
-    poolProbabilities[ labels[ j ] ] += scenarioProbabilities[ j ];
+  std::vector<int> labels(nbScenarios, 0);
+  
+  // Only run kMeans if we have at least one element
+  if (size > 0) {
+    // Initialize with uniform probabilities for continuous pool
+    std::fill(poolProbabilities.begin(), poolProbabilities.end(), 1.0 / size);
+    
+    // Only run k-means if we have more than one scenario
+    if (nbScenarios > 1) {
+      // Save a copy of the original probabilities for later use
+      std::vector<double> originalProbs(nbScenarios);
+      for (size_t i = 0; i < nbScenarios; ++i) {
+        originalProbs[i] = 1.0 / nbScenarios; // Set to uniform
+      }
+      
+      // Run k-means clustering
+      kMeans(size, eigenSet, representativePool, labels);
+      
+      // If k-means successful, compute proper probabilities
+      // Reset poolProbabilities first
+      std::fill(poolProbabilities.begin(), poolProbabilities.end(), 0.0);
+      
+      // Count points in each cluster to ensure we have at least one point per cluster
+      std::vector<int> cluster_counts(size, 0);
+      for (size_t j = 0; j < nbScenarios; j++) {
+        if (labels[j] < size) {
+          cluster_counts[labels[j]]++;
+          poolProbabilities[labels[j]] += originalProbs[j];
+        }
+      }
+      
+      // Check if all clusters have at least one point
+      bool valid_clustering = true;
+      for (size_t i = 0; i < size; i++) {
+        if (cluster_counts[i] == 0) {
+          valid_clustering = false;
+          break;
+        }
+      }
+      
+      // If valid clustering, normalize the probabilities
+      if (valid_clustering) {
+        double sum = 0.0;
+        for (size_t i = 0; i < size; i++) {
+          sum += poolProbabilities[i];
+        }
+        
+        // If sum is valid, normalize
+        if (sum > 0.0) {
+          for (size_t i = 0; i < size; i++) {
+            poolProbabilities[i] /= sum;
+          }
+        }
+      }
+    }
+  }
 }
 
-ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
+[[nodiscard]] ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
 {
   if( currentScenarioIndex >= poolSize )
-    throw( std::out_of_range( "Current scenario index is out of range." ) );
-
-  if( isempty_representativePool() )
   {
-    // transform the scenarioIndexes[currentScenarioIndex]-th row of
-    // scenarioSet into a span< const double >
-    return( Scenario( & scenarioSet[ scenarioIndexes[ currentScenarioIndex ] ][ 0 ],
-                      get_scenario_size() ) );
+    throw( std::out_of_range( "Current scenario index is out of range." ) );
   }
-  // transform the currentScenarioIndex-th element of representativePool
-  // into a span< const double >
-  return( Scenario( representativePool[ currentScenarioIndex ].data(),
-                    get_scenario_size() ) );
+
+  // Use different strategy based on pool type
+  switch (currentPoolType) {
+    case PoolType::Discrete: {
+      // Make sure scenarioIndexes has the expected size
+      if (scenarioIndexes.size() <= currentScenarioIndex)
+      {
+        throw( std::out_of_range( "scenarioIndexes is too small" ) );
+      }
+      
+      // Make sure the index is valid
+      const auto index = scenarioIndexes[currentScenarioIndex];
+      if (index >= nbScenarios)
+      {
+        throw( std::out_of_range( "Scenario index is out of range" ) );
+      }
+    
+      // Transform the scenarioIndexes[currentScenarioIndex]-th row of
+      // scenarioSet into a span<const double>
+      return Scenario(&scenarioSet[index][0], get_scenario_size());
+    }
+    
+    case PoolType::Continuous: {
+      // Make sure representativePool has the expected size
+      if (representativePool.size() <= currentScenarioIndex)
+      {
+        throw( std::out_of_range( "Representative pool is too small" ) );
+      }
+      
+      // Transform the currentScenarioIndex-th element of representativePool
+      // into a span<const double>
+      return Scenario(representativePool[currentScenarioIndex].data(), get_scenario_size());
+    }
+    
+    default:
+      throw std::runtime_error("No active pool initialized");
+  }
 }
 
-double DiscreteScenarioSet::get_current_scenario_probability( void )
+[[nodiscard]] double DiscreteScenarioSet::get_current_scenario_probability( void )
 {
   if( currentScenarioIndex >= poolSize )
+  {
     throw( std::out_of_range( "Current scenario index is out of range." ) );
+  }
 
-  if( isempty_representativePool() )
-    return( scenarioProbabilities[ scenarioIndexes[currentScenarioIndex] ] / sumPoolWeights );
-
-  return( poolProbabilities[ currentScenarioIndex ] );
+  // Use different strategy based on pool type
+  switch (currentPoolType) {
+    case PoolType::Discrete: {
+      // Make sure scenarioIndexes has the expected size
+      if (scenarioIndexes.size() <= currentScenarioIndex)
+      {
+        throw( std::out_of_range( "scenarioIndexes is too small for probability" ) );
+      }
+      
+      // Make sure the index is valid
+      const auto idx = scenarioIndexes[currentScenarioIndex];
+      if (idx >= poolProbabilities.size())
+      {
+        throw( std::out_of_range( "Probability index is out of range" ) );
+      }
+      
+      return (sumPoolWeights > 0.0) ? poolProbabilities[idx] / sumPoolWeights : 0.0;
+    }
+    
+    case PoolType::Continuous: {
+      // Check if currentScenarioIndex is valid for poolProbabilities
+      if (currentScenarioIndex >= poolProbabilities.size())
+      {
+        throw( std::out_of_range( "Probability index is out of range" ) );
+      }
+    
+      return poolProbabilities[currentScenarioIndex];
+    }
+    
+    default:
+      throw std::runtime_error("No active pool initialized");
+  }
 }
 
-bool DiscreteScenarioSet::next_scenario( void )
+// Implementation of the new structured binding method
+[[nodiscard]] DiscreteScenarioSet::ScenarioWithProbability 
+DiscreteScenarioSet::get_current_scenario_with_prob()
 {
-  if( currentScenarioIndex < poolSize - 1 )
-  {
-    currentScenarioIndex++;
-    return( true ); // Successfully moved to the next scenario
+  // Get both the scenario and probability in one call
+  return {get_current_scenario(), get_current_scenario_probability()};
+}
+
+// Implementation of try_get_scenario
+[[nodiscard]] std::optional<ScenarioGenerator::Scenario> 
+DiscreteScenarioSet::try_get_scenario(ScenarioIndex index) const
+{
+  // Save current state
+  if (index >= poolSize) {
+    return std::nullopt;
   }
-  return( false ); // No more scenario in scenarioPool to move to
+  
+  try {
+    // For discrete pool
+    if (currentPoolType == PoolType::Discrete) {
+      if (index < scenarioIndexes.size()) {
+        const auto scenarioIndex = scenarioIndexes[index];
+        if (scenarioIndex < nbScenarios) {
+          return Scenario(&scenarioSet[scenarioIndex][0], scenarioSize);
+        }
+      }
+    } 
+    // For continuous pool
+    else if (currentPoolType == PoolType::Continuous) {
+      if (index < representativePool.size()) {
+        return Scenario(representativePool[index].data(), scenarioSize);
+      }
+    }
+  } catch (...) {
+    return std::nullopt;
+  }
+  
+  return std::nullopt;
+}
+
+// Implementation of is_pool_initialized
+[[nodiscard]] bool DiscreteScenarioSet::is_pool_initialized() const
+{
+  return currentPoolType != PoolType::None;
+}
+
+[[nodiscard]] bool DiscreteScenarioSet::next_scenario( void )
+{
+  // If poolSize is 0 or no pool is initialized, there are no scenarios to move to
+  if (poolSize == 0 || currentPoolType == PoolType::None) {
+    return false;
+  }
+  
+  if (currentScenarioIndex < poolSize - 1)
+  {
+    // Use prefix increment for efficiency
+    ++currentScenarioIndex;
+    return true; // Successfully moved to the next scenario
+  }
+  return false; // No more scenario in scenarioPool to move to
 }
 
 /// Implementation for retrieving the size of a scenario
-ScenarioGenerator::ScenarioSize DiscreteScenarioSet::get_scenario_size( void )
+[[nodiscard]] ScenarioGenerator::ScenarioSize DiscreteScenarioSet::get_scenario_size( void )
 {
-  return( scenarioSize );
+  return scenarioSize;
 }
 
 /// Concrete implementation of ScenarioGenerator
-DiscreteScenarioSet::DiscreteScenarioSet() { set_seed( 1337 ); }
+DiscreteScenarioSet::DiscreteScenarioSet() { set_seed(DEFAULT_SEED); }
 
-/// Destructor
-DiscreteScenarioSet::~DiscreteScenarioSet() {}
+/// Destructor - using RAII principles
+DiscreteScenarioSet::~DiscreteScenarioSet() {
+  // Clear all containers to free memory
+  // Using a lambda to encapsulate the cleanup logic
+  auto cleanupContainers = [this]() {
+    // Reset scenario set
+    scenarioSet.resize(boost::extents[0][0]);
+    
+    // Clear vectors with shrink_to_fit to release memory back to the system
+    scenarioIndexes.clear();
+    scenarioIndexes.shrink_to_fit();
+    
+    representativePool.clear();
+    representativePool.shrink_to_fit();
+    
+    poolProbabilities.clear();
+    poolProbabilities.shrink_to_fit();
+  };
+  
+  // Execute cleanup
+  cleanupContainers();
+}
 
 /*--------------------------------------------------------------------------*/
 /*------------------ End file DiscreteScenarioSet.cpp ----------------------*/

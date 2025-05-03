@@ -10,8 +10,8 @@
 #                                                                            #
 ##############################################################################
 
-# module name
-NAME = StochasticBlock_test_discrete
+# module names
+NAME = test_discretescenarioset
 
 # basic directory
 DIR = .
@@ -23,6 +23,9 @@ DIR = .
 # production switches
 SW = -O3 -std=c++20 -DNDEBUG -DCLANG_1200_0_32_27_PATCH
 
+# debug build switches 
+DSW = -g -O0 -std=c++20 -fno-inline
+
 # compiler
 CC = clang++
 
@@ -33,7 +36,7 @@ default: $(DIR)/$(NAME)
 # clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 clean::
-	rm -f $(DIR)/*.o $(DIR)/*~ $(DIR)/$(NAME)
+	rm -f $(DIR)/*.o $(DIR)/*~ $(DIR)/$(NAME) temp_*.nc
 
 # define & include the necessary modules- - - - - - - - - - - - - - - - - - -
 # if a module is not used in the current configuration, just comment out the
@@ -60,8 +63,8 @@ MOBJ =  $(SMS++OBJ) $(StcBlkOBJ)
 # libraries
 MLIB =  $(SMS++LIB) $(StcBlkLIB)
 
-$(DIR)/$(NAME): $(MOBJ) $(DIR)/test_discrete.o
-	$(CC) -o $(DIR)/$(NAME) $^ $(MLIB) $(SW)
+$(DIR)/$(NAME): $(DIR)/test_discretescenarioset.o $(StcBlkOBJ) $(SMS++OBJ)
+	$(CC) -o $(DIR)/$(NAME) $^ $(MLIB) $(DSW)
 
 # dependencies: every .o from its .C + every recursively included .h- - - - -
 
@@ -73,7 +76,7 @@ MH =    $(SMS++H) $(StcBlkH)
 
 # compile command
 
-$(DIR)/test_discrete.o: $(DIR)/test_discrete.cpp $(MH)
-	$(CC) -c $*.cpp -o $@ $(MINC) $(SW)
+$(DIR)/test_discretescenarioset.o: $(DIR)/test_discretescenarioset.cpp $(MH)
+	$(CC) -c $*.cpp -o $@ $(MINC) -I$(StcBlkSDR)/include $(DSW)
 
 ############################ End of makefile #################################

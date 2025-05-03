@@ -34,6 +34,11 @@
 #include <Eigen/Dense>
 #include <random>
 #include <span>
+#include <optional>
+#include <variant>
+#include <algorithm>
+#include <numeric>
+#include <utility>
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
@@ -42,6 +47,12 @@
 /// namespace for the Structured Modeling System++ (SMS++)
 namespace SMSpp_di_unipi_it
 {
+
+/// User-defined literal for probability percentages (must be at namespace or global scope)
+/** This literal allows writing probabilities as percentages, e.g., 25.0_pct */
+constexpr double operator"" _pct(long double percentage) {
+    return static_cast<double>(percentage / 100.0);
+}
 /*--------------------------------------------------------------------------*/
 /*--------------------- CLASS DiscreteScenarioSet --------------------------*/
 /*--------------------------------------------------------------------------*/
@@ -61,23 +72,23 @@ namespace SMSpp_di_unipi_it
  * boost::multi_array< double, 2 >.
  *
  * DiscreteScenarioSet considers that the (deserialized) pool can be handled
- * by two distinct approaches: the first draws a *subset* of the input
- * scenarioPool, while the second *constructs* a set of representative scenarios
- * from the input. Several functions thus have two different behaviors,
- * whether the pool is initialized by the first or second method.
+ * by two distinct approaches for scenario reduction: the first draws a *subset* 
+ * of the input scenarioPool (discrete approach), while the second *constructs* 
+ * a set of representative scenarios from the input (continuous approach). Several 
+ * functions thus have two different behaviors, whether the pool is initialized by 
+ * the first or second method.
  *
  * The method get_current_scenario() allows the user to query one element in
  * the pool, whether the first or second method was used.
  *
- * The first method outputs scenarios that are part of the input, so the pool
- * is simply characterized by the set of indexes of the drawn scenarios. See
- * init_random_pool(...).
+ * The first method (discrete approach) outputs scenarios that are part of the 
+ * input, so the pool is simply characterized by the set of indexes of the drawn 
+ * scenarios. See init_discrete_pool(...).
  *
- * The second method outputs scenarios that are different that the
- * ones that were inputted. By default, DiscreteScenarioSet uses a native
+ * The second method (continuous approach) outputs scenarios that can be different 
+ * from the ones that were inputted. By default, DiscreteScenarioSet uses a native
  * implementation of k-means clustering. In that case, another container is
- * created to hold the constructed scenarios. See
- * init_representative_pool(...). */
+ * created to hold the constructed scenarios. See init_continuous_pool(...). */
 
 class DiscreteScenarioSet : public ScenarioGenerator
 {
@@ -114,7 +125,11 @@ public:
  /// Container for the centers and the points to be clustered
  /** Lightweight container for a collection of scenarios represented as
   * Eigen::VectorXd. */
- using PoolMap = std::vector< Eigen::Map< Eigen::VectorXd > >;
+ using PoolMap = std::vector< Point >;
+ 
+ /// Type to represent a scenario with its probability
+ using ScenarioWithProbability = std::pair<Scenario, double>;
+ 
 
 /** @} ---------------------------------------------------------------------*/
 /*----------- CONSTRUCTING AND DESTRUCTING DiscreteScenarioSet -------------*/
@@ -152,72 +167,88 @@ public:
 
  void set_seed( unsigned long seed ) override;
 
- /// Function to select a random subset from the input scenario pool
- /** The function init_random_pool selects randomly a few scenarios among the
-  * ones that were deserialized from the input. It saves a subset of indices
-  * in the variable scenarioIndexes. */
- void init_random_pool( ScenarioIndex sampleSize ) override;
+ /// Function to select a discrete subset from the input scenario pool
+ /** The function init_discrete_pool selects a subset of scenarios among the
+  * ones that were deserialized from the input. It saves this subset of indices
+  * in the variable scenarioIndexes.
+  * 
+  * This approach preserves the original scenarios without generating new ones,
+  * making it appropriate for scenario reduction when you need to maintain the
+  * original scenarios and just want to select a representative subset.
+  */
+ void init_discrete_pool( ScenarioIndex sampleSize ) override;
 
- /// Function to compute a finite set of representative scenario
- /** The function init_representative_pool( ScenarioIndex size ) computes a
+ /// Function to compute a continuous approximation for scenario representation
+ /** The function init_continuous_pool( ScenarioIndex size ) computes a
   * set of scenarios that approximates the input set of scenarios according
-  * to some optimization criterium.
+  * to some optimization criterion or statistical properties.
   *
   * By default, in DiscreteScenarioSet a native (and naive) implementation of
-  * k-means clustering is used.
+  * k-means clustering is used. While k-means aims to minimize variance within 
+  * clusters (not necessarily Wasserstein distance), it serves as a general 
+  * method for creating representative scenarios.
   *
-  * Kmeans splits the input scenarios into size clusters. Each of the
-  * clusters has a (bary)center, and each scenario is associated with a label,
-  * which is its nearest center.
+  * Scenario reduction techniques, which specifically aim to minimize Wasserstein
+  * distance between original and reduced distributions, can also be implemented
+  * through this interface.
+  *
+  * Kmeans splits the input scenarios into size clusters. Each cluster has a 
+  * (bary)center, and each scenario is associated with a label, which is its 
+  * nearest center.
   *
   * Knowing the cluster centers and the labels, the representativePool is
-  * made of the centers. The std::vector< double > probabilityPool is such
+  * made of the centers. The std::vector< double > poolProbabilities is such
   * that each component p_i is equal to
   *  p_i = sum( input_weights_with_label_equal_to_i ).
+  * 
+  * This method typically creates new scenarios that weren't in the original set
+  * but are constructed to be good statistical representatives.
   */
- void init_representative_pool( ScenarioIndex sampleSize ) override;
+ void init_continuous_pool( ScenarioIndex sampleSize ) override;
 
  /// Function for retrieving the current scenario.
  /** Checks that the internal variable currentScenarioIndex is within bounds,
   * then converts the currentScenarioIndex-th row of the scenario pool as a
   * Scenario, that is as a std::span< const double >.
   *
-  * If a subset of the scenarioSet has been used, we output the scenario
-  * as a span the scenarioIndex[currentScenarioIndex]-th row of the
+  * If a discrete pool has been initialized (via init_discrete_pool), we output 
+  * the scenario as a span of the scenarioIndex[currentScenarioIndex]-th row of the
   * scenarioSet.
   *
-  * If we use a representativePool, we output the scenario as a span the
-  * currentScenarioIndex-th component of the representativePool. */
+  * If a continuous pool has been initialized (via init_continuous_pool), we output 
+  * the scenario as a span of the currentScenarioIndex-th component of the 
+  * representativePool. */
  Scenario get_current_scenario( void ) override;
 
  /// Function to query the probability weight of the current scenario
  /** When sampling a pool, what are the weights of the drawn scenarios?
   * When using get_scenario_probabilities, we return "the" probability weight
   * inside the pool and not the input probability weight.
-  * Similar question when constructing a representative pool.
+  * This applies for both discrete and continuous pool approaches.
   *
   * Choices made:
-  * 1) Case subset of input. Take the input weight and normalize it, that is
-  * given a scenario with an input_weight, we compute its new_weight by:
+  * 1) For discrete pools (init_discrete_pool): Take the input weight and 
+  * normalize it, that is given a scenario with an input_weight, we compute 
+  * its new_weight by:
   *  "new_weight = input_weight / sum( input_weights_in_the_pool )".
-  * 2) Case constructing representative scenarios. For k-means clustering,
-  *  the "pool weight" should be the proportion of points affected by the
-  * center.
+  * 
+  * 2) For continuous pools (init_continuous_pool): For k-means clustering,
+  * the "pool weight" is the proportion of points affected by the center.
   *
-  * In the first case, after scaling, we return the currentScenarioIndex-th
+  * In the discrete case, after scaling, we return the currentScenarioIndex-th
   * input_weight from the deserialized data in scenarioProbabilities.
-  * In the second case, we return the currentScenarioIndex-th element of the
-  * std::vector< double > poolProbabilities that is constructed with
+  * In the continuous case, we return the currentScenarioIndex-th element of the
+  * std::vector< double > poolProbabilities that is constructed with the
   * representative scenarios.
   * */
  double get_current_scenario_probability( void ) override;
 
  /// Move currentScenarioIndex to the next scenario
- /** Weather the pool has been sampled from the input via init_random_pool(...)
-  * or constructed from the input via init_representative_pool(...), the
-  * function next_scenario() behaves the same: it increments by 1 the
-  * currentScenarioIndex if there is still a scenario left in the pool and
-  * return true, otherwise it returns false. */
+ /** Whether the pool has been created via init_discrete_pool(...)
+  * or via init_continuous_pool(...), the function next_scenario() 
+  * behaves the same: it increments by 1 the currentScenarioIndex if 
+  * there is still a scenario left in the pool and return true, 
+  * otherwise it returns false. */
  bool next_scenario( void ) override;
 
  /// return the dimension of the scenarios
@@ -237,6 +268,15 @@ public:
 
  /// get a reference to scenarioSize
  const ScenarioSize & get_scenarioSize() const;
+ 
+ /// Get current scenario with its probability as a pair
+ [[nodiscard]] ScenarioWithProbability get_current_scenario_with_prob();
+ 
+ /// Try to get a scenario by index, returns nullopt if index is invalid
+ [[nodiscard]] std::optional<Scenario> try_get_scenario(ScenarioIndex index) const;
+ 
+ /// Check if the scenario pool has been initialized
+ [[nodiscard]] bool is_pool_initialized() const;
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
@@ -268,11 +308,22 @@ private:
   * used. */
  ScenarioIndex poolSize = 0;
 
- /// Probabilities of input scenarios
- std::vector< double > scenarioProbabilities;
-
  /// Random generator
  std::mt19937 rng;
+ 
+ /// Enum for pool type
+ enum class PoolType { 
+     None,      ///< No pool initialized
+     Discrete,  ///< Discrete pool
+     Continuous ///< Continuous pool
+ };
+ 
+ /// Current pool type
+ PoolType currentPoolType{PoolType::None};
+ 
+ /// Compile-time constants
+ static constexpr double DEFAULT_EPSILON = 1e-10;
+ static constexpr unsigned long DEFAULT_SEED = 1337;
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- FIELDS FOR REPRESENTATIVE POOL ---------------------*/
@@ -296,25 +347,24 @@ private:
  std::vector< double > poolProbabilities;
 
 /** @} ---------------------------------------------------------------------*/
-/*------------------------- FIELDS FOR RANDOM POOL -------------------------*/
+/*------------------------- FIELDS FOR DISCRETE POOL -------------------------*/
 /*--------------------------------------------------------------------------*/
-/** @name Fields for the random pool
-   * When the scenario pool is made of random scenarios that
-   * are for a subset of the input scenarios contained in the scenario pool
-   * is characterized by a std::vector< ScenarioIndex > and the probability
+/** @name Fields for the discrete pool
+   * When the scenario pool is made of a discrete subset of the input scenarios,
+   * it is characterized by a std::vector< ScenarioIndex > and the probability
    * weights can be deduced from the input weights saved in
    * scenarioProbabilities and the sumPoolWeights of the scenarios that
    * belong to the scenario pool.
  * @{ */
 
- /// holder for the sum of the weights inside the random pool
+ /// holder for the sum of the weights inside the discrete pool
  /** Variable which holds the sum of the weights of the scenarios that were
-  * chosen to be part of the random pool, see init_random_pool(...).
-  * This variable is set back to 0.0 if the representative pool is used,
-  * see init_representative_pool(...). */
+  * chosen to be part of the discrete pool, see init_discrete_pool(...).
+  * This variable is set back to 0.0 if the continuous pool is used,
+  * see init_continuous_pool(...). */
  double sumPoolWeights;
 
- /// Indexes of the pool
+ /// Indexes of the discrete pool
  std::vector< ScenarioIndex > scenarioIndexes;
 
 /** @} ---------------------------------------------------------------------*/
@@ -345,11 +395,11 @@ private:
  /** Function to clear the internal representativePool. */
  void empty_representativePool();
 
- /// "empty" the random pool
- /** As the random pool of DiscreteScenarioSet is simply a subset of indices
+ /// "empty" the discrete pool
+ /** As the discrete pool of DiscreteScenarioSet is simply a subset of indices
   * scenarioIndexes, we clear scenarioIndexes. The variable sumPoolWeights
-  * if initialized to 0.0 as */
- void empty_randomPool();
+  * is initialized to 0.0 */
+ void empty_discretePool();
 
  /// function to check if the representativePool of scenarios is empty
  bool isempty_representativePool() const;
