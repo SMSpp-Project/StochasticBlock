@@ -54,6 +54,23 @@ if (NOT hasParent)
     find_package(SMS++ REQUIRED)
 endif ()
 
+# ----- Optional CapacitatedFacilityLocationBlock dependency -------------- #
+option(WITH_CAPACITATED_FACILITY_LOCATION "Build with CapacitatedFacilityLocationBlock for scenario reduction" ON)
+
+if (WITH_CAPACITATED_FACILITY_LOCATION)
+    if (NOT hasParent)
+        find_package(CapacitatedFacilityLocationBlock)
+    endif ()
+    
+    if (TARGET ${modNamespace}::CapacitatedFacilityLocationBlock)
+        message(STATUS "Building ${modName} with scenario reduction capabilities")
+        set(HAVE_CAPACITATED_FACILITY_LOCATION TRUE)
+    else()
+        message(STATUS "CapacitatedFacilityLocationBlock not found, scenario reduction capabilities disabled")
+        set(WITH_CAPACITATED_FACILITY_LOCATION OFF)
+    endif()
+endif()
+
 # ----- Configuration header ------------------------------------------------ #
 # This will generate a *Config.h header in the build directory.
 configure_file(cmake/${modName}Config.h.in ${modName}Config.h)
@@ -96,6 +113,12 @@ target_include_directories(
 # library, INTERFACE means they will be linked only to the targets that depend
 # on this library.
 target_link_libraries(${modName} PUBLIC ${modNamespace}::SMS++)
+
+# Link with CapacitatedFacilityLocationBlock if available
+if (HAVE_CAPACITATED_FACILITY_LOCATION)
+    target_link_libraries(${modName} PUBLIC ${modNamespace}::CapacitatedFacilityLocationBlock)
+    target_compile_definitions(${modName} PUBLIC WITH_CAPACITATED_FACILITY_LOCATION)
+endif()
 
 # This alias is defined so that executables in this same project can use
 # the library with this notation.
