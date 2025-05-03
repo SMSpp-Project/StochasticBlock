@@ -28,6 +28,47 @@ following:
   (a vector) as parameter and sets the data of the inner `Block` according
   to its set of `DataMapping`
 
+### Scenario Reduction
+
+The `DiscreteScenarioSet` class provides scenario reduction capabilities when built with the `CapacitatedFacilityLocationBlock` dependency. This feature allows for reducing a large set of scenarios to a smaller representative subset while minimizing the Wasserstein distance between the original and reduced distributions.
+
+#### Available Algorithms
+
+- **Dupacova algorithm**: The default scenario reduction method that uses a forward selection approach to minimize Wasserstein distance
+- **BestFit**: An alternative algorithm that uses local search with best improvement selection at each step
+- **FirstFit**: A simpler, faster algorithm that selects the first satisfactory improvement
+
+#### Configuration
+
+Scenario reduction can be configured through:
+
+1. **NetCDF File**: Include a `ScenarioReductionConfig` group in your scenario data file with the following structure:
+   ```
+   ScenarioReductionConfig/ (type = "BlockConfig")
+   ├── CFLConfig/ (type = "BlockConfig")
+   │   ├── k = [int] (number of scenarios to select)
+   │   └── ell = [float] (Wasserstein distance power, default: 2.0)
+   └── SolverConfig/ (type = "BlockSolverConfig")
+       └── algorithm = [string] ("Dupacova", "BestFit", or "FirstFit")
+   ```
+
+2. **Programmatic Configuration**: Use the `set_scenario_reduction_config()` method to set a configuration object programmatically:
+   ```cpp
+   auto config = new BlockConfig(false);  // Not differential
+   auto cflConfig = new BlockConfig(false);
+   cflConfig->add_conf_prop("k", 5);
+   cflConfig->add_conf_prop("ell", 2.0f);
+   config->add_R3_BlockConfig("CFLConfig", cflConfig);
+   
+   auto solverConfig = new BlockSolverConfig(false);  // Not differential
+   solverConfig->add_conf_prop("algorithm", std::string("Dupacova"));
+   config->add_Solver_Configuration("SolverConfig", solverConfig);
+   
+   discreteScenarioSet.set_scenario_reduction_config(config);
+   ```
+
+When the `CapacitatedFacilityLocationBlock` is not available, the class automatically falls back to a simpler selection method based on scenario probabilities.
+
 
 ## Getting started
 
@@ -36,6 +77,7 @@ These instructions will let you build StochasticBlock on your system.
 ### Requirements
 
 - [SMS++ core library](https://gitlab.com/smspp/smspp)
+- [CapacitatedFacilityLocationBlock](https://gitlab.com/smspp/capacitatedfacilitylocationblock) (optional, enables scenario reduction functionality)
 
 ### Build and install with CMake
 

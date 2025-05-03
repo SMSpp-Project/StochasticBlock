@@ -5,6 +5,20 @@
  * Header file for the *concrete* class DiscreteScenarioSet that is an
  * implementation of ScenarioGenerator suited to the case where the input
  * distribution is contained in a netCDF file as a collection of vectors.
+ * 
+ * The class provides two main approaches for scenario management:
+ * 1. Discrete pools: Select a subset of existing scenarios
+ *    - Using random selection (always available)
+ *    - Using scenario reduction via Wasserstein distance minimization 
+ *      (requires CapacitatedFacilityLocationBlock)
+ * 
+ * 2. Continuous pools: Generate representative scenarios
+ *    - Using k-means clustering to create centroids
+ *
+ * The scenario reduction functionality can be configured through a Configuration 
+ * object loaded from a netCDF file or set programmatically. It integrates with 
+ * the CapacitatedFacilityLocationBlock module to implement optimal scenario
+ * selection methods based on the Wasserstein distance metric.
  *
  * \author Antonio Frangioni \n
  *         Dipartimento di Informatica \n
@@ -30,15 +44,17 @@
 /*--------------------------------------------------------------------------*/
 
 #include "ScenarioGenerator.h"
+#include "Configuration.h"
 
 #include <Eigen/Dense>
-#include <random>
-#include <span>
-#include <optional>
-#include <variant>
-#include <algorithm>
-#include <numeric>
-#include <utility>
+
+// Additional C++ standard library includes not in SMSTypedefs.h
+#include <random>    // C++11: For random number generation (std::mt19937)
+#include <span>      // C++20: For non-owning views of contiguous data (Scenario type)
+#include <optional>  // C++17: For representing optional values
+#include <variant>   // C++17: For type-safe unions
+#include <numeric>   // C++11: For accumulate and other numeric algorithms
+#include <utility>   // C++11: For std::pair and utility functions
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
@@ -72,23 +88,26 @@ constexpr double operator"" _pct(long double percentage) {
  * boost::multi_array< double, 2 >.
  *
  * DiscreteScenarioSet considers that the (deserialized) pool can be handled
- * by two distinct approaches for scenario reduction: the first draws a *subset* 
- * of the input scenarioPool (discrete approach), while the second *constructs* 
- * a set of representative scenarios from the input (continuous approach). Several 
- * functions thus have two different behaviors, whether the pool is initialized by 
- * the first or second method.
+ * by two distinct approaches for scenario reduction: 
+ * 
+ * 1. Discrete approach: Selects a *subset* of the input scenarioPool. This can be done:
+ *    - Using random selection (always available)
+ *    - Using scenario reduction via the ScenarioReductionConfig (requires CapacitatedFacilityLocationBlock)
+ *    - The subset is characterized by the set of indexes of the selected scenarios
+ *    - See init_discrete_pool(...)
+ * 
+ * 2. Continuous approach: *Constructs* a set of representative scenarios from the input:
+ *    - Uses k-means clustering to create centroids
+ *    - Another container is created to hold the constructed scenarios
+ *    - See init_continuous_pool(...)
  *
  * The method get_current_scenario() allows the user to query one element in
- * the pool, whether the first or second method was used.
- *
- * The first method (discrete approach) outputs scenarios that are part of the 
- * input, so the pool is simply characterized by the set of indexes of the drawn 
- * scenarios. See init_discrete_pool(...).
- *
- * The second method (continuous approach) outputs scenarios that can be different 
- * from the ones that were inputted. By default, DiscreteScenarioSet uses a native
- * implementation of k-means clustering. In that case, another container is
- * created to hold the constructed scenarios. See init_continuous_pool(...). */
+ * the pool, whether the discrete or continuous approach was used.
+ * 
+ * The scenario reduction functionality can be configured through a ScenarioReductionConfig
+ * object loaded from a netCDF file or set programmatically. It integrates with
+ * the CapacitatedFacilityLocationBlock module to implement optimal scenario 
+ * selection methods based on the Wasserstein distance metric. */
 
 class DiscreteScenarioSet : public ScenarioGenerator
 {
@@ -175,6 +194,18 @@ public:
   * This approach preserves the original scenarios without generating new ones,
   * making it appropriate for scenario reduction when you need to maintain the
   * original scenarios and just want to select a representative subset.
+  * 
+  * If a ScenarioReductionConfig is available (loaded during deserialization
+  * or set manually), the function will attempt to use it to perform scenario reduction
+  * based on the Wasserstein distance between scenarios. This uses the CapacitatedFacilityLocationBlock
+  * and ScenarioReductionSolver to select a representative subset of scenarios.
+  * 
+  * If scenario reduction is not available or fails, the function falls back to 
+  * randomly selecting scenarios using standard random subset generation.
+  * 
+  * Configuration for scenario reduction can be provided in a netCDF file or set
+  * programmatically using the set_scenario_reduction_config() method. See the 
+  * documentation for scenarioReductionConfig for details on the configuration structure.
   */
  void init_discrete_pool( ScenarioIndex sampleSize ) override;
 
@@ -277,6 +308,24 @@ public:
  
  /// Check if the scenario pool has been initialized
  [[nodiscard]] bool is_pool_initialized() const;
+ 
+ /// Get the scenario reduction configuration if available
+ /** Returns a pointer to the current scenario reduction configuration, or nullptr
+  * if no configuration is available. The DiscreteScenarioSet retains ownership
+  * of the configuration object. It's recommended to cast the returned pointer to
+  * ScenarioReductionConfig* for accessing specific configuration properties. */
+ [[nodiscard]] const Configuration* get_scenario_reduction_config() const { 
+     return scenarioReductionConfig.get(); 
+ }
+ 
+ /// Set the scenario reduction configuration
+ /** This method lets you set a custom configuration for scenario reduction.
+  * The DiscreteScenarioSet takes ownership of the provided configuration.
+  * Note that only ScenarioReductionConfig instances will be used for scenario
+  * reduction. Other configuration types will be stored but not used. */
+ void set_scenario_reduction_config(Configuration* config) {
+     scenarioReductionConfig.reset(config);
+ }
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
@@ -324,6 +373,37 @@ private:
  /// Compile-time constants
  static constexpr double DEFAULT_EPSILON = 1e-10;
  static constexpr unsigned long DEFAULT_SEED = 1337;
+ 
+ /// Configuration for scenario reduction
+ /** This is a ScenarioReductionConfig instance that contains settings for the scenario reduction algorithms,
+  * including which algorithm to use and its parameters. It's loaded from the netCDF file during
+  * deserialization (if available) and used during init_discrete_pool.
+  * 
+  * The configuration should be structured as follows in the netCDF file:
+  * 
+  * ScenarioReductionConfig  (Group)
+  * ├── CFLConfig           (Group)
+  * │   ├── k               (Attribute) = [int] Number of scenarios to select
+  * │   └── ell             (Attribute) = [float] Power for Wasserstein distance (default: 2.0)
+  * └── SolverConfig        (Group)
+  *     └── algorithm       (Attribute) = [string] One of: "Dupacova" (default), "BestFit", "FirstFit"
+  * 
+  * Explanation of parameters:
+  * - k: Number of scenarios to select (must be less than or equal to the total number of scenarios)
+  * - ell: Power parameter in the ell-Wasserstein distance (2.0 for standard Euclidean distance)
+  * - algorithm: Method used for scenario reduction:
+  *   - "Dupacova": Forward selection algorithm for discrete scenario reduction
+  *   - "BestFit": Local search algorithm that selects best improvement at each step
+  *   - "FirstFit": Local search algorithm that selects first satisfactory improvement
+  * 
+  * Implementation notes:
+  * - Only ScenarioReductionConfig instances are supported for scenario reduction
+  * - The configuration can be created programmatically and set with set_scenario_reduction_config()
+  * - If the WITH_CAPACITATED_FACILITY_LOCATION flag is not defined during compilation,
+  *   a fallback method will be used that selects scenarios based on their probabilities
+  * - If any configuration parameters are missing, reasonable defaults will be used
+  */
+ std::unique_ptr<Configuration> scenarioReductionConfig;
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- FIELDS FOR REPRESENTATIVE POOL ---------------------*/
@@ -403,6 +483,42 @@ private:
 
  /// function to check if the representativePool of scenarios is empty
  bool isempty_representativePool() const;
+ 
+ /// Determines if scenario reduction should be used based on configuration
+ /** This function checks if scenario reduction is configured properly and
+  * can be used for the current situation. It evaluates several conditions:
+  * 
+  * 1. The requested scenario pool size must be greater than 1 (trivial case)
+  * 2. A valid scenarioReductionConfig must exist
+  * 3. The configuration must be a ScenarioReductionConfig instance
+  *
+  * This method is called by init_discrete_pool() before attempting to use
+  * scenario reduction algorithms.
+  *
+  * @param size The desired size of the reduced scenario pool
+  * @return true if scenario reduction can be used, false otherwise
+  */
+ bool should_use_scenario_reduction(ScenarioIndex size) const;
+ 
+ /// Helper method to apply scenario reduction for discrete pool
+ /** This method applies scenario reduction to select a representative subset of scenarios
+  * using a ScenarioReductionConfig. When compiled with WITH_CAPACITATED_FACILITY_LOCATION
+  * defined, it:
+  * 
+  * 1. Creates a CapacitatedFacilityLocationBlock to formulate the selection problem
+  * 2. Extracts configuration parameters (ell, k, algorithm) from the ScenarioReductionConfig
+  * 3. Configures and runs the ScenarioReductionSolver with the selected algorithm
+  * 4. Updates scenarioIndexes with the selected scenario indices
+  * 5. Recalculates sumPoolWeights based on the selected scenarios
+  * 
+  * When WITH_CAPACITATED_FACILITY_LOCATION is not defined, it falls back to:
+  * - Selecting scenarios based on their original probabilities (highest first)
+  * - A simpler but still valid scenario selection method
+  *
+  * @param size The desired size of the reduced scenario pool
+  * @return true if reduction was successful, false otherwise (fallback to random selection)
+  */
+ bool apply_scenario_reduction(ScenarioIndex size);
 
   SMSpp_insert_in_factory_h;
 

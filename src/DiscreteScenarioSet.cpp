@@ -25,6 +25,136 @@
 #include "DiscreteScenarioSet.h"
 
 #include <Eigen/Dense>
+#include "CapacitatedFacilityLocationBlock.h"
+#include "ScenarioReductionSolver.h"
+#include "Block.h" // For BlockConfig
+#include "Solver.h" // For BlockSolverConfig
+
+// Simple configuration class for scenario reduction
+/**
+ * Simple configuration class for scenario reduction
+ * 
+ * This avoids API incompatibilities while still providing the necessary functionality.
+ */
+class ScenarioReductionConfig : public SMSpp_di_unipi_it::Configuration {
+public:
+    // Simple structure for configuration properties
+    struct ConfigProperty {
+        std::string name;
+        std::variant<int, float, double, std::string> value;
+    };
+    
+    // Nested configuration
+    struct NestedConfig {
+        std::string type;
+        std::vector<ConfigProperty> properties;
+    };
+    
+    // Constructors
+    ScenarioReductionConfig(bool diff = true) : Configuration() {}
+    
+    ScenarioReductionConfig(std::istream& input) : Configuration() {
+        load(input);
+    }
+    
+    ScenarioReductionConfig(const ScenarioReductionConfig& old) : Configuration() {
+        cfl_config = old.cfl_config;
+        solver_config = old.solver_config;
+    }
+    
+    // Required for SMS++ factory
+    void load(std::istream& input) override {}
+    
+    // Create method - required for factory registration
+    static SMSpp_di_unipi_it::Configuration* create() { return new ScenarioReductionConfig(); }
+    
+    // Specialized clone implementation
+    ScenarioReductionConfig* clone() const override {
+        return new ScenarioReductionConfig(*this);
+    }
+    
+    // Name for the configuration type
+    const std::string& private_name() const override {
+        static const std::string name = "ScenarioReductionConfig";
+        return name;
+    }
+    
+    // Helper to set the k parameter (number of scenarios to select)
+    void set_k(int k) {
+        cfl_config.properties.push_back({"k", k});
+    }
+    
+    // Helper to set the ell parameter (Wasserstein distance power)
+    void set_ell(float ell) {
+        cfl_config.properties.push_back({"ell", ell});
+    }
+    
+    // Helper to set the algorithm parameter
+    void set_algorithm(const std::string& algorithm) {
+        solver_config.properties.push_back({"algorithm", algorithm});
+    }
+    
+    // Custom method to configure based on common parameters
+    void configure(int k, float ell = 2.0f, const std::string& algorithm = "Dupacova") {
+        // Set CFL configuration
+        cfl_config.type = "CFLConfig";
+        set_k(k);
+        set_ell(ell);
+        
+        // Set solver configuration
+        solver_config.type = "SolverConfig";
+        set_algorithm(algorithm);
+    }
+    
+    // Access methods for properties
+    int get_k() const {
+        for (const auto& prop : cfl_config.properties) {
+            if (prop.name == "k" && std::holds_alternative<int>(prop.value)) {
+                return std::get<int>(prop.value);
+            }
+        }
+        return 0; // Default
+    }
+    
+    float get_ell() const {
+        for (const auto& prop : cfl_config.properties) {
+            if (prop.name == "ell" && std::holds_alternative<float>(prop.value)) {
+                return std::get<float>(prop.value);
+            }
+        }
+        return 2.0f; // Default
+    }
+    
+    std::string get_algorithm() const {
+        for (const auto& prop : solver_config.properties) {
+            if (prop.name == "algorithm" && std::holds_alternative<std::string>(prop.value)) {
+                return std::get<std::string>(prop.value);
+            }
+        }
+        return "Dupacova"; // Default
+    }
+    
+private:
+    // Storage for nested configurations
+    NestedConfig cfl_config;
+    NestedConfig solver_config;
+};
+
+// Registration is handled through the Configuration system itself
+// Rather than using the macro directly
+
+// Helper function to create a scenario reduction configuration (static to avoid linker conflicts)
+static SMSpp_di_unipi_it::Configuration* create_scenario_reduction_config(int k, float ell = 2.0f, const std::string& algorithm = "Dupacova") {
+    // Create and configure ScenarioReductionConfig
+    auto config = new ScenarioReductionConfig();
+    config->configure(k, ell, algorithm);
+    return config;
+}
+
+// TestConfig class removed - no longer needed for backward compatibility
+
+// Additional C++ standard library includes not in SMSTypedefs.h
+#include <chrono> // C++11: Used for generating unique temporary filenames
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
@@ -278,6 +408,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   poolProbabilities.clear();
   scenarioIndexes.clear();
   representativePool.clear();
+  scenarioReductionConfig.reset(); // Clear any existing configuration
   
   // Compute the two dimensions of the scenarioPool
   ::deserialize_dim( group , "NumberScenarios" , nbScenarios , false );
@@ -299,6 +430,61 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   
   if (!probsLoaded || poolProbabilities.size() != nbScenarios) {
     poolProbabilities = createUniformWeights();
+  }
+  
+  // Check for scenario reduction configuration group
+  try {
+    // Check if the ScenarioReductionConfig group exists
+    netCDF::NcGroup cfgGroup = group.getGroup("ScenarioReductionConfig");
+    if (!cfgGroup.isNull()) {
+      try {
+        // Try to create a new ScenarioReductionConfig directly
+        auto config = new ScenarioReductionConfig();
+        
+        // Set up configuration properties from the netCDF group
+        // Read the 'k' parameter if available
+        try {
+          netCDF::NcGroup cflGroup = cfgGroup.getGroup("CFLConfig");
+          if (!cflGroup.isNull()) {
+            netCDF::NcGroupAtt kAtt = cflGroup.getAtt("k");
+            if (!kAtt.isNull()) {
+              int k_value;
+              kAtt.getValues(&k_value);
+              config->set_k(k_value);
+            }
+            
+            netCDF::NcGroupAtt ellAtt = cflGroup.getAtt("ell");
+            if (!ellAtt.isNull()) {
+              float ell_value;
+              ellAtt.getValues(&ell_value);
+              config->set_ell(ell_value);
+            }
+          }
+        } catch (...) {}
+        
+        // Read the 'algorithm' parameter if available
+        try {
+          netCDF::NcGroup solverGroup = cfgGroup.getGroup("SolverConfig");
+          if (!solverGroup.isNull()) {
+            netCDF::NcGroupAtt algoAtt = solverGroup.getAtt("algorithm");
+            if (!algoAtt.isNull()) {
+              std::string alg_value;
+              algoAtt.getValues(alg_value);
+              config->set_algorithm(alg_value);
+            }
+          }
+        } catch (...) {}
+        
+        // Set the configuration
+        scenarioReductionConfig.reset(config);
+      } catch (const std::exception& e) {
+        // Configuration creation failed, continue without it
+        scenarioReductionConfig.reset();
+      }
+    }
+  } catch (const std::exception& e) {
+    // Configuration not found or invalid, just continue without it
+    scenarioReductionConfig.reset();
   }
 }
 
@@ -353,7 +539,17 @@ void DiscreteScenarioSet::init_discrete_pool(ScenarioIndex size)
     scenarioIndexes.resize(size);
   }
 
-  generateRandomSubset(nbScenarios, size, scenarioIndexes, rng);
+  // Check if we should use scenario reduction based on configuration
+  bool used_reduction = false;
+  if (should_use_scenario_reduction(size)) {
+    // Try to apply scenario reduction using the configuration
+    used_reduction = apply_scenario_reduction(size);
+  }
+  
+  // If scenario reduction was not used or failed, use standard random selection
+  if (!used_reduction) {
+    generateRandomSubset(nbScenarios, size, scenarioIndexes, rng);
+  }
 
   // Save the total probability weights of the pool in sumPoolWeights
   // Using std::accumulate with lambda for better readability and safety
@@ -624,6 +820,189 @@ DiscreteScenarioSet::try_get_scenario(ScenarioIndex index) const
   return scenarioSize;
 }
 
+/// Check if scenario reduction should be used based on configuration
+bool DiscreteScenarioSet::should_use_scenario_reduction(ScenarioIndex size) const {
+  // Skip scenario reduction for zero size
+  if (size == 0) return false;
+  
+  // Skip scenario reduction for size 1, as it's a trivial case
+  if (size == 1) return false;
+  
+  // Check if we have a valid configuration
+  if (!scenarioReductionConfig) return false;
+  
+  // Check if the configuration is a ScenarioReductionConfig
+  auto srConfig = dynamic_cast<const ScenarioReductionConfig*>(scenarioReductionConfig.get());
+  if (srConfig) {
+    // Get the k value from the configuration
+    int k = srConfig->get_k();
+    
+    // If k is specified in the configuration and valid, definitely use scenario reduction
+    if (k > 0 && static_cast<ScenarioIndex>(k) <= nbScenarios) {
+      return true;
+    }
+    
+    // Even if k is not specified, if we have a valid configuration, it's worth attempting
+    // scenario reduction with the provided size parameter
+    return true;
+  }
+  
+  // If we have a configuration but it's not a ScenarioReductionConfig, 
+  // don't use scenario reduction
+  return false;
+}
+
+/// Apply scenario reduction based on configuration
+bool DiscreteScenarioSet::apply_scenario_reduction(ScenarioIndex size) {
+  // Check if we have a valid configuration
+  if (!scenarioReductionConfig) {
+    return false;
+  }
+
+  // Get ell value (power in Wasserstein distance) from configuration
+  float ell = 2.0;  // Default to squared Euclidean distance
+  
+  // Check 'k' parameter (number of scenarios to select) from configuration
+  ScenarioIndex k_scenarios = size;
+  
+  std::string algorithm = "Dupacova"; // Default algorithm
+  
+  // Try to use the ScenarioReductionConfig
+  try {
+    auto srConfig = dynamic_cast<ScenarioReductionConfig*>(scenarioReductionConfig.get());
+    if (srConfig) {
+      // Use the proper methods to access configuration values
+      int k_value = srConfig->get_k();
+      if (k_value > 0 && static_cast<ScenarioIndex>(k_value) <= nbScenarios) {
+        k_scenarios = static_cast<ScenarioIndex>(k_value);
+      }
+      
+      ell = srConfig->get_ell();
+      algorithm = srConfig->get_algorithm();
+    } else {
+      // If the configuration is not of the expected type, use default values
+      // This could happen if a different configuration type is provided
+      // but we expect specifically ScenarioReductionConfig
+    }
+  } catch (...) {
+    // If anything goes wrong with configuration access, use defaults
+  }
+
+  try {    
+    #ifdef WITH_CAPACITATED_FACILITY_LOCATION
+    // Create a CapacitatedFacilityLocationBlock
+    auto cflBlock = std::make_unique<CapacitatedFacilityLocationBlock>();
+
+    // Create the data structures needed for the CFL problem
+    const Index n_facilities = nbScenarios;  // Each original scenario is a potential facility
+    const Index n_customers = nbScenarios;   // Each original scenario is also a customer
+
+    // Create capacity vector - each facility can serve exactly one customer
+    CapacitatedFacilityLocationBlock::DVector capacities(n_facilities, 1.0);
+    
+    // Create fixed costs vector - all facilities have the same fixed cost
+    CapacitatedFacilityLocationBlock::CVector fixed_costs(n_facilities, 0.0);
+    
+    // Create demands vector - each customer has a demand equal to its probability weight
+    CapacitatedFacilityLocationBlock::DVector demands = poolProbabilities;
+    
+    // Create transportation cost matrix - the cost is the Wasserstein distance between scenarios
+    CapacitatedFacilityLocationBlock::CMatrix transport_costs(boost::extents[n_facilities][n_customers]);
+    
+    // Compute distances between scenarios (transport costs)
+    for (ScenarioIndex i = 0; i < n_facilities; ++i) {
+      for (ScenarioIndex j = 0; j < n_customers; ++j) {
+        // Calculate Euclidean distance between scenarios i and j raised to power ell
+        double dist = 0.0;
+        for (ScenarioSize d = 0; d < scenarioSize; ++d) {
+          double diff = scenarioSet[i][d] - scenarioSet[j][d];
+          dist += std::pow(diff, 2);  // Squared difference
+        }
+        transport_costs[i][j] = std::pow(dist, ell/2.0);  // Convert squared Euclidean to ell-Wasserstein
+      }
+    }
+    
+    // Load the CFL problem
+    cflBlock->load(n_facilities, n_customers, std::move(capacities), std::move(fixed_costs),
+                  std::move(demands), std::move(transport_costs), true, k_scenarios);
+    
+    // Create and configure the ScenarioReductionSolver
+    auto solver = std::make_unique<ScenarioReductionSolver>();
+    solver->set_Block(cflBlock.get());
+    solver->set_ell(ell);
+    
+    // Set the algorithm based on what we found in the configuration
+    if (algorithm == "Dupacova") {
+      solver->set_algorithm(ScenarioReductionSolver::Algorithm::Dupacova);
+    } else if (algorithm == "BestFit") {
+      solver->set_algorithm(ScenarioReductionSolver::Algorithm::BestFit);
+    } else if (algorithm == "FirstFit") {
+      solver->set_algorithm(ScenarioReductionSolver::Algorithm::FirstFit);
+    } else {
+      // Unknown algorithm, fall back to default
+      solver->set_algorithm(ScenarioReductionSolver::Algorithm::Dupacova);
+    }
+    
+    // Solve the scenario reduction problem
+    int status = solver->compute();
+    
+    // Check if the solve was successful
+    if (status == Solver::kOK) {
+      // Get the solution - which scenarios were selected
+      const auto& reduced_atoms = solver->get_reduced_atoms();
+      
+      // Clear the current scenario indexes
+      scenarioIndexes.clear();
+      
+      // Add the selected scenarios to scenarioIndexes
+      for (ScenarioIndex i = 0; i < n_facilities; ++i) {
+        if (reduced_atoms[i]) {
+          scenarioIndexes.push_back(i);
+        }
+      }
+      
+      // Calculate sum of weights of selected scenarios for normalization
+      sumPoolWeights = 0.0;
+      for (const auto& idx : scenarioIndexes) {
+        sumPoolWeights += poolProbabilities[idx];
+      }
+      
+      return true;
+    } else {
+      return false;
+    }
+    #else // WITH_CAPACITATED_FACILITY_LOCATION not defined
+    
+    // Fallback to a simpler method: sort scenarios by probability and take the top k
+    // This is not scenario reduction in the Wasserstein sense, but provides a deterministic
+    // selection that can be useful when the proper solver is not available
+    
+    // Create a vector of (index, probability) pairs
+    std::vector<std::pair<ScenarioIndex, double>> scenario_probs;
+    for (ScenarioIndex i = 0; i < nbScenarios; ++i) {
+      scenario_probs.emplace_back(i, poolProbabilities[i]);
+    }
+    
+    // Sort by probability in descending order
+    std::sort(scenario_probs.begin(), scenario_probs.end(),
+              [](const auto& a, const auto& b) { return a.second > b.second; });
+    
+    // Take the top k_scenarios
+    scenarioIndexes.clear();
+    sumPoolWeights = 0.0;
+    for (ScenarioIndex i = 0; i < std::min(k_scenarios, static_cast<ScenarioIndex>(scenario_probs.size())); ++i) {
+      scenarioIndexes.push_back(scenario_probs[i].first);
+      sumPoolWeights += scenario_probs[i].second;
+    }
+    
+    return !scenarioIndexes.empty();
+    #endif // WITH_CAPACITATED_FACILITY_LOCATION
+  } catch (const std::exception& e) {
+    // Silently handle errors in scenario reduction and fall back to random selection
+    return false;
+  }
+}
+
 /// Concrete implementation of ScenarioGenerator
 DiscreteScenarioSet::DiscreteScenarioSet() { set_seed(DEFAULT_SEED); }
 
@@ -644,6 +1023,9 @@ DiscreteScenarioSet::~DiscreteScenarioSet() {
     
     poolProbabilities.clear();
     poolProbabilities.shrink_to_fit();
+    
+    // Release the configuration
+    scenarioReductionConfig.reset();
   };
   
   // Execute cleanup
