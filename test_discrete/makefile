@@ -55,28 +55,40 @@ include $(SMS++SDR)/lib/makefile-inc
 StcBlkSDR = ..
 include $(StcBlkSDR)/makefile
 
+# CapacitatedFacilityLocationBlock
+CFLBlkSDR = ../../CapacitatedFacilityLocationBlock
+include $(CFLBlkSDR)/makefile
+
+# BinaryKnapsackBlock
+BKPBlkSDR = ../../BinaryKnapsackBlock
+include $(BKPBlkSDR)/makefile
+
+# MCFBlock
+MCFBlkSDR = ../../MCFBlock
+include $(MCFBlkSDR)/makefile
+
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
 # object files
-MOBJ =  $(SMS++OBJ) $(StcBlkOBJ)
+MOBJ =  $(SMS++OBJ) $(StcBlkOBJ) $(CFLBlkOBJ) $(BKPBlkOBJ) $(MCFBlkOBJ)
 
 # libraries
-MLIB =  $(SMS++LIB) $(StcBlkLIB)
+MLIB =  $(SMS++LIB) $(StcBlkLIB) $(CFLBlkLIB) $(BKPBlkLIB) $(MCFBlkLIB) -lnetcdf_c++4 -lnetcdf
 
-$(DIR)/$(NAME): $(DIR)/test_discretescenarioset.o $(StcBlkOBJ) $(SMS++OBJ)
+$(DIR)/$(NAME): $(DIR)/test_discretescenarioset.o $(StcBlkOBJ) $(SMS++OBJ) $(CFLBlkOBJ) $(BKPBlkOBJ) $(MCFBlkOBJ)
 	$(CC) -o $(DIR)/$(NAME) $^ $(MLIB) $(DSW)
 
 # dependencies: every .o from its .C + every recursively included .h- - - - -
 
 # include directives
-MINC =  $(SMS++INC) $(StcBlkINC)
+MINC =  $(SMS++INC) $(StcBlkINC) $(CFLBlkINC) $(BKPBlkINC) $(MCFBlkINC)
 
 # includes
-MH =    $(SMS++H) $(StcBlkH)
+MH =    $(SMS++H) $(StcBlkH) $(CFLBlkH) $(BKPBlkH) $(MCFBlkH)
 
 # compile command
 
 $(DIR)/test_discretescenarioset.o: $(DIR)/test_discretescenarioset.cpp $(MH)
-	$(CC) -c $*.cpp -o $@ $(MINC) -I$(StcBlkSDR)/include $(DSW)
+	$(CC) -c $*.cpp -o $@ $(MINC) -I$(StcBlkSDR)/include -I$(CFLBlkSDR)/include -I$(BKPBlkSDR)/include -I$(MCFBlkSDR)/include $(DSW)
 
 ############################ End of makefile #################################

@@ -17,6 +17,12 @@
 add_executable(test_discretescenarioset test_discretescenarioset.cpp)
 target_link_libraries(test_discretescenarioset PRIVATE SMS++::StochasticBlock)
 
+# Add CapacitatedFacilityLocationBlock dependency if available
+if (TARGET ${modNamespace}::CapacitatedFacilityLocationBlock)
+    target_link_libraries(test_discretescenarioset PRIVATE ${modNamespace}::CapacitatedFacilityLocationBlock)
+    target_compile_definitions(test_discretescenarioset PRIVATE WITH_CAPACITATED_FACILITY_LOCATION)
+endif()
+
 # Register the test with CTest
 add_test(NAME test_discretescenarioset
         COMMAND test_discretescenarioset)

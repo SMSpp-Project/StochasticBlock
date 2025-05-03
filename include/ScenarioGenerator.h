@@ -472,14 +472,17 @@ class ScenarioGenerator
  virtual void set_seed( unsigned long seed = 0 ) = 0;
 
 /*--------------------------------------------------------------------------*/
- /// generate a random pool of given size
- /** This method (logically) constructs the scenario pool from realizations of
-  * the random variable, typically by sampling. One would expect the scenarios
-  * to be uniformly distributed across the (possibly, infinite) set of
-  * possible realizations, so that the corresponding scenarios can be used,
-  * e.g., during a simulation phase to evaluate the quality of the decisions
-  * taken by some optimization model that has only "seen" a (much) smaller
-  * number of scenarios [see init_representative_pool()].
+ /// generate a discrete pool of given size
+ /** This method (logically) constructs the scenario pool from a subset of 
+  * the existing scenarios. It selects a discrete set of scenarios from the 
+  * original distribution, making this appropriate for situations where one 
+  * wants to work with a subset of the original scenarios without generating 
+  * new ones.
+  *
+  * The selected scenarios will be drawn from the existing set, preserving 
+  * their original characteristics but potentially with adjusted weights.
+  * This approach is useful for scenario reduction when you need to maintain
+  * the original scenarios and just want to select a representative subset.
   *
   * \p size is the number of scenarios in the produced pool.
   *
@@ -487,22 +490,25 @@ class ScenarioGenerator
   * the current scenario and can be read [see get_current_scenario()] and
   * get_current_scenario_probability()] right away. */
 
-  virtual void init_random_pool( ScenarioIndex size ) = 0;
+  virtual void init_discrete_pool( ScenarioIndex size ) = 0;
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
- /// generate a "representative" pool of given size
- /** This method (logically) constructs the scenario pool from realizations of
-  * the random variable, working hard to ensure that the set is "as much
-  * representative as possible" of the whole (possibly, infinite) set of
-  * possible realizations, so that the corresponding scenarios can be used,
-  * e.g., to build an optimization model of "reasonable size" (so that it can
-  * be solved) that still "sees enough of the random variable to take good
-  * decisions". This may be nontrivial, in particular if the underlying
-  * variable is discrete in nature and therefore something like an Optimal
-  * Transport Problem needs to be solved. Thus, this method may have a
-  * nontrivial computational cost. Then, the decisions taken by such a model
-  * can be evaluated with a simulation on (much) larger number of "uniformly
-  * distributed" scenarios [see init_random_pool()].
+ /// generate a "continuous" pool of given size through scenario reduction
+ /** This method (logically) constructs the scenario pool by applying scenario
+  * reduction techniques to create new scenarios that may not exist in the original
+  * set. It produces a continuous representation of the distribution that attempts
+  * to minimize some distance metric (typically Wasserstein distance) between
+  * the original and reduced distributions.
+  * 
+  * This approach is useful for scenario reduction when creating compact
+  * representative sets that capture the essential characteristics of the
+  * distribution, often through techniques like clustering (e.g., k-means),
+  * moment matching, or optimal transport. The scenarios generated through this
+  * method typically weren't in the original set but are constructed to be
+  * optimal representatives.
+  *
+  * This method may involve solving optimization problems and thus may have
+  * a nontrivial computational cost compared to simply selecting existing scenarios.
   *
   * \p size is the number of scenarios in the produced pool.
   *
@@ -510,7 +516,7 @@ class ScenarioGenerator
   * the current scenario and can be read [see get_current_scenario()] and
   * get_current_scenario_probability()] right away. */
 
-  virtual void init_representative_pool( ScenarioIndex size ) = 0;
+  virtual void init_continuous_pool( ScenarioIndex size ) = 0;
 
 /*--------------------------------------------------------------------------*/
  /// read the data of the current scenario
