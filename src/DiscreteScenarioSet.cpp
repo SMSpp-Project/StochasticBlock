@@ -60,12 +60,22 @@ SMSpp_insert_in_factory_cpp_0( DiscreteScenarioSet );
 [[nodiscard]] static int nearestCenterIndex(const Eigen::VectorXd& point,
                                            const DiscreteScenarioSet::DiscreteRepresentativePool& centers)
 {
+  // Handle edge cases
+  if (centers.empty()) {
+    return -1;  // No centers to compare against
+  }
+  
   // Use a structured binding to keep track of minimum distance and index
   auto [minDistance, minIndex] = [&centers, &point]() {
     double minDist = std::numeric_limits<double>::max();
     int idx = 0;
     
     for (size_t i = 0; i < centers.size(); i++) {
+      // Safety check that vectors are the same size
+      if (centers[i].size() != point.size()) {
+        continue;  // Skip incompatible vectors
+      }
+      
       double distance = euclideanDistance(point, centers[i]);
       if (distance < minDist) {
         minDist = distance;
@@ -84,18 +94,63 @@ static void kMeans(unsigned int k, DiscreteScenarioSet::PoolMap& pool,
                   std::vector<int>& labels)
 {
   size_t n = pool.size(); // n = nbScenarios
+  
+  // Safety check for empty pool
+  if (n == 0) {
+    return;  // Nothing to do with empty pool
+  }
+  
   unsigned int scenariosize = pool[0].size();
   
-  bool changed;
-  do
+  // Ensure centers and labels have the correct size
+  if (centers.size() != k) {
+    centers.resize(k);
+    for (auto& center : centers) {
+      if (center.size() != scenariosize) {
+        center.resize(scenariosize);
+      }
+    }
+  }
+  
+  if (labels.size() != n) {
+    labels.resize(n, 0);
+  }
+  
+  // Special case: when k=1, just compute the centroid of all points
+  if (k == 1) {
+    // Set all labels to 0 (there's only one cluster)
+    std::fill(labels.begin(), labels.end(), 0);
+    
+    // Reset the center
+    centers[0].setZero();
+    
+    // Compute the centroid by summing all points
+    for (size_t i = 0; i < n; i++) {
+      centers[0] += pool[i];
+    }
+    
+    // Divide by the number of points
+    centers[0] /= static_cast<double>(n);
+    
+    // No need for iteration when k=1
+    return;
+  }
+  
+  // For k > 1, proceed with standard k-means
+  bool changed = true; // Initialize to true to ensure first iteration runs
+  int iteration = 0;   // Add iteration counter to avoid infinite loops
+  const int MAX_ITERATIONS = 100; // Limit iterations as a safeguard
+  
+  while (changed && iteration < MAX_ITERATIONS)
   {
     changed = false;
+    iteration++;
 
     // Assign points to the nearest center
-    for (int i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++)
     {
       int newIndex = nearestCenterIndex(pool[i], centers);
-      if (labels[i] != newIndex)
+      if (newIndex >= 0 && newIndex < static_cast<int>(k) && labels[i] != newIndex)
       {
         labels[i] = newIndex;
         changed = true;
@@ -112,27 +167,29 @@ static void kMeans(unsigned int k, DiscreteScenarioSet::PoolMap& pool,
     std::vector<int> counts(k, 0);
     
     // Sum all points in each cluster
-    for (int i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++)
     {
       const int clusterIdx = labels[i];
-      Eigen::VectorXd& center = centers[clusterIdx];
-      
-      // Add the point to its cluster center
-      center += pool[i];
-      
-      // Increment count for this cluster
-      counts[clusterIdx]++;
+      if (clusterIdx >= 0 && clusterIdx < static_cast<int>(k)) {
+        Eigen::VectorXd& center = centers[clusterIdx];
+        
+        // Add the point to its cluster center
+        center += pool[i];
+        
+        // Increment count for this cluster
+        counts[clusterIdx]++;
+      }
     }
 
     // Compute the average (barycenter) for each cluster
-    for (int i = 0; i < k; i++)
+    for (size_t i = 0; i < k; i++)
     {
       // Avoid division by zero
       if (counts[i] > 0) {
         centers[i] /= static_cast<double>(counts[i]);
       }
     }
-  } while (changed);
+  }
 }
 
 /*--------------------------------------------------------------------------*/

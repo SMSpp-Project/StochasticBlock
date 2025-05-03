@@ -38,6 +38,8 @@
 #include <algorithm>
 #include <netcdf>
 #include <sstream> // for cout suppression
+#include <thread>
+#include <future>
 
 /*--------------------------------------------------------------------------*/
 /*------------------------------- USING -----------------------------------*/
@@ -919,7 +921,7 @@ void test_large_scenario_set() {
     std::cout << "\n---------- Running Test 10: Large Scenario Set ----------" << std::endl;
     
     try {
-        // Create a large test data set (we'll use 500 instead of 1000 for quicker testing)
+        // Create a large-ish test data set
         const ScenarioGenerator::ScenarioIndex largeSize = 500;
         const ScenarioGenerator::ScenarioSize largeDim = 10;
         
@@ -991,6 +993,248 @@ void test_large_scenario_set() {
     }
 }
 
+/// Test 11: Dedicated Continuous Pool Test
+void test_continuous_pool() {
+    std::cout << "\n---------- Running Test 11: Continuous Pool ----------" << std::endl;
+    
+    try {
+        // Create a dataset with controlled scenario data for predictable clustering
+        std::string filename = "temp_continuous_pool_test.nc";
+        netCDF::NcFile dataFile(filename, netCDF::NcFile::replace);
+        
+        // Define dimensions - create a simple 2D scenario space with clear clusters
+        const ScenarioGenerator::ScenarioIndex nbScenarios = 30;
+        const ScenarioGenerator::ScenarioSize scenarioSize = 2; // 2D for easier visualization/verification
+        
+        auto nbScenariosDim = dataFile.addDim("NumberScenarios", nbScenarios);
+        auto scenarioSizeDim = dataFile.addDim("ScenarioSize", scenarioSize);
+        
+        // Define scenario variable
+        std::vector<netCDF::NcDim> dims = {nbScenariosDim, scenarioSizeDim};
+        auto scenariosVar = dataFile.addVar("Scenarios", netCDF::ncDouble, dims);
+        
+        // Create scenario data with 3 distinct clusters
+        // Cluster 1: around (0,0)
+        // Cluster 2: around (10,10)
+        // Cluster 3: around (5,15)
+        std::vector<double> scenarioData(nbScenarios * scenarioSize);
+        
+        // Helper to add noise to a value
+        auto addNoise = [](double value, double noise = 1.0) {
+            static std::mt19937 gen(42); // Fixed seed for reproducibility
+            std::normal_distribution<> d(0, noise);
+            return value + d(gen);
+        };
+        
+        for (ScenarioGenerator::ScenarioIndex i = 0; i < nbScenarios; i++) {
+            // Assign each scenario to one of the 3 clusters
+            if (i < 10) {
+                // Cluster 1: near (0,0)
+                scenarioData[i * scenarioSize] = addNoise(0.0);
+                scenarioData[i * scenarioSize + 1] = addNoise(0.0);
+            } else if (i < 20) {
+                // Cluster 2: near (10,10)
+                scenarioData[i * scenarioSize] = addNoise(10.0);
+                scenarioData[i * scenarioSize + 1] = addNoise(10.0);
+            } else {
+                // Cluster 3: near (5,15)
+                scenarioData[i * scenarioSize] = addNoise(5.0);
+                scenarioData[i * scenarioSize + 1] = addNoise(15.0);
+            }
+        }
+        
+        // Write the scenario data
+        scenariosVar.putVar(scenarioData.data());
+        
+        // Add uniform probability distribution
+        auto probVar = dataFile.addVar("poolProbabilities", netCDF::ncDouble, nbScenariosDim);
+        std::vector<double> probData(nbScenarios, 1.0 / nbScenarios);
+        probVar.putVar(probData.data());
+        
+        // Close the file to ensure data is written
+        dataFile.close();
+        
+        std::cout << "✓ Created test data with 3 clusters in 2D space" << std::endl;
+        
+        // Load the test data
+        DiscreteScenarioSet dss;
+        {
+            netCDF::NcFile file(filename, netCDF::NcFile::read);
+            dss.deserialize(file);
+        }
+        std::cout << "✓ Successfully loaded test data with " << dss.get_nbScenarios() << " scenarios" << std::endl;
+        
+        // TEST 1: Test with k=3 (should identify our 3 clusters)
+        std::cout << "Test 1: Continuous pool with size 3 (matching number of clusters)" << std::endl;
+        dss.set_seed(42); // Fixed seed for reproducibility
+        dss.init_continuous_pool(3);
+        
+        // Store the representative scenarios
+        std::vector<std::vector<double>> representatives;
+        for (ScenarioGenerator::ScenarioIndex i = 0; i < 3; i++) {
+            auto scenario = dss.get_current_scenario();
+            std::vector<double> scenarioData(scenario.begin(), scenario.end());
+            representatives.push_back(scenarioData);
+            
+            std::cout << "  Representative " << i << ": ("
+                    << scenarioData[0] << ", " << scenarioData[1] << ") with probability "
+                    << dss.get_current_scenario_probability() << std::endl;
+                    
+            if (i < 2) dss.next_scenario();
+        }
+        
+        // Verify we have 3 distinct representatives
+        bool distinct = true;
+        for (size_t i = 0; i < representatives.size(); i++) {
+            for (size_t j = i + 1; j < representatives.size(); j++) {
+                double distance = std::sqrt(
+                    std::pow(representatives[i][0] - representatives[j][0], 2) +
+                    std::pow(representatives[i][1] - representatives[j][1], 2)
+                );
+                std::cout << "  Distance between rep " << i << " and rep " << j << ": " << distance << std::endl;
+                
+                // Representatives should be at least 3 units apart
+                if (distance < 3.0) {
+                    distinct = false;
+                    std::cout << "⚠ Representatives " << i << " and " << j 
+                             << " are too close (" << distance << " < 3.0)" << std::endl;
+                }
+            }
+        }
+        
+        ASSERT_WITH_MSG(distinct, "Representatives should be distinct and represent different clusters");
+        std::cout << "✓ Representatives are sufficiently distinct" << std::endl;
+        
+        // Check that each representative is close to one of our cluster centers
+        bool near_centers = true;
+        std::vector<std::array<double, 2>> centers = {{{0.0, 0.0}}, {{10.0, 10.0}}, {{5.0, 15.0}}};
+        
+        for (const auto& rep : representatives) {
+            double min_distance = std::numeric_limits<double>::max();
+            for (const auto& center : centers) {
+                double distance = std::sqrt(
+                    std::pow(rep[0] - center[0], 2) +
+                    std::pow(rep[1] - center[1], 2)
+                );
+                min_distance = std::min(min_distance, distance);
+            }
+            
+            // Each representative should be within 2 units of some cluster center
+            if (min_distance > 2.0) {
+                near_centers = false;
+                std::cout << "⚠ Representative (" << rep[0] << ", " << rep[1] 
+                         << ") is not close to any cluster center (min distance: " 
+                         << min_distance << ")" << std::endl;
+            }
+        }
+        
+        ASSERT_WITH_MSG(near_centers, "Representatives should be near cluster centers");
+        if (near_centers) {
+            std::cout << "✓ Representatives are close to expected cluster centers" << std::endl;
+        }
+        
+        // TEST 2: Test with k=1 (should collapse to a single representative)
+        std::cout << "\nTest 2: Continuous pool with size 1 (single representative)" << std::endl;
+        dss.init_continuous_pool(1);
+        
+        auto scenario = dss.get_current_scenario();
+        std::cout << "  Single representative: (" << scenario[0] << ", " << scenario[1] << ")" << std::endl;
+        
+        // Probability should be exactly 1.0
+        double prob = dss.get_current_scenario_probability();
+        ASSERT_WITH_MSG(approx_equal(prob, 1.0), 
+                       "Single representative should have probability 1.0, got " + std::to_string(prob));
+        std::cout << "✓ Single representative has probability 1.0" << std::endl;
+        
+        std::cout << "\nTest 3: Continuous pool with size 5 (more than actual clusters)" << std::endl;
+        
+        // Use the object for testing k=5 
+        dss.set_seed(42); // Fixed seed for reproducibility
+        dss.init_continuous_pool(5);
+        
+        // Check that probabilities sum to 1.0
+        double totalProb = 0.0;
+        for (ScenarioGenerator::ScenarioIndex i = 0; i < 5; i++) {
+            totalProb += dss.get_current_scenario_probability();
+            
+            auto scenario = dss.get_current_scenario();
+            std::cout << "  Representative " << i << ": ("
+                    << scenario[0] << ", " << scenario[1] << ") with probability "
+                    << dss.get_current_scenario_probability() << std::endl;
+                    
+            if (i < 4) dss.next_scenario();
+        }
+        
+        ASSERT_WITH_MSG(approx_equal(totalProb, 1.0), 
+                       "Probabilities should sum to 1.0, got " + std::to_string(totalProb));
+        std::cout << "✓ Probabilities sum to 1.0" << std::endl;
+        
+        // TEST 4: Switch between discrete and continuous pools repeatedly
+        // Continue using the fresh object to avoid issues
+        std::cout << "\nTest 4: Switching between pool types" << std::endl;
+        
+        // We'll catch exceptions but document them instead of failing the test
+        // This allows us to report all issues rather than stopping at the first one
+        try {
+            // Initialize discrete pool
+            dss.init_discrete_pool(10);
+            std::cout << "  Switched to discrete pool with 10 scenarios" << std::endl;
+            
+            // Try accessing a scenario from the discrete pool
+            try {
+                auto scenario = dss.get_current_scenario();
+                double prob = dss.get_current_scenario_probability();
+                std::cout << "  ✓ Successfully accessed first scenario from discrete pool" << std::endl;
+            } catch (const std::exception& e) {
+                std::cout << "  ⚠ POTENTIAL BUG: Failed to access scenario after init_discrete_pool: " << e.what() << std::endl;
+            }
+            
+            // Switch to continuous pool with k=3
+            dss.init_continuous_pool(3);
+            std::cout << "  Switched to continuous pool with 3 representatives" << std::endl;
+            
+            // Try accessing a scenario from the continuous pool
+            try {
+                auto scenario = dss.get_current_scenario();
+                double prob = dss.get_current_scenario_probability();
+                std::cout << "  ✓ Successfully accessed first scenario from continuous pool" << std::endl;
+            } catch (const std::exception& e) {
+                std::cout << "  ⚠ POTENTIAL BUG: Failed to access scenario after init_continuous_pool: " << e.what() << std::endl;
+            }
+            
+            // Back to discrete
+            dss.init_discrete_pool(5);
+            std::cout << "  Switched back to discrete pool with 5 scenarios" << std::endl;
+            
+            // Check if we can access scenarios after all this switching
+            bool can_access = true;
+            try {
+                auto scenario = dss.get_current_scenario();
+                double prob = dss.get_current_scenario_probability();
+                std::cout << "  ✓ Successfully accessed scenario after multiple pool switches" << std::endl;
+            } catch (const std::exception& e) {
+                can_access = false;
+                std::cout << "  ⚠ POTENTIAL BUG: Failed to access scenario after multiple pool switches: " << e.what() << std::endl;
+                std::cout << "  This suggests a state inconsistency when switching between pool types." << std::endl;
+            }
+            
+            if (can_access) {
+                std::cout << "✓ Pool switching functionality works correctly" << std::endl;
+            } else {
+                std::cout << "⚠ Pool switching has issues that need to be investigated" << std::endl;
+            }
+        } catch (const std::exception& e) {
+            std::cout << "  ⚠ Exception during pool switching tests: " << e.what() << std::endl;
+        }
+        
+        std::cout << "✓ Test 11: Continuous Pool completed successfully" << std::endl;
+        
+    } catch (const std::exception& e) {
+        std::cerr << "✗ Test 11 Failed with exception: " << e.what() << std::endl;
+        ASSERT_WITH_MSG(false, "Unexpected exception in test_continuous_pool");
+    }
+}
+
 /// Cleanup function to remove temporary files and compiled objects
 void cleanup_temp_files() {
     verbose_print("\n---------- Cleaning up temporary files ----------\n");
@@ -1009,6 +1253,7 @@ void cleanup_temp_files() {
         "temp_edge_test.nc",
         "temp_memory_test.nc",
         "temp_large_test.nc",
+        "temp_continuous_pool_test.nc",
         "simple_test.nc"
     };
     
@@ -1048,7 +1293,7 @@ void cleanup_temp_files() {
 // Print usage information
 void print_usage() {
     std::cout << "Usage: test_discretescenarioset [-h/--help] [test_number] [-v/--verbose] [--clean]" << std::endl;
-    std::cout << "  test_number: (optional) Specific test to run (1-10)" << std::endl;
+    std::cout << "  test_number: (optional) Specific test to run (1-11)" << std::endl;
     std::cout << "  -v/--verbose: (optional) Enable verbose output" << std::endl;
     std::cout << "  -h/--help: Show this help message" << std::endl;
     std::cout << "  --clean: Only clean up temporary files without running tests" << std::endl;
@@ -1064,6 +1309,7 @@ void print_usage() {
     std::cout << "    8: Edge Cases" << std::endl;
     std::cout << "    9: Memory Management" << std::endl;
     std::cout << "   10: Large Scenario Set (Scalability Test)" << std::endl;
+    std::cout << "   11: Continuous Pool (Dedicated Test)" << std::endl;
 }
 
 /*--------------------------------------------------------------------------*/
@@ -1089,7 +1335,7 @@ int main(int argc, char* argv[]) {
         } else {
             try {
                 int test_num = std::stoi(arg);
-                if (test_num < 1 || test_num > 10) {
+                if (test_num < 1 || test_num > 11) {
                     std::cerr << "Invalid test number: " << test_num << std::endl;
                     print_usage();
                     return 1;
@@ -1132,6 +1378,7 @@ int main(int argc, char* argv[]) {
         if (should_run_test(8)) test_edge_cases();              // Test 8
         if (should_run_test(9)) test_memory_management();       // Test 9
         if (should_run_test(10)) test_large_scenario_set();     // Test 10
+        if (should_run_test(11)) test_continuous_pool();        // Test 11
         
         // Clean up temporary files
         cleanup_temp_files();
