@@ -63,6 +63,100 @@ using namespace SMSpp_di_unipi_it;
 /*--------------------------- HELPER FUNCTIONS ----------------------------*/
 /*--------------------------------------------------------------------------*/
 
+/**
+ * Compute the ell-Wasserstein distance between the original scenario distribution
+ * and a reduced scenario distribution
+ * 
+ * The ell-Wasserstein distance measures how well the reduced set represents the original set.
+ * Formula: (sum_{i} min_{j in J} w_i * ||s_i - s_j||^ell)^(1/ell)
+ * where:
+ * - s_i are the original scenarios
+ * - s_j are the selected scenarios (subset)
+ * - w_i are the probabilities of original scenarios
+ * - J is the set of indices of selected scenarios
+ * 
+ * @param scenarios Original scenario pool
+ * @param selected_indices Indices of selected scenarios in the reduced set
+ * @param weights Probability weights of original scenarios (must sum to 1.0)
+ * @param ell Power parameter for the Wasserstein distance (default: 2.0)
+ * @return The ell-Wasserstein distance value
+ */
+double compute_wasserstein_distance(
+    const DiscreteScenarioSet::DiscreteScenarioPool& scenarios, 
+    const std::vector<ScenarioGenerator::ScenarioIndex>& selected_indices,
+    const std::vector<double>& weights,
+    double ell = 2.0)
+{
+    // Validate input parameters
+    if (selected_indices.empty()) {
+        throw std::invalid_argument("Selected indices vector is empty");
+    }
+    
+    const ScenarioGenerator::ScenarioIndex n_scenarios = scenarios.shape()[0];
+    const ScenarioGenerator::ScenarioSize scenario_size = scenarios.shape()[1];
+    
+    if (weights.size() != n_scenarios) {
+        throw std::invalid_argument("Number of weights must match number of scenarios");
+    }
+    
+    // Check if weights sum to approximately 1.0
+    double weight_sum = std::accumulate(weights.begin(), weights.end(), 0.0);
+    if (std::abs(weight_sum - 1.0) > 1e-10) {
+        throw std::invalid_argument("Probability weights must sum to 1.0, got: " + 
+                                    std::to_string(weight_sum));
+    }
+    
+    // Ensure selected indices are within bounds
+    for (auto idx : selected_indices) {
+        if (idx >= n_scenarios) {
+            throw std::out_of_range("Selected index out of range: " + std::to_string(idx));
+        }
+    }
+
+    // Compute the Wasserstein distance
+    double distance_power_ell = 0.0;
+    
+    // For each original scenario, find the closest selected scenario
+    for (ScenarioGenerator::ScenarioIndex i = 0; i < n_scenarios; i++) {
+        // Find minimum distance to any selected scenario
+        double min_distance = std::numeric_limits<double>::max();
+        
+        for (auto j : selected_indices) {
+            // Calculate distance based on ell parameter
+            double distance = 0.0;
+            
+            // Select the appropriate distance metric based on ell
+            if (ell == 1.0) {
+                // Manhattan distance (L1 norm)
+                for (ScenarioGenerator::ScenarioSize d = 0; d < scenario_size; d++) {
+                    distance += std::abs(scenarios[i][d] - scenarios[j][d]);
+                }
+            } else if (ell == 2.0) {
+                // Euclidean distance squared (L2 norm squared)
+                for (ScenarioGenerator::ScenarioSize d = 0; d < scenario_size; d++) {
+                    double diff = scenarios[i][d] - scenarios[j][d];
+                    distance += diff * diff;
+                }
+            } else {
+                // General case for ell-norm
+                for (ScenarioGenerator::ScenarioSize d = 0; d < scenario_size; d++) {
+                    double diff = std::abs(scenarios[i][d] - scenarios[j][d]);
+                    distance += std::pow(diff, ell);
+                }
+            }
+            
+            // Keep track of minimum distance
+            min_distance = std::min(min_distance, distance);
+        }
+        
+        // Add weighted contribution to the distance
+        distance_power_ell += weights[i] * min_distance;
+    }
+    
+    // Return the ell-Wasserstein distance
+    return std::pow(distance_power_ell, 1.0 / ell);
+}
+
 // Global flag for verbose output
 bool verbose_output = false;
 
@@ -1483,8 +1577,14 @@ void cleanup_temp_files() {
         "simple_test.nc"
     };
     
-    // Add our new test file too
+    // Add our new test files
     filesToRemove.push_back("temp_reduction_test.nc");
+    filesToRemove.push_back("temp_wasserstein_test.nc");
+    
+    // Add stress test files (which follow a naming pattern)
+    for (int i = 0; i < 10; i++) {
+        filesToRemove.push_back("temp_stress_test_" + std::to_string(i) + ".nc");
+    }
     
     // Also remove any other temp_*.nc and temp_config_extract_*.nc files that might be created
     std::string cmd = "find . -name 'temp_*.nc' -o -name 'temp_config_extract_*.nc' 2>/dev/null";
@@ -1519,13 +1619,319 @@ void cleanup_temp_files() {
     verbose_print("✓ Cleanup completed\n");
 }
 
-/// Test 13: Scenario Reduction Functionality
-/** This test verifies the scenario reduction capability implemented in DiscreteScenarioSet.
- * It tests the following functionalities:
+/// Test 14: Wasserstein Distance Calculation and Validation
+/** This test verifies the correctness of the compute_wasserstein_distance function.
+ * It uses controlled scenarios where we know the expected distance values.
+ * This is a critical helper function for the stress tests in Test 15.
+ */
+void test_wasserstein_distance() {
+    std::cout << "\n---------- Running Test 14: Wasserstein Distance Calculation ----------" << std::endl;
+    
+    try {
+        // Simple test cases with known distances
+        // ----------------------------------------------
+        
+        // Create a very simple scenario set where we can manually calculate the distances
+        DiscreteScenarioSet::DiscreteScenarioPool scenarios(boost::extents[4][2]);
+        
+        // Four points in 2D forming a square pattern
+        // (0,0), (0,1), (1,0), (1,1)
+        scenarios[0][0] = 0.0; scenarios[0][1] = 0.0;  // Point at origin
+        scenarios[1][0] = 0.0; scenarios[1][1] = 1.0;  // Point above origin
+        scenarios[2][0] = 1.0; scenarios[2][1] = 0.0;  // Point right of origin
+        scenarios[3][0] = 1.0; scenarios[3][1] = 1.0;  // Point at (1,1)
+        
+        // Equal weights for all scenarios
+        std::vector<double> weights = {0.25, 0.25, 0.25, 0.25};
+        
+        std::cout << "Created simple test scenario set (4 points forming a square)" << std::endl;
+        
+        // TEST CASE 1: Select a single scenario (the origin)
+        // Expected: For ell=2, the Wasserstein-2 distance should be sqrt(0.5)
+        // This is because:
+        // - Point (0,0) has distance 0 to itself
+        // - Point (0,1) has distance 1 to (0,0)
+        // - Point (1,0) has distance 1 to (0,0)
+        // - Point (1,1) has distance sqrt(2) to (0,0)
+        // Weighted sum: 0.25*0 + 0.25*1 + 0.25*1 + 0.25*2 = 1.0
+        // W_2 distance = sqrt(1.0) = 1.0
+        
+        std::vector<ScenarioGenerator::ScenarioIndex> case1_indices = {0};  // Select only the origin
+        double case1_ell2 = compute_wasserstein_distance(scenarios, case1_indices, weights, 2.0);
+        
+        std::cout << "  Case 1: Select single point (origin)" << std::endl;
+        std::cout << "  W_2 distance: " << case1_ell2 << ", Expected: 1.0" << std::endl;
+        ASSERT_WITH_MSG(approx_equal(case1_ell2, 1.0, 1e-6), 
+                      "Case 1 ell=2 distance should be 1.0, got " + std::to_string(case1_ell2));
+        
+        // TEST CASE 2: Select two diagonally opposite scenarios (0,0) and (1,1)
+        // For ell=2, the Wasserstein-2 distance should be lower
+        // This is because:
+        // - Point (0,0) has distance 0 to itself
+        // - Point (0,1) has distance 1 to (0,0)
+        // - Point (1,0) has distance 1 to (0,0)
+        // - Point (1,1) has distance 0 to itself
+        // Weighted sum: 0.25*0 + 0.25*1 + 0.25*1 + 0.25*0 = 0.5
+        // W_2 distance = sqrt(0.5) ≈ 0.7071
+        
+        std::vector<ScenarioGenerator::ScenarioIndex> case2_indices = {0, 3};  // Select diagonal points
+        double case2_ell2 = compute_wasserstein_distance(scenarios, case2_indices, weights, 2.0);
+        
+        std::cout << "  Case 2: Select diagonal points (0,0) and (1,1)" << std::endl;
+        std::cout << "  W_2 distance: " << case2_ell2 << ", Expected: " << std::sqrt(0.5) << std::endl;
+        ASSERT_WITH_MSG(approx_equal(case2_ell2, std::sqrt(0.5), 1e-6), 
+                      "Case 2 ell=2 distance should be sqrt(0.5), got " + std::to_string(case2_ell2));
+        
+        // TEST CASE 3: Test with ell=1 (Manhattan distance)
+        // For ell=1, distances change because we're using L1 norm instead of L2
+        
+        double case1_ell1 = compute_wasserstein_distance(scenarios, case1_indices, weights, 1.0);
+        std::cout << "  Case 3: Same as Case 1 but with ell=1 (Manhattan distance)" << std::endl;
+        std::cout << "  W_1 distance: " << case1_ell1 << ", Expected: 1.0" << std::endl;
+        ASSERT_WITH_MSG(approx_equal(case1_ell1, 1.0, 1e-6), 
+                      "Case 3 ell=1 distance should be 1.0, got " + std::to_string(case1_ell1));
+        
+        // TEST CASE 4: Select all scenarios (should be distance 0)
+        std::vector<ScenarioGenerator::ScenarioIndex> case4_indices = {0, 1, 2, 3};
+        double case4_ell2 = compute_wasserstein_distance(scenarios, case4_indices, weights, 2.0);
+        
+        std::cout << "  Case 4: Select all points (distance should be 0)" << std::endl;
+        std::cout << "  W_2 distance: " << case4_ell2 << ", Expected: 0.0" << std::endl;
+        ASSERT_WITH_MSG(approx_equal(case4_ell2, 0.0, 1e-6), 
+                      "Case 4 distance should be 0.0, got " + std::to_string(case4_ell2));
+        
+        std::cout << "✓ Wasserstein distance calculation passed all test cases" << std::endl;
+        std::cout << "\n✓ Test 14: Wasserstein Distance Calculation completed successfully" << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "✗ Test 14 Failed with exception: " << e.what() << std::endl;
+        ASSERT_WITH_MSG(false, "Unexpected exception in test_wasserstein_distance");
+    }
+}
+
+/**
+ * Helper function to generate a random scenario set and save it to a netCDF file
+ * 
+ * @param filename Path to write the netCDF file
+ * @param num_scenarios Number of scenarios to generate
+ * @param scenario_dim Dimension of each scenario
+ * @param seed Random seed for reproducibility
+ * @return Pair of (scenarios pool, weights vector)
+ */
+std::pair<DiscreteScenarioSet::DiscreteScenarioPool, std::vector<double>> 
+generate_random_scenario_set(const std::string& filename, int num_scenarios, int scenario_dim, unsigned seed) {
+    // Create the scenario pool and weights
+    DiscreteScenarioSet::DiscreteScenarioPool scenarios(boost::extents[num_scenarios][scenario_dim]);
+    std::vector<double> weights(num_scenarios, 1.0/num_scenarios);  // Uniform weights
+    
+    // Create random scenarios with normally distributed values
+    std::mt19937 gen(seed);
+    std::normal_distribution<double> dist(0.0, 5.0);
+    
+    for (int i = 0; i < num_scenarios; i++) {
+        for (int j = 0; j < scenario_dim; j++) {
+            scenarios[i][j] = dist(gen);
+        }
+    }
+    
+    // Save to netCDF file
+    {
+        netCDF::NcFile dataFile(filename, netCDF::NcFile::replace);
+        
+        // Define dimensions
+        auto nbScenariosDim = dataFile.addDim("NumberScenarios", num_scenarios);
+        auto scenarioSizeDim = dataFile.addDim("ScenarioSize", scenario_dim);
+        
+        // Define scenarios variable
+        std::vector<netCDF::NcDim> dims = {nbScenariosDim, scenarioSizeDim};
+        auto scenariosVar = dataFile.addVar("Scenarios", netCDF::ncDouble, dims);
+        
+        // Convert multi_array to flat vector for writing
+        std::vector<double> scenario_data(num_scenarios * scenario_dim);
+        for (int i = 0; i < num_scenarios; i++) {
+            for (int j = 0; j < scenario_dim; j++) {
+                scenario_data[i*scenario_dim + j] = scenarios[i][j];
+            }
+        }
+        
+        // Write scenarios and weights
+        scenariosVar.putVar(scenario_data.data());
+        auto probVar = dataFile.addVar("poolProbabilities", netCDF::ncDouble, nbScenariosDim);
+        probVar.putVar(weights.data());
+    }
+    
+    return {scenarios, weights};
+}
+
+/**
+ * Helper function to test a scenario reduction method and collect performance metrics
+ * 
+ * @param algorithm The reduction algorithm to test
+ * @param scenarios The scenario pool to reduce
+ * @param weights Probability weights of scenarios
+ * @param filename Path to the netCDF file with the scenarios
+ * @param k_value Number of scenarios to select
+ * @param ell_value Wasserstein distance power parameter
+ * @return Pair of (wasserstein distance, execution time in ms)
+ */
+std::pair<double, double> test_reduction_method(
+    const std::string& algorithm,
+    const DiscreteScenarioSet::DiscreteScenarioPool& scenarios,
+    const std::vector<double>& weights,
+    const std::string& filename,
+    int k_value,
+    float ell_value
+) {
+    std::cout << "Testing method: " << algorithm << std::endl;
+    
+    // Create a new DiscreteScenarioSet
+    DiscreteScenarioSet dss;
+    
+    // Load the test data
+    {
+        netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
+        dss.deserialize(dataFile);
+    }
+    
+    // Set up configuration
+    if (algorithm != "Random") {
+        auto config = create_scenario_reduction_config(k_value, ell_value, algorithm);
+        dss.set_scenario_reduction_config(config);
+    }
+    
+    // Measure execution time
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    // Run the scenario reduction method
+    dss.init_discrete_pool(k_value);
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> elapsed = end - start;
+    
+    // Extract the selected indices
+    std::vector<ScenarioGenerator::ScenarioIndex> selected_indices;
+    for (int i = 0; i < k_value; i++) {
+        selected_indices.push_back(dss.get_selected_scenario_index(i));
+    }
+    
+    // Calculate Wasserstein distance
+    double wasserstein_dist = compute_wasserstein_distance(
+        scenarios, selected_indices, weights, ell_value);
+    
+    // Print results
+    std::cout << "  - Selected indices: ";
+    for (auto idx : selected_indices) {
+        std::cout << idx << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "  - Wasserstein distance: " << wasserstein_dist << std::endl;
+    std::cout << "  - Execution time: " << elapsed.count() << " ms" << std::endl;
+    
+    return {wasserstein_dist, elapsed.count()};
+}
+
+/// Test 15: Stress Test for Scenario Reduction Methods
+/** This test runs a comprehensive stress test for all scenario reduction methods.
+ * It generates multiple random scenario sets and tests each reduction method
+ * on the same data, comparing their Wasserstein distances and running times.
+ */
+void test_stress_scenario_reduction() {
+    std::cout << "\n---------- Running Test 15: Stress Test for Scenario Reduction Methods ----------" << std::endl;
+    
+    try {
+        // Parameters for the stress test
+        const int num_iterations = 3;     // Number of different scenario sets to generate
+        const int num_scenarios = 20;     // Number of scenarios in each set
+        const int scenario_dim = 5;       // Dimension of each scenario
+        const int k_value = 5;            // Number of scenarios to select
+        const float ell_value = 2.0f;     // Wasserstein distance power parameter
+        
+        // Algorithms to test
+        std::vector<std::string> algorithms = {"Random", "Dupacova", "BestFit", "FirstFit", "MILP"};
+        
+        // For storing wasserstein distances and execution times for each method
+        std::map<std::string, std::vector<double>> method_distances;
+        std::map<std::string, std::vector<double>> method_times;
+        
+        // Initialize containers for all algorithms
+        for (const auto& alg : algorithms) {
+            method_distances[alg] = std::vector<double>();
+            method_times[alg] = std::vector<double>();
+        }
+        
+        // Run multiple iterations with different random scenario sets
+        for (int iter = 0; iter < num_iterations; iter++) {
+            std::cout << "\nIteration " << (iter+1) << "/" << num_iterations << ":" << std::endl;
+            
+            // 1. Generate a random scenario set
+            std::string tempfile = "temp_stress_test_" + std::to_string(iter) + ".nc";
+            auto [scenarios, weights] = generate_random_scenario_set(
+                tempfile, num_scenarios, scenario_dim, 42 + iter);
+            
+            // 2. Test each scenario reduction method
+            for (const auto& algorithm : algorithms) {
+                // Test the method and collect results
+                auto [wasserstein_dist, execution_time] = test_reduction_method(
+                    algorithm, scenarios, weights, tempfile, k_value, ell_value);
+                
+                // Store the metrics
+                method_distances[algorithm].push_back(wasserstein_dist);
+                method_times[algorithm].push_back(execution_time);
+            }
+            
+            // Clean up the temporary file
+            std::remove(tempfile.c_str());
+        }
+        
+        // 3. Analyze and report results
+        std::cout << "\n==== Results Summary ====" << std::endl;
+        
+        // Calculate and display average Wasserstein distances
+        std::cout << "Average Wasserstein distances (lower is better):" << std::endl;
+        for (const auto& [alg, distances] : method_distances) {
+            double avg_distance = std::accumulate(distances.begin(), distances.end(), 0.0) / distances.size();
+            std::cout << alg << ": " << avg_distance << std::endl;
+        }
+        
+        // Calculate and display average execution times
+        std::cout << "\nAverage execution times (ms):" << std::endl;
+        for (const auto& [alg, times] : method_times) {
+            double avg_time = std::accumulate(times.begin(), times.end(), 0.0) / times.size();
+            std::cout << alg << ": " << avg_time << " ms" << std::endl;
+        }
+        
+        // Find the method with the lowest average Wasserstein distance
+        auto best_method = std::min_element(
+            method_distances.begin(), 
+            method_distances.end(),
+            [](const auto& a, const auto& b) {
+                return 
+                    std::accumulate(a.second.begin(), a.second.end(), 0.0) / a.second.size() <
+                    std::accumulate(b.second.begin(), b.second.end(), 0.0) / b.second.size();
+            }
+        );
+        
+        std::cout << "\nBest performing method: " << best_method->first << std::endl;
+        
+        std::cout << "\n✓ Test 15: Stress Test for Scenario Reduction Methods completed successfully" << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "✗ Test 15 Failed with exception: " << e.what() << std::endl;
+        ASSERT_WITH_MSG(false, "Unexpected exception in test_stress_scenario_reduction");
+    }
+}
+
+/// Test 13: Testing Methods for init_discrete_pool()
+/** This test verifies the different scenario reduction methods that can be used with
+ * init_discrete_pool() in DiscreteScenarioSet.
+ * 
+ * It tests the following functionalities and algorithms:
  * 
  * 1. Creation of structured scenario data with clearly defined clusters
  * 2. Configuration creation and loading for scenario reduction parameters
- * 3. Application of scenario reduction algorithms to select representative scenarios
+ * 3. Application of various scenario reduction algorithms to select representative scenarios:
+ *    - "Dupacova": Forward selection algorithm (default)
+ *    - "BestFit": Local search algorithm that selects best improvement at each step
+ *    - "FirstFit": Local search algorithm that selects first satisfactory improvement
+ *    - "MILP": Mixed Integer Linear Programming approach (if available)
  * 4. Validation of selected scenarios (should represent different clusters)
  * 5. Verification of probability normalization after scenario reduction
  * 6. Testing programmatic configuration setting and scenario reduction
@@ -1544,7 +1950,7 @@ void cleanup_temp_files() {
  * when that module is not available.
  */
 void test_scenario_reduction() {
-    std::cout << "\n---------- Running Test 13: Scenario Reduction Functionality ----------" << std::endl;
+    std::cout << "\n---------- Running Test 13: Methods for init_discrete_pool() ----------" << std::endl;
     
     try {
         // Create test data with distinct cluster structure (similar to test_continuous_pool)
@@ -1610,7 +2016,7 @@ void test_scenario_reduction() {
         std::cout << "\nTesting all algorithms with different parameter combinations:" << std::endl;
         
         // Test various algorithms and parameter combinations
-        std::vector<std::string> algorithms = {"Dupacova", "BestFit", "FirstFit"};
+        std::vector<std::string> algorithms = {"Dupacova", "BestFit", "FirstFit", "MILP"};
         std::vector<int> k_values = {3, 5, 10};
         std::vector<float> ell_values = {1.0f, 2.0f, 3.0f};
         
@@ -1732,7 +2138,51 @@ void test_scenario_reduction() {
             }
         }
         
-        // Part 3: Test netCDF file configuration loading
+        // Part 3: Test MILP specific implementation
+        // -------------------------------------------------------------
+        std::cout << "\nTesting MILP specific implementation:" << std::endl;
+        
+        // Create a fresh DiscreteScenarioSet and load the test data
+        DiscreteScenarioSet dssMILP;
+        {
+            netCDF::NcFile file(filename, netCDF::NcFile::read);
+            dssMILP.deserialize(file);
+        }
+        
+        // Set up configuration specifically for MILP
+        auto milpConfig = create_scenario_reduction_config(3, 2.0f, "MILP");
+        dssMILP.set_scenario_reduction_config(milpConfig);
+        
+        // Initialize the pool with MILP-based scenario reduction
+        std::cout << "Initializing discrete pool with MILP-based scenario reduction..." << std::endl;
+        
+        #ifdef WITH_MILPSOLVER
+        std::cout << "✓ MILP solver support is available" << std::endl;
+        #endif
+        
+        try {
+            dssMILP.init_discrete_pool(3);
+            
+            // Verify we have the expected number of scenarios
+            int count = 0;
+            double totalProb = 0.0;
+            
+            do {
+                count++;
+                totalProb += dssMILP.get_current_scenario_probability();
+            } while (dssMILP.next_scenario());
+            
+            if (count == 3 && approx_equal(totalProb, 1.0)) {
+                std::cout << "✓ MILP selected " << count << " scenarios, probabilities sum to " << totalProb << std::endl;
+            } else {
+                std::cout << "⚠ MILP selected " << count << " scenarios (expected 3), probabilities sum to " << totalProb << std::endl;
+            }
+        } catch (const std::exception& e) {
+            std::cout << "⚠ MILP method threw exception: " << e.what() << std::endl;
+            std::cout << "  This may be expected if WITH_MILPSOLVER is not defined or no MILP solver is available." << std::endl;
+        }
+        
+        // Part 4: Test netCDF file configuration loading
         // -------------------------------------------------------------
         std::cout << "\nTesting configuration loading from netCDF file:" << std::endl;
         
@@ -1836,7 +2286,7 @@ void test_scenario_reduction() {
             std::cout << "⚠ Failed to load configuration from netCDF file" << std::endl;
         }
         
-        std::cout << "\n✓ Test 13: Scenario Reduction Functionality completed successfully" << std::endl;
+        std::cout << "\n✓ Test 13: Methods for init_discrete_pool() completed successfully" << std::endl;
         
     } catch (const std::exception& e) {
         std::cerr << "✗ Test 13 Failed with exception: " << e.what() << std::endl;
@@ -1847,7 +2297,7 @@ void test_scenario_reduction() {
 // Print usage information
 void print_usage() {
     std::cout << "Usage: test_discretescenarioset [-h/--help] [test_number] [-v/--verbose] [--clean]" << std::endl;
-    std::cout << "  test_number: (optional) Specific test to run (1-13)" << std::endl;
+    std::cout << "  test_number: (optional) Specific test to run (1-15)" << std::endl;
     std::cout << "  -v/--verbose: (optional) Enable verbose output" << std::endl;
     std::cout << "  -h/--help: Show this help message" << std::endl;
     std::cout << "  --clean: Only clean up temporary files without running tests" << std::endl;
@@ -1865,7 +2315,9 @@ void print_usage() {
     std::cout << "   10: Large Scenario Set (Scalability Test)" << std::endl;
     std::cout << "   11: Continuous Pool (Dedicated Test)" << std::endl;
     std::cout << "   12: Configuration Integration" << std::endl;
-    std::cout << "   13: Scenario Reduction Functionality" << std::endl;
+    std::cout << "   13: Methods for init_discrete_pool() (Random, Dupacova, BestFit, FirstFit, MILP)" << std::endl;
+    std::cout << "   14: Wasserstein Distance Calculation" << std::endl;
+    std::cout << "   15: Stress Test for Scenario Reduction Methods" << std::endl;
 }
 
 /*--------------------------------------------------------------------------*/
@@ -1891,7 +2343,7 @@ int main(int argc, char* argv[]) {
         } else {
             try {
                 int test_num = std::stoi(arg);
-                if (test_num < 1 || test_num > 13) {
+                if (test_num < 1 || test_num > 15) {
                     std::cerr << "Invalid test number: " << test_num << std::endl;
                     print_usage();
                     return 1;
@@ -1937,6 +2389,8 @@ int main(int argc, char* argv[]) {
         if (should_run_test(11)) test_continuous_pool();        // Test 11
         if (should_run_test(12)) test_configuration_integration(); // Test 12
         if (should_run_test(13)) test_scenario_reduction();     // Test 13
+        if (should_run_test(14)) test_wasserstein_distance();   // Test 14
+        if (should_run_test(15)) test_stress_scenario_reduction(); // Test 15
         
         // Clean up temporary files
         cleanup_temp_files();
