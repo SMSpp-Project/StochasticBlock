@@ -40,19 +40,37 @@ The `DiscreteScenarioSet` class provides scenario reduction capabilities when bu
 
 #### Configuration
 
-Scenario reduction can be configured through:
+Scenario reduction can be configured in three ways:
 
-1. **NetCDF File**: Include a `ScenarioReductionConfig` group in your scenario data file with the following structure:
+1. **Using ScenarioReductionConfig class**: The preferred method using a dedicated configuration class:
+   ```cpp
+   // Create a new configuration with required parameters
+   auto config = new ScenarioReductionConfig(10);  // 10 scenarios to select
+   
+   // Customize configuration
+   config->set_ell(1.5f);  // Use l1.5-Wasserstein distance
+   config->set_algorithm("BestFit");  // Use BestFit algorithm
+   
+   // Use configuration with consistency checking
+   if (!config->check_consistency()) {
+       std::cerr << "Configuration has issues!" << std::endl;
+   }
+   
+   // Apply to scenario set
+   discreteScenarioSet.set_scenario_reduction_config(config);
    ```
-   ScenarioReductionConfig/ (type = "BlockConfig")
-   ├── CFLConfig/ (type = "BlockConfig")
+
+2. **From netCDF File**: Include a `ScenarioReductionConfig` group in your scenario data file:
+   ```
+   ScenarioReductionConfig/
+   ├── CFLConfig/
    │   ├── k = [int] (number of scenarios to select)
    │   └── ell = [float] (Wasserstein distance power, default: 2.0)
-   └── SolverConfig/ (type = "BlockSolverConfig")
-       └── algorithm = [string] ("Dupacova", "BestFit", or "FirstFit")
+   └── SolverConfig/
+       └── algorithm = [string] ("Dupacova", "BestFit", "FirstFit", or "MILP")
    ```
 
-2. **Programmatic Configuration**: Use the `set_scenario_reduction_config()` method to set a configuration object programmatically:
+3. **Legacy Manual Configuration**: The original approach using generic configuration objects:
    ```cpp
    auto config = new BlockConfig(false);  // Not differential
    auto cflConfig = new BlockConfig(false);
@@ -157,6 +175,12 @@ conduct, and the process for submitting merge requests to us.
 ### Lead Authors
 
 - **Rafael Durbano Lobato**  
+  Dipartimento di Informatica  
+  Università di Pisa
+
+### Contributors
+
+- **Benoît Tran**  
   Dipartimento di Informatica  
   Università di Pisa
 
