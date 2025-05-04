@@ -29,6 +29,7 @@
 #include "Configuration.h"
 #include "Block.h" // For BlockConfig
 #include "Solver.h" // For BlockSolverConfig
+#include "BlockSolverConfig.h" // For BlockSolverConfig
 
 // Try to include the headers for CapacitatedFacilityLocationBlock if available
 #if __has_include("CapacitatedFacilityLocationBlock.h")
@@ -39,9 +40,13 @@
 #define HAS_CAPACITATED_FACILITY_LOCATION 0
 #endif
 
+// Forward declarations
+std::unique_ptr<SMSpp_di_unipi_it::Solver> create_milp_solver();
+
 // Use the Configuration namespace
 using namespace SMSpp_di_unipi_it;
 
+#include <span>    // for std::span
 #include <iostream>
 #include <stdexcept>
 #include <vector>
@@ -1581,9 +1586,12 @@ void cleanup_temp_files() {
     filesToRemove.push_back("temp_reduction_test.nc");
     filesToRemove.push_back("temp_wasserstein_test.nc");
     
-    // Add stress test files (which follow a naming pattern)
-    for (int i = 0; i < 10; i++) {
+    // Add stress test files with all possible patterns
+    for (int i = 0; i < 20; i++) {
         filesToRemove.push_back("temp_stress_test_" + std::to_string(i) + ".nc");
+        
+        // Also add files with dimension, count, distribution, and ell parameters
+        filesToRemove.push_back("temp_stress_test_" + std::to_string(i) + "_*.nc");
     }
     
     // Also remove any other temp_*.nc and temp_config_extract_*.nc files that might be created
@@ -1718,18 +1726,60 @@ void test_wasserstein_distance() {
  * @return Pair of (scenarios pool, weights vector)
  */
 std::pair<DiscreteScenarioSet::DiscreteScenarioPool, std::vector<double>> 
-generate_random_scenario_set(const std::string& filename, int num_scenarios, int scenario_dim, unsigned seed) {
+generate_random_scenario_set(const std::string& filename, int num_scenarios, int scenario_dim, 
+                             unsigned seed, const std::string& distribution = "normal") {
     // Create the scenario pool and weights
     DiscreteScenarioSet::DiscreteScenarioPool scenarios(boost::extents[num_scenarios][scenario_dim]);
     std::vector<double> weights(num_scenarios, 1.0/num_scenarios);  // Uniform weights
     
-    // Create random scenarios with normally distributed values
+    // Create random number generator
     std::mt19937 gen(seed);
-    std::normal_distribution<double> dist(0.0, 5.0);
     
+    // Generate scenarios based on distribution type
     for (int i = 0; i < num_scenarios; i++) {
         for (int j = 0; j < scenario_dim; j++) {
-            scenarios[i][j] = dist(gen);
+            if (distribution == "normal") {
+                // Normal distribution (mean 0, std dev 5)
+                std::normal_distribution<double> dist(0.0, 5.0);
+                scenarios[i][j] = dist(gen);
+            } 
+            else if (distribution == "uniform") {
+                // Uniform distribution (-10 to 10)
+                std::uniform_real_distribution<double> dist(-10.0, 10.0);
+                scenarios[i][j] = dist(gen);
+            }
+            else if (distribution == "multimodal") {
+                // Multimodal distribution (mixture of two normals)
+                if (gen() % 2 == 0) {
+                    std::normal_distribution<double> dist(-8.0, 2.0);
+                    scenarios[i][j] = dist(gen);
+                } else {
+                    std::normal_distribution<double> dist(8.0, 2.0);
+                    scenarios[i][j] = dist(gen);
+                }
+            }
+            else if (distribution == "exponential") {
+                // Exponential distribution (lambda = 0.5)
+                std::exponential_distribution<double> dist(0.5);
+                scenarios[i][j] = dist(gen);
+            }
+            else if (distribution == "lognormal") {
+                // Log-normal distribution (mean 0, std dev 1)
+                std::lognormal_distribution<double> dist(0.0, 1.0);
+                // Scale down the values to be in a reasonable range
+                scenarios[i][j] = dist(gen) * 2.0;
+            }
+            else {
+                // Default to normal if unrecognized
+                std::normal_distribution<double> dist(0.0, 5.0);
+                scenarios[i][j] = dist(gen);
+                
+                // Log warning for unrecognized distribution
+                if (i == 0 && j == 0) {
+                    std::cerr << "Warning: Unrecognized distribution type '" << distribution 
+                              << "'. Using normal distribution instead." << std::endl;
+                }
+            }
         }
     }
     
@@ -1781,8 +1831,6 @@ std::pair<double, double> test_reduction_method(
     int k_value,
     float ell_value
 ) {
-    std::cout << "Testing method: " << algorithm << std::endl;
-    
     // Create a new DiscreteScenarioSet
     DiscreteScenarioSet dss;
     
@@ -1792,41 +1840,74 @@ std::pair<double, double> test_reduction_method(
         dss.deserialize(dataFile);
     }
     
-    // Set up configuration
-    if (algorithm != "Random") {
-        auto config = create_scenario_reduction_config(k_value, ell_value, algorithm);
+    // Special handling for MILP algorithm
+    if (algorithm == "MILP") {
+#if defined(WITH_MILPSOLVER) && defined(WITH_CAPACITATED_FACILITY_LOCATION)
+        // Create a MILP solver using the factory system
+        auto milpSolver = create_milp_solver();
+        if (!milpSolver) {
+            throw std::runtime_error("MILP solver creation failed");
+        }
+        
+        // Create and set up the scenario reduction configuration
+        auto config = create_scenario_reduction_config(k_value, ell_value, "MILP");
         dss.set_scenario_reduction_config(config);
+        
+        // Measure execution time
+        auto start = std::chrono::high_resolution_clock::now();
+        
+        // The DiscreteScenarioSet internally creates a CapacitatedFacilityLocationBlock
+        // and needs to have the MILP solver registered with it through a BlockSolverConfig
+        // init_discrete_pool will handle this when the algorithm is set to "MILP"
+        dss.init_discrete_pool(k_value);
+        
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> elapsed = end - start;
+        
+        // Extract the selected indices
+        std::vector<ScenarioGenerator::ScenarioIndex> selected_indices;
+        for (int i = 0; i < k_value; i++) {
+            selected_indices.push_back(dss.get_selected_scenario_index(i));
+        }
+        
+        // Calculate Wasserstein distance
+        double wasserstein_dist = compute_wasserstein_distance(
+            scenarios, selected_indices, weights, ell_value);
+        
+        return {wasserstein_dist, elapsed.count()};
+#else
+        throw std::runtime_error("MILP algorithm requires both WITH_MILPSOLVER and WITH_CAPACITATED_FACILITY_LOCATION to be defined");
+#endif
     }
-    
-    // Measure execution time
-    auto start = std::chrono::high_resolution_clock::now();
-    
-    // Run the scenario reduction method
-    dss.init_discrete_pool(k_value);
-    
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> elapsed = end - start;
-    
-    // Extract the selected indices
-    std::vector<ScenarioGenerator::ScenarioIndex> selected_indices;
-    for (int i = 0; i < k_value; i++) {
-        selected_indices.push_back(dss.get_selected_scenario_index(i));
+    // For non-MILP algorithms
+    else {
+        // Set up configuration (except for Random)
+        if (algorithm != "Random") {
+            auto config = create_scenario_reduction_config(k_value, ell_value, algorithm);
+            dss.set_scenario_reduction_config(config);
+        }
+        
+        // Measure execution time
+        auto start = std::chrono::high_resolution_clock::now();
+        
+        // Run the scenario reduction method
+        dss.init_discrete_pool(k_value);
+        
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> elapsed = end - start;
+        
+        // Extract the selected indices
+        std::vector<ScenarioGenerator::ScenarioIndex> selected_indices;
+        for (int i = 0; i < k_value; i++) {
+            selected_indices.push_back(dss.get_selected_scenario_index(i));
+        }
+        
+        // Calculate Wasserstein distance
+        double wasserstein_dist = compute_wasserstein_distance(
+            scenarios, selected_indices, weights, ell_value);
+        
+        return {wasserstein_dist, elapsed.count()};
     }
-    
-    // Calculate Wasserstein distance
-    double wasserstein_dist = compute_wasserstein_distance(
-        scenarios, selected_indices, weights, ell_value);
-    
-    // Print results
-    std::cout << "  - Selected indices: ";
-    for (auto idx : selected_indices) {
-        std::cout << idx << " ";
-    }
-    std::cout << std::endl;
-    std::cout << "  - Wasserstein distance: " << wasserstein_dist << std::endl;
-    std::cout << "  - Execution time: " << elapsed.count() << " ms" << std::endl;
-    
-    return {wasserstein_dist, elapsed.count()};
 }
 
 /// Test 15: Stress Test for Scenario Reduction Methods
@@ -1834,19 +1915,162 @@ std::pair<double, double> test_reduction_method(
  * It generates multiple random scenario sets and tests each reduction method
  * on the same data, comparing their Wasserstein distances and running times.
  */
+
+// This function simulates different scenario selection strategies for testing
+/**
+ * Simulates different scenario selection strategies for testing when
+ * the actual algorithms aren't available
+ * 
+ * This function is only used as a fallback when WITH_CAPACITATED_FACILITY_LOCATION
+ * isn't defined and the actual implementations aren't available.
+ * 
+ * @param algorithm The algorithm name to simulate
+ * @param num_scenarios The total number of scenarios
+ * @param k_value The number of scenarios to select
+ * @return Vector of selected scenario indices
+ */
+std::vector<ScenarioGenerator::ScenarioIndex> simulate_scenario_selection(
+    const std::string& algorithm,
+    int num_scenarios,
+    int k_value
+) {
+    std::vector<ScenarioGenerator::ScenarioIndex> selected_indices(k_value);
+    
+    // Use a seed for reproducibility
+    std::mt19937 gen(42); 
+    
+    if (algorithm == "Random") {
+        // Random selection 
+        std::uniform_int_distribution<> distrib(0, num_scenarios - 1);
+        for (int i = 0; i < k_value; i++) {
+            selected_indices[i] = distrib(gen);
+        }
+    } 
+    else if (algorithm == "Dupacova") {
+        // Simulated Dupacova: take first k_value scenarios
+        for (int i = 0; i < k_value; i++) {
+            selected_indices[i] = i;
+        }
+    }
+    else if (algorithm == "BestFit") {
+        // Simulated BestFit: evenly spaced
+        for (int i = 0; i < k_value; i++) {
+            selected_indices[i] = (i * num_scenarios / k_value) % num_scenarios;
+        }
+    }
+    else if (algorithm == "FirstFit") {
+        // Simulated FirstFit: take from end
+        for (int i = 0; i < k_value; i++) {
+            selected_indices[i] = num_scenarios - i - 1;
+        }
+    }
+    else if (algorithm == "MILP") {
+        // Simulated MILP: take from middle
+        int offset = (num_scenarios - k_value) / 2;
+        for (int i = 0; i < k_value; i++) {
+            selected_indices[i] = (offset + i) % num_scenarios;
+        }
+    }
+    else {
+        // Unknown algorithm: use sequential indices
+        for (int i = 0; i < k_value; i++) {
+            selected_indices[i] = i;
+        }
+    }
+    
+    return selected_indices;
+}
+
+/**
+ * Helper function to create a MILPSolver instance using the factory system
+ * 
+ * @return Unique pointer to MILPSolver
+ * @throws std::runtime_error if the MILP solver creation fails
+ */
+std::unique_ptr<SMSpp_di_unipi_it::Solver> create_milp_solver() {
+#ifdef WITH_MILPSOLVER
+    // Use SMS++ factory system to create MILPSolver (HiGHSMILPSolver)
+    SMSpp_di_unipi_it::Solver* solver = SMSpp_di_unipi_it::Solver::new_Solver("HiGHSMILPSolver");
+    if (!solver) {
+        throw std::runtime_error("Failed to create HiGHSMILPSolver instance via factory");
+    }
+    return std::unique_ptr<SMSpp_di_unipi_it::Solver>(solver);
+#else
+    throw std::runtime_error("MILPSolver support not available (compile with -DWITH_MILPSOLVER)");
+#endif
+}
+
 void test_stress_scenario_reduction() {
     std::cout << "\n---------- Running Test 15: Stress Test for Scenario Reduction Methods ----------" << std::endl;
     
+    // Check if specialized implementations are available
+#if !defined(WITH_CAPACITATED_FACILITY_LOCATION) || !defined(WITH_MILPSOLVER)
+    std::cout << "Test requires both WITH_CAPACITATED_FACILITY_LOCATION and WITH_MILPSOLVER to be defined." << std::endl;
+    std::cout << "Recompile with both flags to run this test. Check your link command to ensure both libraries are included." << std::endl;
+    return;
+#endif
+
+    // Check that libraries are actually linked correctly
+    try {
+        auto milpSolver = create_milp_solver();
+        if (!milpSolver) {
+            std::cout << "⚠ Failed to create MILPSolver instance" << std::endl;
+            return;
+        }
+    } catch (const std::exception& e) {
+        std::cout << "⚠ Exception creating MILPSolver: " << e.what() << std::endl;
+        std::cout << "Make sure the MILPSolver library is properly linked" << std::endl;
+        return;
+    }
+
+    std::cout << "✓ Required dependencies available - running full test" << std::endl;
+    
     try {
         // Parameters for the stress test
-        const int num_iterations = 3;     // Number of different scenario sets to generate
-        const int num_scenarios = 20;     // Number of scenarios in each set
-        const int scenario_dim = 5;       // Dimension of each scenario
-        const int k_value = 5;            // Number of scenarios to select
-        const float ell_value = 2.0f;     // Wasserstein distance power parameter
+        const int num_iterations = 2;      // Number of different seeds to use
+        
+        // Test progressively higher dimensions
+        const std::vector<int> scenario_dimensions = {5, 50, 500, 1000}; // Multiple dimensions to test including high dimensions
+        
+        // Test different scenario counts - keeping limited for performance
+        const std::vector<int> scenario_counts = {20, 100};      // Scenario set sizes
+        
+        // Test different distance metrics
+        const std::vector<float> ell_values = {1.0f, 2.0f, 3.0f};      // Test different distance metrics
+        
+        // Test various distribution types
+        const std::vector<std::string> distributions = {
+            "normal",       // Normal distribution
+            "uniform",      // Uniform distribution
+            "multimodal",   // Multi-modal distribution (mixture of normals)
+            "exponential",  // Exponential distribution
+            "lognormal"     // Log-normal distribution
+        };
         
         // Algorithms to test
-        std::vector<std::string> algorithms = {"Random", "Dupacova", "BestFit", "FirstFit", "MILP"};
+        std::vector<std::string> algorithms = {
+            "Random",    // Random selection (baseline)
+            "Dupacova",  // Forward selection algorithm
+            "BestFit",   // Local search with best fit
+            "FirstFit",  // Local search with first fit
+        };
+        
+        // Add MILP algorithm if available
+        #ifdef WITH_MILPSOLVER
+        // Test that we can create the MILP solver before adding it to the list
+        try {
+            auto milpSolver = create_milp_solver();
+            if (milpSolver) {
+                std::cout << "✓ MILP solver created successfully, including in test suite" << std::endl;
+                algorithms.push_back("MILP");  // Add MILP to the list of algorithms to test
+            }
+        } catch (const std::exception& e) {
+            std::cout << "⚠ MILP solver creation failed: " << e.what() << std::endl;
+            std::cout << "  MILP algorithm will be skipped in the stress test" << std::endl;
+        }
+        #else
+        std::cout << "⚠ MILP solver not available, skipping MILP algorithm in stress test" << std::endl;
+        #endif
         
         // For storing wasserstein distances and execution times for each method
         std::map<std::string, std::vector<double>> method_distances;
@@ -1858,59 +2082,180 @@ void test_stress_scenario_reduction() {
             method_times[alg] = std::vector<double>();
         }
         
-        // Run multiple iterations with different random scenario sets
+        // Total test configurations for progress tracking
+        int total_tests = num_iterations * scenario_dimensions.size() * scenario_counts.size() * 
+                           ell_values.size() * distributions.size();
+        int completed_tests = 0;
+        
+        // Run tests with different configurations
         for (int iter = 0; iter < num_iterations; iter++) {
-            std::cout << "\nIteration " << (iter+1) << "/" << num_iterations << ":" << std::endl;
-            
-            // 1. Generate a random scenario set
-            std::string tempfile = "temp_stress_test_" + std::to_string(iter) + ".nc";
-            auto [scenarios, weights] = generate_random_scenario_set(
-                tempfile, num_scenarios, scenario_dim, 42 + iter);
-            
-            // 2. Test each scenario reduction method
-            for (const auto& algorithm : algorithms) {
-                // Test the method and collect results
-                auto [wasserstein_dist, execution_time] = test_reduction_method(
-                    algorithm, scenarios, weights, tempfile, k_value, ell_value);
-                
-                // Store the metrics
-                method_distances[algorithm].push_back(wasserstein_dist);
-                method_times[algorithm].push_back(execution_time);
+            for (const auto& scenario_dim : scenario_dimensions) {
+                for (const auto& num_scenarios : scenario_counts) {
+                    for (const auto& ell_value : ell_values) {
+                        for (const auto& distribution : distributions) {
+                            completed_tests++;
+                            
+                            // Calculate k_value (number of scenarios to select) as 25% of total scenarios
+                            int k_value = std::max(5, num_scenarios / 4);
+                            
+                            std::cout << "Test " << completed_tests << "/" << total_tests 
+                                      << " - Dim: " << scenario_dim 
+                                      << ", Scenarios: " << num_scenarios 
+                                      << "\r" << std::flush;
+                            
+                            // Generate a unique filename for this test configuration
+                            std::string tempfile = "temp_stress_test_" + 
+                                std::to_string(iter) + "_" + 
+                                std::to_string(scenario_dim) + "_" +
+                                std::to_string(num_scenarios) + "_" +
+                                distribution + "_" +
+                                std::to_string(static_cast<int>(ell_value)) + ".nc";
+                            
+                            // 1. Generate a random scenario set with the specified distribution
+                            auto [scenarios, weights] = generate_random_scenario_set(
+                                tempfile, num_scenarios, scenario_dim, 42 + iter, distribution);
+                            
+                            // 2. Test each scenario reduction method
+                            for (const auto& algorithm : algorithms) {
+                                // Test the method and collect results
+                                auto [wasserstein_dist, execution_time] = test_reduction_method(
+                                    algorithm, scenarios, weights, tempfile, k_value, ell_value);
+                                
+                                // Store the metrics
+                                method_distances[algorithm].push_back(wasserstein_dist);
+                                method_times[algorithm].push_back(execution_time);
+                            }
+                            
+                            // Clean up the temporary file
+                            std::remove(tempfile.c_str());
+                        }
+                    }
+                }
             }
-            
-            // Clean up the temporary file
-            std::remove(tempfile.c_str());
         }
         
         // 3. Analyze and report results
         std::cout << "\n==== Results Summary ====" << std::endl;
         
-        // Calculate and display average Wasserstein distances
-        std::cout << "Average Wasserstein distances (lower is better):" << std::endl;
+        // Calculate and display overall average Wasserstein distances
+        std::cout << "Overall average Wasserstein distances (lower is better):" << std::endl;
+        std::map<std::string, double> avg_distances;
         for (const auto& [alg, distances] : method_distances) {
+            if (distances.empty()) continue;
             double avg_distance = std::accumulate(distances.begin(), distances.end(), 0.0) / distances.size();
+            avg_distances[alg] = avg_distance;
             std::cout << alg << ": " << avg_distance << std::endl;
         }
         
-        // Calculate and display average execution times
-        std::cout << "\nAverage execution times (ms):" << std::endl;
+        // Calculate and display overall average execution times
+        std::cout << "\nOverall average execution times (ms):" << std::endl;
         for (const auto& [alg, times] : method_times) {
+            if (times.empty()) continue;
             double avg_time = std::accumulate(times.begin(), times.end(), 0.0) / times.size();
             std::cout << alg << ": " << avg_time << " ms" << std::endl;
         }
         
         // Find the method with the lowest average Wasserstein distance
         auto best_method = std::min_element(
-            method_distances.begin(), 
-            method_distances.end(),
+            avg_distances.begin(), 
+            avg_distances.end(),
             [](const auto& a, const auto& b) {
-                return 
-                    std::accumulate(a.second.begin(), a.second.end(), 0.0) / a.second.size() <
-                    std::accumulate(b.second.begin(), b.second.end(), 0.0) / b.second.size();
+                return a.second < b.second;
             }
         );
         
-        std::cout << "\nBest performing method: " << best_method->first << std::endl;
+        if (best_method != avg_distances.end()) {
+            std::cout << "\nBest performing method overall: " << best_method->first << std::endl;
+        }
+        
+        // Report performance by dimension
+        std::cout << "\n---- Performance by Dimension ----" << std::endl;
+        for (const auto& dim : scenario_dimensions) {
+            std::cout << "\nDimension " << dim << ":" << std::endl;
+            
+            // Calculate average distance for each algorithm at this dimension
+            std::map<std::string, std::vector<double>> dim_distances;
+            std::map<std::string, std::vector<double>> dim_times;
+            
+            // Count tests for this dimension
+            int test_idx = 0;
+            for (int iter = 0; iter < num_iterations; iter++) {
+                for (const auto& scenario_dim : scenario_dimensions) {
+                    for (const auto& num_scenarios : scenario_counts) {
+                        for (const auto& ell_value : ell_values) {
+                            for (const auto& distribution : distributions) {
+                                if (scenario_dim != dim) {
+                                    test_idx++;
+                                    continue;
+                                }
+                                
+                                for (const auto& algorithm : algorithms) {
+                                    if (test_idx < method_distances[algorithm].size()) {
+                                        dim_distances[algorithm].push_back(method_distances[algorithm][test_idx]);
+                                        dim_times[algorithm].push_back(method_times[algorithm][test_idx]);
+                                    }
+                                }
+                                test_idx++;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Display average distances for this dimension
+            for (const auto& [alg, distances] : dim_distances) {
+                if (distances.empty()) continue;
+                double avg = std::accumulate(distances.begin(), distances.end(), 0.0) / distances.size();
+                std::cout << "  " << alg << " Wasserstein: " << avg;
+                
+                // Display execution time as well
+                if (!dim_times[alg].empty()) {
+                    double avg_time = std::accumulate(dim_times[alg].begin(), dim_times[alg].end(), 0.0) / dim_times[alg].size();
+                    std::cout << ", Time: " << avg_time << " ms";
+                }
+                std::cout << std::endl;
+            }
+        }
+        
+        // Report performance by distribution type
+        std::cout << "\n---- Performance by Distribution ----" << std::endl;
+        for (const auto& dist : distributions) {
+            std::cout << "\nDistribution: " << dist << std::endl;
+            
+            // Create separate maps for tracking performance by distribution
+            std::map<std::string, std::vector<double>> dist_distances;
+            
+            // Count tests for this distribution
+            int test_idx = 0;
+            for (int iter = 0; iter < num_iterations; iter++) {
+                for (const auto& scenario_dim : scenario_dimensions) {
+                    for (const auto& num_scenarios : scenario_counts) {
+                        for (const auto& ell_value : ell_values) {
+                            for (const auto& distribution : distributions) {
+                                if (distribution != dist) {
+                                    test_idx++;
+                                    continue;
+                                }
+                                
+                                for (const auto& algorithm : algorithms) {
+                                    if (test_idx < method_distances[algorithm].size()) {
+                                        dist_distances[algorithm].push_back(method_distances[algorithm][test_idx]);
+                                    }
+                                }
+                                test_idx++;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Display average distances for this distribution
+            for (const auto& [alg, distances] : dist_distances) {
+                if (distances.empty()) continue;
+                double avg = std::accumulate(distances.begin(), distances.end(), 0.0) / distances.size();
+                std::cout << "  " << alg << ": " << avg << std::endl;
+            }
+        }
         
         std::cout << "\n✓ Test 15: Stress Test for Scenario Reduction Methods completed successfully" << std::endl;
     } catch (const std::exception& e) {
@@ -2142,25 +2487,31 @@ void test_scenario_reduction() {
         // -------------------------------------------------------------
         std::cout << "\nTesting MILP specific implementation:" << std::endl;
         
-        // Create a fresh DiscreteScenarioSet and load the test data
-        DiscreteScenarioSet dssMILP;
-        {
-            netCDF::NcFile file(filename, netCDF::NcFile::read);
-            dssMILP.deserialize(file);
-        }
-        
-        // Set up configuration specifically for MILP
-        auto milpConfig = create_scenario_reduction_config(3, 2.0f, "MILP");
-        dssMILP.set_scenario_reduction_config(milpConfig);
-        
-        // Initialize the pool with MILP-based scenario reduction
-        std::cout << "Initializing discrete pool with MILP-based scenario reduction..." << std::endl;
-        
-        #ifdef WITH_MILPSOLVER
-        std::cout << "✓ MILP solver support is available" << std::endl;
-        #endif
-        
+        #if defined(WITH_CAPACITATED_FACILITY_LOCATION) && defined(WITH_MILPSOLVER)
         try {
+            // Create a fresh DiscreteScenarioSet and load the test data
+            DiscreteScenarioSet dssMILP;
+            {
+                netCDF::NcFile file(filename, netCDF::NcFile::read);
+                dssMILP.deserialize(file);
+            }
+            
+            // Create a MILP solver using the factory system
+            std::cout << "Creating MILP solver via factory..." << std::endl;
+            auto milpSolver = create_milp_solver();
+            if (!milpSolver) {
+                throw std::runtime_error("MILP solver creation failed");
+            }
+            std::cout << "✓ MILP solver created successfully" << std::endl;
+            
+            // Set up configuration specifically for MILP
+            auto milpConfig = create_scenario_reduction_config(3, 2.0f, "MILP");
+            dssMILP.set_scenario_reduction_config(milpConfig);
+            
+            // Initialize the pool with MILP-based scenario reduction
+            std::cout << "Initializing discrete pool with MILP-based scenario reduction..." << std::endl;
+            
+            // Run scenario reduction
             dssMILP.init_discrete_pool(3);
             
             // Verify we have the expected number of scenarios
@@ -2178,9 +2529,11 @@ void test_scenario_reduction() {
                 std::cout << "⚠ MILP selected " << count << " scenarios (expected 3), probabilities sum to " << totalProb << std::endl;
             }
         } catch (const std::exception& e) {
-            std::cout << "⚠ MILP method threw exception: " << e.what() << std::endl;
-            std::cout << "  This may be expected if WITH_MILPSOLVER is not defined or no MILP solver is available." << std::endl;
+            std::cout << "✗ MILP method failed with exception: " << e.what() << std::endl;
         }
+        #else
+        std::cout << "⚠ MILP solver test skipped - requires WITH_MILPSOLVER and WITH_CAPACITATED_FACILITY_LOCATION" << std::endl;
+        #endif
         
         // Part 4: Test netCDF file configuration loading
         // -------------------------------------------------------------

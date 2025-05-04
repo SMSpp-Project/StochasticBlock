@@ -2,7 +2,7 @@
 ################################ makefile ####################################
 ##############################################################################
 #                                                                            #
-#   makefile of test (for StochasticBlock)                                   #
+#   makefile of test (for CapacitatedFacilityLocationBlock)                  #
 #                                                                            #
 #                              Antonio Frangioni                             #
 #                          Dipartimento di Informatica                       #
@@ -10,33 +10,51 @@
 #                                                                            #
 ##############################################################################
 
-# module names
+# module name - must match the binary name and source file
 NAME = StochasticBlock_test_discretescenarioset
 
 # basic directory
 DIR = .
 
-# debug switches
-#SW = -g -glldb -fno-inline -std=c++20 -ferror-limit=1
-# debug switches with address sanitizer and extra pedantic warning
-#SW = -g3 -glldb -fno-inline -std=c++20 -ferror-limit=1 -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer -Wpedantic -Wextra -Wno-unused-parameter
-# production switches
-SW = -O3 -std=c++20 -DNDEBUG -DCLANG_1200_0_32_27_PATCH
+# common flags
+COMMON_SW = -std=c++20 -ferror-limit=1 -Wno-enum-compare -DWITH_CAPACITATED_FACILITY_LOCATION -DWITH_MILPSOLVER
 
-# debug build switches 
-DSW = -g -O0 -std=c++20 -fno-inline
+# debug switches
+SW_DEBUG = -g3 -glldb -fno-inline $(COMMON_SW) -DCLANG_1200_0_32_27_PATCH
+# debug switches with address sanitizer and extra pedantic warning
+SW_DEBUG_ASAN = -g3 -glldb -fno-inline $(COMMON_SW) -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer -Wpedantic -Wextra -Wno-unused-parameter -Wno-enum-compare -Wno-deprecated-copy-with-user-provided-copy
+# production switches
+SW_RELEASE = -O3 $(COMMON_SW) -DNDEBUG -DCLANG_1200_0_32_27_PATCH
 
 # compiler
 CC = clang++
 
 # default target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-default: $(DIR)/$(NAME)
+default: release
 
-# clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# debug target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+debug: SW = $(SW_DEBUG)
+debug: $(DIR)/$(NAME)
+
+# debug_asan target - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+debug_asan: SW = $(SW_DEBUG_ASAN)
+debug_asan: $(DIR)/$(NAME)
+
+# release target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+release: SW = $(SW_RELEASE)
+release: $(DIR)/$(NAME)
+
+# clean target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 clean::
-	rm -f $(DIR)/*.o $(DIR)/*~ $(DIR)/$(NAME) temp_*.nc
+	rm -f $(DIR)/*.o $(DIR)/*~ $(NAME)
+
+# Define the MILPSolver directory independently first
+MILPSSDR = ../../MILPSolver
 
 # define & include the necessary modules- - - - - - - - - - - - - - - - - - -
 # if a module is not used in the current configuration, just comment out the
@@ -52,43 +70,56 @@ SMS++SDR = ../../SMS++
 include $(SMS++SDR)/lib/makefile-inc
 
 # StochasticBlock
-StcBlkSDR = ..
+StcBlkSDR = ../../StochasticBlock
 include $(StcBlkSDR)/makefile
 
 # CapacitatedFacilityLocationBlock
-CFLBlkSDR = ../../CapacitatedFacilityLocationBlock
-include $(CFLBlkSDR)/makefile
+CFLBkSDR = ../../CapacitatedFacilityLocationBlock
+include $(CFLBkSDR)/makefile-s
 
-# BinaryKnapsackBlock
-BKPBlkSDR = ../../BinaryKnapsackBlock
-include $(BKPBlkSDR)/makefile
+# BundleSolver
+BNDSLVSDR = ../../BundleSolver
+include $(BNDSLVSDR)/makefile-s
 
-# MCFBlock
-MCFBlkSDR = ../../MCFBlock
-include $(MCFBlkSDR)/makefile
+# LagrangianDualSolver
+LgDSLVSDR = ../../LagrangianDualSolver
+include $(LgDSLVSDR)/makefile
+
+# MILPSolver - we need it for ScenarioReductionSolver
+include $(MILPSSDR)/makefile-c
+
+# LEMONSolver, assuming all dependencies (MCFBlock) are there already
+# (comment out if not required)
+# note: -std=c++20 is required if this is included
+#MCFLESDR = ../../LEMONSolver
+#include $(MCFLESDR)/makefile
+
+# Define explicit MILPS include paths to ensure it's found
+MILPS_INC = -I$(MILPSSDR)/include
 
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
-# object files
-MOBJ =  $(SMS++OBJ) $(StcBlkOBJ) $(CFLBlkOBJ) $(BKPBlkOBJ) $(MCFBlkOBJ)
+# object files - includes all necessary objects
+MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BNDSLVOBJ) $(LgDSLVOBJ) $(CFLBkOBJ) $(MCFBkOBJ) $(MCFLEOBJ) $(MILPSOBJ)
 
-# libraries
-MLIB =  $(SMS++LIB) $(StcBlkLIB) $(CFLBlkLIB) $(BKPBlkLIB) $(MCFBlkLIB) -lnetcdf_c++4 -lnetcdf
+# libraries - includes all necessary libraries
+MLIB =  $(BNDSLVLIB) $(LgDSLVLIB) $(CFLBkLIB) $(SMS++LIB) $(MCFBkLIB) $(MCFLELIB) $(MILPSLIB) $(StcBlkLIB)
 
-$(DIR)/$(NAME): $(DIR)/test_discretescenarioset.o $(StcBlkOBJ) $(SMS++OBJ) $(CFLBlkOBJ) $(BKPBlkOBJ) $(MCFBlkOBJ)
-	$(CC) -o $(DIR)/$(NAME) $^ $(MLIB) $(DSW)
+# Final compilation target
+$(DIR)/$(NAME): $(MOBJ) $(DIR)/test_discretescenarioset.o
+	$(CC) -o $(DIR)/$(NAME) $^ $(MLIB) $(SW)
 
-# dependencies: every .o from its .C + every recursively included .h- - - - -
+# dependencies: every .o from its .cpp + every recursively included .h- - - -
 
-# include directives
-MINC =  $(SMS++INC) $(StcBlkINC) $(CFLBlkINC) $(BKPBlkINC) $(MCFBlkINC)
+# include directives - add MILPS_INC as an extra safety measure
+MINC =  $(SMS++INC) $(StcBlkINC) $(BNDSLVINC) $(LgDSLVINC) $(CFLBkINC) $(MCFBkINC) $(MCFLEINC) $(MILPSINC) $(MILPS_INC) -I../include
 
 # includes
-MH =    $(SMS++H) $(StcBlkH) $(CFLBlkH) $(BKPBlkH) $(MCFBlkH)
+MH =    $(SMS++H) $(StcBlkH) $(BNDSLVH) $(LgDSLVH) $(CFLBkH) $(MCFBkH) $(MCFLEH) $(MILPSH)
 
 # compile command
 
 $(DIR)/test_discretescenarioset.o: $(DIR)/test_discretescenarioset.cpp $(MH)
-	$(CC) -c $*.cpp -o $@ $(MINC) -I$(StcBlkSDR)/include -I$(CFLBlkSDR)/include -I$(BKPBlkSDR)/include -I$(MCFBlkSDR)/include $(DSW)
+	$(CC) -c $(DIR)/test_discretescenarioset.cpp -o $@ $(MINC) $(SW)
 
 ############################ End of makefile #################################

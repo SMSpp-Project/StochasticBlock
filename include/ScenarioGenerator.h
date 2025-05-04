@@ -71,8 +71,11 @@
 
 #include "SMSTypedefs.h"
 
-#include <span> // To be added in SMSTypedefs.h includes of the std library?
-                // but it requires cxx_std_20
+// Required for Scenario type but not available in SMSTypedefs.h yet
+// TODO: Consider adding to SMSTypedefs.h in a future update
+#include <span>  // C++20: For non-owning views of contiguous data
+#include <utility> // for std::pair
+#include <optional> // for std::optional
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
 /*--------------------------------------------------------------------------*/
