@@ -6,19 +6,18 @@
  * implementation of ScenarioGenerator suited to the case where the input
  * distribution is contained in a netCDF file as a collection of vectors.
  * 
- * The class provides two main approaches for scenario management:
- * 1. Discrete pools: Select a subset of existing scenarios
- *    - Using random selection (always available)
- *    - Using scenario reduction via Wasserstein distance minimization 
- *      (requires CapacitatedFacilityLocationBlock)
- * 
- * 2. Continuous pools: Generate representative scenarios
- *    - Using k-means clustering to create centroids
+ * The class provides methods for scenario selection and management:
+ * - Scenario Pool Selection:
+ *   - Using random selection (always available)
+ *   - Using scenario reduction via Wasserstein distance minimization: 
+ *     - Forward selection method (Dupačová)
+ *     - Local search algorithms: FirstFit and BestFit
+ *     - MILP-based optimization approach
  *
  * The scenario reduction functionality can be configured through a Configuration 
  * object loaded from a netCDF file or set programmatically. It integrates with 
- * the CapacitatedFacilityLocationBlock module to implement optimal scenario
- * selection methods based on the Wasserstein distance metric.
+ * the CapacitatedFacilityLocationBlock module to implement scenario selection methods 
+ * based on the Wasserstein distance metric.
  *
  * \author Antonio Frangioni \n
  *         Dipartimento di Informatica \n
@@ -43,18 +42,20 @@
 /*------------------------------ INCLUDES ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-#include "ScenarioGenerator.h"
+#include "ScenarioGenerator.h"  // Already includes SMSTypedefs.h
 #include "Configuration.h"
+#include "Block.h"           // For BlockConfig
+#include "BlockSolverConfig.h" // For BlockSolverConfig
 
-#include <Eigen/Dense>
+#include <Eigen/Dense>  // For vector operations
 
 // Additional C++ standard library includes not in SMSTypedefs.h
-#include <random>    // C++11: For random number generation (std::mt19937)
-#include <span>      // C++20: For non-owning views of contiguous data (Scenario type)
-#include <optional>  // C++17: For representing optional values
-#include <variant>   // C++17: For type-safe unions
-#include <numeric>   // C++11: For accumulate and other numeric algorithms
-#include <utility>   // C++11: For std::pair and utility functions
+#include <random>    // For random number generation (std::mt19937)
+#include <optional>  // For representing optional values
+#include <variant>   // For type-safe unions
+
+// <span> is included in ScenarioGenerator.h
+// <numeric> and <utility> are included in SMSTypedefs.h
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
@@ -63,6 +64,11 @@
 /// namespace for the Structured Modeling System++ (SMS++)
 namespace SMSpp_di_unipi_it
 {
+
+// Forward declarations
+class CapacitatedFacilityLocationBlock;
+class ScenarioReductionSolver;
+class MILPSolver;
 
 /// User-defined literal for probability percentages (must be at namespace or global scope)
 /** This literal allows writing probabilities as percentages, e.g., 25.0_pct */
@@ -77,43 +83,34 @@ constexpr double operator"" _pct(long double percentage) {
 
 /// DiscreteScenarioSet to sample from a collection of scenarios
 /** DiscreteScenarioSet is an implementation of the ScenarioGenerator class.
- * As such, it gives methods to sample from an input distribution and manipulate
+ * As such, it provides methods to sample from an input distribution and manipulate
  * a scenarioPool.
  *
  * In the specific context of DiscreteScenarioSet, the distribution to sample
  * from is assumed to be a discrete probability distribution characterized
  * by a collection of scenarios. Scenarios are assumed to be contained in a
- * netCDF file, and DiscreteScenarioSet gives method to deserialize the scenarios
+ * netCDF file, and DiscreteScenarioSet provides methods to deserialize the scenarios
  * from the netCDF file. The deserialized scenarios are stored in a
  * boost::multi_array< double, 2 >.
  *
- * DiscreteScenarioSet considers that the (deserialized) pool can be handled
- * by two distinct approaches for scenario reduction: 
+ * DiscreteScenarioSet implements scenario selection from the input pool:
  * 
- * 1. Discrete approach: Selects a *subset* of the input scenarioPool. This can be done:
- *    - Using random selection (always available)
- *    - Using scenario reduction via the ScenarioReductionConfig (requires CapacitatedFacilityLocationBlock)
- *    - The subset is characterized by the set of indexes of the selected scenarios
- *    - See init_discrete_pool(...)
- * 
- * 2. Continuous approach: *Constructs* a set of representative scenarios from the input:
- *    - Uses k-means clustering to create centroids
- *    - Another container is created to hold the constructed scenarios
- *    - See init_continuous_pool(...)
+ * - Selects a *subset* of the input scenarioPool via:
+ *   - Random selection (always available) via init_random_pool()
+ *   - Scenario reduction via init_representative_pool() (requires proper configuration)
+ *   - The subset is characterized by the set of indexes of the selected scenarios
  *
  * The method get_current_scenario() allows the user to query one element in
- * the pool, whether the discrete or continuous approach was used.
- * 
- * The scenario reduction functionality can be configured through a ScenarioReductionConfig
- * object loaded from a netCDF file or set programmatically. It integrates with
- * the CapacitatedFacilityLocationBlock module to implement optimal scenario 
- * selection methods based on the Wasserstein distance metric. */
+ * the selected pool. The get_current_scenario_probability() method returns
+ * the normalized probability of the current scenario.
+ */
 
 class DiscreteScenarioSet : public ScenarioGenerator
 {
 /*--------------------------------------------------------------------------*/
 /*----------------------- PUBLIC PART OF THE CLASS -------------------------*/
 /*--------------------------------------------------------------------------*/
+
 
 public:
 /*--------------------------------------------------------------------------*/
@@ -126,29 +123,16 @@ public:
  /** Every scenario is assumed to have the same dimension. As the number of
   * scenarios becomes known whenever we deserialize the data, the scenario
   * pool is of known size at this point. Hence, the choice to store it inside
-  * a boost::multi_array. See the function init_random_pool()*/
+  * a boost::multi_array. */
  using DiscreteScenarioPool = boost::multi_array< double , 2 >;
 
- /// Container for the representative pool
- /** The representative pool is made of Eigen::VectorXd for ease of linear
-  * algebra manipulations. See the function init_representative_pool(). */
- using DiscreteRepresentativePool = std::vector< Eigen::VectorXd >;
-
- /// type Point for Eigen::VectorXd
- /** For ease of linear algebra manipulations, we use Eigen::VectorXd to
-  * hold a scenario. As scenarios are assumed to be present in memory
-  * already (as boost::multi_array< double, 2 >), they are converted into
-  * Eigen::VectorXd using Eigen::Map. */
+ /// Type to hold a scenario reference (used within implementation)
+ /** For ease of linear algebra manipulations, we use Eigen::VectorXd when
+  * scenario operations need to be performed. */
  using Point = Eigen::Map< Eigen::VectorXd >;
-
- /// Container for the centers and the points to be clustered
- /** Lightweight container for a collection of scenarios represented as
-  * Eigen::VectorXd. */
- using PoolMap = std::vector< Point >;
  
  /// Type to represent a scenario with its probability
  using ScenarioWithProbability = std::pair<Scenario, double>;
- 
 
 /** @} ---------------------------------------------------------------------*/
 /*----------- CONSTRUCTING AND DESTRUCTING DiscreteScenarioSet -------------*/
@@ -173,7 +157,21 @@ public:
   * std::vector< double > called scenarioProbabilities. If ScenarioProbabilities
   * is *not* present in the group, then uniform weights are assumed, that is,
   * scenarioProbabilities is a vector of size nbScenarios where each component
-  * is equal to 1.0 / nbScenarios. */
+  * is equal to 1.0 / nbScenarios. 
+  * 
+  * If a "ScenarioReductionConfig" group is found during deserialization,
+  * it will be used to populate the scenario reduction configuration. This
+  * group should contain:
+  * 
+  * - A "BlockConfig" group with parameters like:
+  *   - k: Number of scenarios to select
+  *   - ell: Power parameter for Wasserstein distance
+  * 
+  * - A "SolverConfig" group with parameters like:
+  *   - algorithm: Scenario reduction method to use 
+  *     (e.g., "Dupacova", "BestFit", "FirstFit", "MILP")
+  *   - Additional solver-specific settings
+  */
  void deserialize( const netCDF::NcGroup & group ) override;
 
  virtual ~DiscreteScenarioSet();
@@ -186,7 +184,7 @@ public:
 
  void set_seed( unsigned long seed ) override;
 
- /// Function to select a discrete subset from the input scenario pool
+ /// Function to select a subset from the input scenario pool
  /** The function init_discrete_pool selects a subset of scenarios among the
   * ones that were deserialized from the input. It saves this subset of indices
   * in the variable scenarioIndexes.
@@ -195,91 +193,61 @@ public:
   * making it appropriate for scenario reduction when you need to maintain the
   * original scenarios and just want to select a representative subset.
   * 
-  * If a ScenarioReductionConfig is available (loaded during deserialization
-  * or set manually), the function will attempt to use it to perform scenario reduction
-  * based on the Wasserstein distance between scenarios. This uses the CapacitatedFacilityLocationBlock
-  * and ScenarioReductionSolver to select a representative subset of scenarios.
+  * If scenario reduction is configured, the function will first try to use
+  * the appropriate scenario reduction method. If that fails or if no 
+  * configuration is available, it falls back to random selection.
   * 
-  * If scenario reduction is not available or fails, the function falls back to 
-  * randomly selecting scenarios using standard random subset generation.
-  * 
-  * Configuration for scenario reduction can be provided in a netCDF file or set
-  * programmatically using the set_scenario_reduction_config() method. See the 
-  * documentation for scenarioReductionConfig for details on the configuration structure.
+  * @param sampleSize The number of scenarios to select for the pool.
+  * @throws std::out_of_range If sampleSize exceeds the total number of scenarios.
   */
  void init_discrete_pool( ScenarioIndex sampleSize ) override;
 
- /// Function to compute a continuous approximation for scenario representation
- /** The function init_continuous_pool( ScenarioIndex size ) computes a
-  * set of scenarios that approximates the input set of scenarios according
-  * to some optimization criterion or statistical properties.
-  *
-  * By default, in DiscreteScenarioSet a native (and naive) implementation of
-  * k-means clustering is used. While k-means aims to minimize variance within 
-  * clusters (not necessarily Wasserstein distance), it serves as a general 
-  * method for creating representative scenarios.
-  *
-  * Scenario reduction techniques, which specifically aim to minimize Wasserstein
-  * distance between original and reduced distributions, can also be implemented
-  * through this interface.
-  *
-  * Kmeans splits the input scenarios into size clusters. Each cluster has a 
-  * (bary)center, and each scenario is associated with a label, which is its 
-  * nearest center.
-  *
-  * Knowing the cluster centers and the labels, the representativePool is
-  * made of the centers. The std::vector< double > poolProbabilities is such
-  * that each component p_i is equal to
-  *  p_i = sum( input_weights_with_label_equal_to_i ).
+ /// Function for backward compatibility, redirects to init_random_pool
+ /** This method is maintained for backward compatibility with the ScenarioGenerator
+  * interface. It now simply redirects to init_random_pool as we no longer support
+  * the continuous scenario generation approach.
   * 
-  * This method typically creates new scenarios that weren't in the original set
-  * but are constructed to be good statistical representatives.
+  * @param sampleSize The number of scenarios to select for the pool.
+  * @throws std::out_of_range If sampleSize exceeds the total number of scenarios.
   */
  void init_continuous_pool( ScenarioIndex sampleSize ) override;
 
  /// Function for retrieving the current scenario.
  /** Checks that the internal variable currentScenarioIndex is within bounds,
-  * then converts the currentScenarioIndex-th row of the scenario pool as a
+  * then converts the currentScenarioIndex-th scenario of the selected pool as a
   * Scenario, that is as a std::span< const double >.
   *
-  * If a discrete pool has been initialized (via init_discrete_pool), we output 
-  * the scenario as a span of the scenarioIndex[currentScenarioIndex]-th row of the
-  * scenarioSet.
-  *
-  * If a continuous pool has been initialized (via init_continuous_pool), we output 
-  * the scenario as a span of the currentScenarioIndex-th component of the 
-  * representativePool. */
+  * The function returns a span of the scenarioIndex[currentScenarioIndex]-th 
+  * row of the scenarioSet (since we only use the discrete pool approach).
+  * 
+  * @return A span representing the current scenario
+  * @throws std::out_of_range If currentScenarioIndex is out of range
+  */
  Scenario get_current_scenario( void ) override;
 
  /// Function to query the probability weight of the current scenario
  /** When sampling a pool, what are the weights of the drawn scenarios?
   * When using get_scenario_probabilities, we return "the" probability weight
   * inside the pool and not the input probability weight.
-  * This applies for both discrete and continuous pool approaches.
   *
-  * Choices made:
-  * 1) For discrete pools (init_discrete_pool): Take the input weight and 
-  * normalize it, that is given a scenario with an input_weight, we compute 
-  * its new_weight by:
+  * For scenario pools: We take the input weight and normalize it. Given a
+  * scenario with an input_weight, we compute its new_weight by:
   *  "new_weight = input_weight / sum( input_weights_in_the_pool )".
-  * 
-  * 2) For continuous pools (init_continuous_pool): For k-means clustering,
-  * the "pool weight" is the proportion of points affected by the center.
   *
-  * In the discrete case, after scaling, we return the currentScenarioIndex-th
-  * input_weight from the deserialized data in scenarioProbabilities.
-  * In the continuous case, we return the currentScenarioIndex-th element of the
-  * std::vector< double > poolProbabilities that is constructed with the
-  * representative scenarios.
-  * */
+  * This normalization ensures that the weights of all scenarios in the 
+  * pool sum to 1.0.
+  * 
+  * @return The normalized probability of the current scenario
+  * @throws std::out_of_range If currentScenarioIndex is out of range
+  */
  double get_current_scenario_probability( void ) override;
 
  /// Move currentScenarioIndex to the next scenario
- /** Whether the pool has been created via init_discrete_pool(...)
-  * or via init_continuous_pool(...), the function next_scenario() 
-  * behaves the same: it increments by 1 the currentScenarioIndex if 
-  * there is still a scenario left in the pool and return true, 
-  * otherwise it returns false. */
+ /** The function increments currentScenarioIndex by 1 if there is still
+  * a scenario left in the pool and returns true. Otherwise, it returns false.
+  * 
+  * @return true if successfully moved to the next scenario, false if at the end
+  */
  bool next_scenario( void ) override;
 
  /// return the dimension of the scenarios
@@ -289,7 +257,134 @@ public:
  ScenarioSize get_scenario_size( void ) override;
 
 /** @} ---------------------------------------------------------------------*/
-/*--------------------- GETTERS  FOR PRIVATE FIELDS ------------------------*/
+/*-------------------- SCENARIO POOL MANAGEMENT METHODS --------------------*/
+/*--------------------------------------------------------------------------*/
+/** @name Scenario Pool Management Methods
+ *  @{ */
+
+ /**
+  * @brief Create a pool by randomly selecting scenarios
+  * 
+  * Randomly selects a subset of scenarios from the full scenario set without
+  * any optimization. Each scenario has an equal probability of being selected.
+  * 
+  * This method:
+  * 1. Validates that pool_size is <= nbScenarios
+  * 2. Resets any existing pool (discrete or continuous)
+  * 3. Sets up the internal state for a discrete pool
+  * 4. Generates random indices to select scenarios
+  * 5. Updates sumPoolWeights to normalize probabilities
+  * 
+  * Implementation details:
+  * - Uses std::sample with the internal RNG for unbiased selection
+  * - Stores selected indices in scenarioIndexes
+  * - Computes sumPoolWeights for probability normalization
+  * 
+  * @param pool_size Number of scenarios to include in the pool (must be ≤ total scenarios)
+  * @throws std::invalid_argument If pool_size exceeds the total number of scenarios
+  */
+ void init_random_pool(size_t pool_size);
+
+ /**
+  * @brief Create a pool by selecting representative scenarios
+  * 
+  * Uses scenario reduction techniques to select a subset of scenarios that best
+  * represents the full scenario set according to the configured reduction method.
+  * 
+  * This method:
+  * 1. Checks for a valid scenario reduction configuration
+  * 2. Extracts the parameters (k, ell, algorithm) from the configuration
+  * 3. Creates a CapacitatedFacilityLocationBlock to model the scenario selection problem
+  * 4. Configures and runs a ScenarioReductionSolver with the selected algorithm
+  * 5. Updates scenarioIndexes with the optimal scenario selection
+  * 
+  * Supported algorithms:
+  * - "Dupacova": Forward selection method (fast, good quality)
+  * - "BestFit": Local search with best improvement (slower, better quality)
+  * - "FirstFit": Local search with first improvement (balanced speed/quality)
+  * - "MILP": Mixed integer linear programming approach (slow, optimal quality)
+  * 
+  * Implementation details:
+  * - The number of scenarios to select (k) comes from the configuration
+  * - The Wasserstein distance power (ell) defaults to 2.0 if not specified
+  * - If reduction fails, throws a runtime error with diagnostic information
+  * 
+  * @throws std::runtime_error If no scenario reduction configuration is available
+  * @throws std::runtime_error If the configured reduction method fails
+  * @see set_scenario_reduction_config()
+  */
+ void init_representative_pool();
+
+/** @} ---------------------------------------------------------------------*/
+/*----------------- SCENARIO REDUCTION CONFIG METHODS ----------------------*/
+/*--------------------------------------------------------------------------*/
+/** @name Scenario Reduction Configuration Methods
+ *  @{ */
+
+ /**
+  * @brief Get the block configuration for scenario reduction
+  * 
+  * Returns the BlockConfig part of the scenario reduction configuration,
+  * which contains parameters like:
+  * - k: Number of scenarios to select
+  * - ell: Power parameter for Wasserstein distance (typically 2.0)
+  * 
+  * The BlockConfig is owned by the DiscreteScenarioSet object and should
+  * not be deleted by the caller.
+  * 
+  * @return Pointer to the BlockConfig, or nullptr if no configuration exists
+  */
+ BlockConfig* get_scenario_reduction_block_config() const;
+
+ /**
+  * @brief Get the solver configuration for scenario reduction
+  * 
+  * Returns the BlockSolverConfig part of the scenario reduction configuration,
+  * which contains parameters like:
+  * - algorithm: Scenario reduction method to use (e.g., "Dupacova", "BestFit")
+  * - rho: Initial solution parameter (0.0 for random, 1.0 for Dupačová initialization)
+  * - shuffle: Whether to shuffle scenarios (for FirstFit algorithm)
+  * - Additional solver-specific settings
+  * 
+  * The BlockSolverConfig is owned by the DiscreteScenarioSet object and should
+  * not be deleted by the caller.
+  * 
+  * @return Pointer to the BlockSolverConfig, or nullptr if no configuration exists
+  */
+ BlockSolverConfig* get_scenario_reduction_solver_config() const;
+
+ /**
+  * @brief Set the scenario reduction configuration
+  * 
+  * Configures how scenario reduction will be performed when init_representative_pool()
+  * is called. Takes ownership of the provided configuration objects.
+  * 
+  * The provided configurations should contain:
+  * 
+  * 1. block_config (BlockConfig):
+  *    - k: Number of scenarios to select (must be > 0 and <= nbScenarios)
+  *    - ell: Power parameter for Wasserstein distance (typically 2.0)
+  * 
+  * 2. solver_config (BlockSolverConfig):
+  *    - algorithm: Scenario reduction method to use, one of:
+  *      - "Dupacova" (default, forward selection method)
+  *      - "BestFit" (local search with best improvement)
+  *      - "FirstFit" (local search with first improvement)
+  *      - "MILP" (mixed integer linear programming)
+  *    - Other solver-specific parameters
+  * 
+  * Implementation details:
+  * - Stores the configurations internally
+  * - Replaces any existing configuration
+  * - The object takes ownership of both config pointers
+  * 
+  * @param block_config BlockConfig containing reduction parameters (k, ell)
+  * @param solver_config BlockSolverConfig containing algorithm and solver settings
+  */
+ void set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config);
+
+/** @} ---------------------------------------------------------------------*/
+/*---------------- METHODS FOR ScenarioReduction FIELDS --------------------*/
 /*--------------------------------------------------------------------------*/
 /** @name Getters for some private fields
  *  @{ */
@@ -309,23 +404,66 @@ public:
  /// Check if the scenario pool has been initialized
  [[nodiscard]] bool is_pool_initialized() const;
  
- /// Get the scenario reduction configuration if available
- /** Returns a pointer to the current scenario reduction configuration, or nullptr
-  * if no configuration is available. The DiscreteScenarioSet retains ownership
-  * of the configuration object. It's recommended to cast the returned pointer to
-  * ScenarioReductionConfig* for accessing specific configuration properties. */
- [[nodiscard]] const Configuration* get_scenario_reduction_config() const { 
-     return scenarioReductionConfig.get(); 
+ /// Access an individual scenario value
+ [[nodiscard]] double get_scenario_value(ScenarioIndex scenario_idx, ScenarioSize component_idx) const {
+     if (scenario_idx >= nbScenarios || component_idx >= scenarioSize) {
+         throw std::out_of_range("Index out of range in get_scenario_value");
+     }
+     return scenarioSet[scenario_idx][component_idx];
  }
  
- /// Set the scenario reduction configuration
- /** This method lets you set a custom configuration for scenario reduction.
-  * The DiscreteScenarioSet takes ownership of the provided configuration.
-  * Note that only ScenarioReductionConfig instances will be used for scenario
-  * reduction. Other configuration types will be stored but not used. */
- void set_scenario_reduction_config(Configuration* config) {
-     scenarioReductionConfig.reset(config);
+ /// Get the number of selected scenarios
+ [[nodiscard]] size_t get_selected_scenario_count() const {
+     return scenarioIndexes.size();
  }
+ 
+ /// Get a specific selected scenario index
+ [[nodiscard]] ScenarioIndex get_selected_scenario_index(size_t index) const {
+     if (index >= scenarioIndexes.size()) {
+         throw std::out_of_range("Index out of range in get_selected_scenario_index");
+     }
+     return scenarioIndexes[index];
+ }
+
+/** @} ---------------------------------------------------------------------*/
+/*--------------------- PROTECTED PART OF THE CLASS -------------------------*/
+/*--------------------------------------------------------------------------*/
+/** Following members are protected rather than private to allow:
+ *  1. Access from test code when validating scenario reduction functionality
+ *  2. Access from derived scenario reduction methods that need to manipulate
+ *     the scenario sets and selected indexes directly
+ */
+
+protected:
+ /// Container for Scenario-s
+ DiscreteScenarioPool scenarioSet;
+ 
+ /// Indexes of the discrete pool
+ std::vector< ScenarioIndex > scenarioIndexes;
+
+ // Use base class deserialize and serialize from the public section
+ 
+ /**
+  * @brief Serialize the object to a netCDF group
+  * 
+  * Extends the base class serialization to include scenario reduction configuration.
+  * Creates a "ScenarioReductionConfig" group if the configuration exists.
+  * 
+  * This method:
+  * 1. First calls the base class serialize to save basic scenario data
+  * 2. Checks if scenario reduction configuration exists
+  * 3. If it exists, creates a "ScenarioReductionConfig" group
+  * 4. Creates "BlockConfig" and "SolverConfig" subgroups
+  * 5. Writes parameters like k, ell, and algorithm to these groups
+  * 
+  * Implementation notes:
+  * - Only serializes the configuration if it exists
+  * - Follows SMS++ netCDF serialization patterns
+  * - Preserves all configuration parameters
+  * 
+  * @param group The netCDF group to serialize the object to
+  */
+ void serialize(const netCDF::NcGroup& group) const;
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
@@ -348,82 +486,45 @@ private:
  /// Size of a scenario
  ScenarioSize scenarioSize;
 
- /// Container for Scenario-s
- DiscreteScenarioPool scenarioSet;
-
  /// Pool size
  /** The variable poolSize is initialized when
-  * init_representative_pool( size_t size ) or init_rando_pool( size_t size ) is
-  * used. */
+  * init_representative_pool() or init_random_pool() is used. */
  ScenarioIndex poolSize = 0;
 
  /// Random generator
  std::mt19937 rng;
  
- /// Enum for pool type
- enum class PoolType { 
-     None,      ///< No pool initialized
-     Discrete,  ///< Discrete pool
-     Continuous ///< Continuous pool
- };
- 
- /// Current pool type
- PoolType currentPoolType{PoolType::None};
+ /// Flag to check if pool is initialized
+ bool is_initialized{false};
  
  /// Compile-time constants
  static constexpr double DEFAULT_EPSILON = 1e-10;
  static constexpr unsigned long DEFAULT_SEED = 1337;
  
- /// Configuration for scenario reduction
- /** This is a ScenarioReductionConfig instance that contains settings for the scenario reduction algorithms,
-  * including which algorithm to use and its parameters. It's loaded from the netCDF file during
-  * deserialization (if available) and used during init_discrete_pool.
+ /**
+  * @brief Configuration for scenario reduction
   * 
-  * The configuration should be structured as follows in the netCDF file:
+  * Stores a pair of configurations for scenario reduction:
+  * - First: BlockConfig with parameters like k (number of scenarios) and ell (distance power)
+  * - Second: BlockSolverConfig with the algorithm choice and solver settings
   * 
-  * ScenarioReductionConfig  (Group)
-  * ├── CFLConfig           (Group)
-  * │   ├── k               (Attribute) = [int] Number of scenarios to select
-  * │   └── ell             (Attribute) = [float] Power for Wasserstein distance (default: 2.0)
-  * └── SolverConfig        (Group)
-  *     └── algorithm       (Attribute) = [string] One of: "Dupacova" (default), "BestFit", "FirstFit"
-  * 
-  * Explanation of parameters:
-  * - k: Number of scenarios to select (must be less than or equal to the total number of scenarios)
-  * - ell: Power parameter in the ell-Wasserstein distance (2.0 for standard Euclidean distance)
-  * - algorithm: Method used for scenario reduction:
-  *   - "Dupacova": Forward selection algorithm for discrete scenario reduction
-  *   - "BestFit": Local search algorithm that selects best improvement at each step
-  *   - "FirstFit": Local search algorithm that selects first satisfactory improvement
-  * 
-  * Implementation notes:
-  * - Only ScenarioReductionConfig instances are supported for scenario reduction
-  * - The configuration can be created programmatically and set with set_scenario_reduction_config()
-  * - If the WITH_CAPACITATED_FACILITY_LOCATION flag is not defined during compilation,
-  *   a fallback method will be used that selects scenarios based on their probabilities
-  * - If any configuration parameters are missing, reasonable defaults will be used
+  * The configuration is loaded during deserialization if available
+  * in the netCDF file, or can be set programmatically using
+  * set_scenario_reduction_config().
   */
- std::unique_ptr<Configuration> scenarioReductionConfig;
+ std::pair<BlockConfig*, BlockSolverConfig*> f_scenario_reduction_config = {nullptr, nullptr};
 
 /** @} ---------------------------------------------------------------------*/
-/*--------------------- FIELDS FOR REPRESENTATIVE POOL ---------------------*/
+/*--------------------- PROBABILITY FIELDS ---------------------------------*/
 /*--------------------------------------------------------------------------*/
-/** @name Fields for the representative pool
-   * When the scenario pool is made of representative scenarios that
-   * are in general different from the input scenarios, the scenario pool
-   * has its own container of type DiscreteRepresentativePool with
-   * associated vector of probability weights poolProbabilities.
+/** @name Probability weight fields
+   * These fields store information about scenario probabilities
  * @{ */
 
- /// Container for representative pool of scenarios
- DiscreteRepresentativePool representativePool;
-
- /// Probabilities of scenarios inside the pool
- /** No matter the chosen method to make the pool, poolProbabilities is
-  * the vector of associated probability weights. It is different from
-  * scenarioProbabilities which is the vector of probability weights
-  * of the input scenarios, which is in general a different set than the
-  * pool. */
+ /// Probabilities of scenarios in the input pool
+ /** Vector containing the probability weights of all input scenarios
+  * (before any selection). Used to compute normalized probabilities
+  * for selected scenarios. */
  std::vector< double > poolProbabilities;
 
 /** @} ---------------------------------------------------------------------*/
@@ -443,9 +544,6 @@ private:
   * This variable is set back to 0.0 if the continuous pool is used,
   * see init_continuous_pool(...). */
  double sumPoolWeights;
-
- /// Indexes of the discrete pool
- std::vector< ScenarioIndex > scenarioIndexes;
 
 /** @} ---------------------------------------------------------------------*/
 /*-------------------- HELPER METHODS OF THE CLASS -------------------------*/
@@ -471,26 +569,41 @@ private:
   * the scenarios chosen to be part of the pool. */
  void set_poolSize( ScenarioIndex size );
 
- /// empty the representativePool of scenarios
- /** Function to clear the internal representativePool. */
- void empty_representativePool();
-
- /// "empty" the discrete pool
- /** As the discrete pool of DiscreteScenarioSet is simply a subset of indices
-  * scenarioIndexes, we clear scenarioIndexes. The variable sumPoolWeights
-  * is initialized to 0.0 */
- void empty_discretePool();
-
- /// function to check if the representativePool of scenarios is empty
- bool isempty_representativePool() const;
+ /// Empty the scenario pool
+ /** Function to clear the internal pool of selected scenario indices.
+  * Resets scenarioIndexes, sumPoolWeights, currentScenarioIndex,
+  * poolSize, and is_initialized.
+  */
+ void empty_pool();
+ 
+ /**
+  * @brief Extract k parameter with validation
+  * 
+  * Helper method to safely extract the k parameter (number of scenarios to select)
+  * from a BlockConfig, with validation and default value handling.
+  * 
+  * This method:
+  * 1. Extracts the "k" parameter from the BlockConfig
+  * 2. Validates that it's positive and doesn't exceed nbScenarios
+  * 3. Returns the validated k parameter
+  * 
+  * Implementation notes:
+  * - Throws an exception if k is invalid (not positive or too large)
+  * - This is especially important as k controls how many scenarios are selected
+  * 
+  * @param config The BlockConfig containing the k parameter
+  * @return The validated value of k
+  * @throws std::runtime_error If the k parameter is invalid (not positive or too large)
+  */
+ int get_k_parameter(const BlockConfig* config) const;
  
  /// Determines if scenario reduction should be used based on configuration
  /** This function checks if scenario reduction is configured properly and
   * can be used for the current situation. It evaluates several conditions:
   * 
   * 1. The requested scenario pool size must be greater than 1 (trivial case)
-  * 2. A valid scenarioReductionConfig must exist
-  * 3. The configuration must be a ScenarioReductionConfig instance
+  * 2. A valid scenario reduction configuration must exist
+  * 3. The configuration must have valid k and ell parameters
   *
   * This method is called by init_discrete_pool() before attempting to use
   * scenario reduction algorithms.
@@ -502,23 +615,22 @@ private:
  
  /// Helper method to apply scenario reduction for discrete pool
  /** This method applies scenario reduction to select a representative subset of scenarios
-  * using a ScenarioReductionConfig. When compiled with WITH_CAPACITATED_FACILITY_LOCATION
-  * defined, it:
+  * using the configured reduction method. It:
   * 
   * 1. Creates a CapacitatedFacilityLocationBlock to formulate the selection problem
-  * 2. Extracts configuration parameters (ell, k, algorithm) from the ScenarioReductionConfig
+  * 2. Extracts configuration parameters (ell, k, algorithm) from the configuration
   * 3. Configures and runs the ScenarioReductionSolver with the selected algorithm
   * 4. Updates scenarioIndexes with the selected scenario indices
   * 5. Recalculates sumPoolWeights based on the selected scenarios
   * 
-  * When WITH_CAPACITATED_FACILITY_LOCATION is not defined, it falls back to:
-  * - Selecting scenarios based on their original probabilities (highest first)
-  * - A simpler but still valid scenario selection method
+  * Implementation notes:
+  * - This is called internally by init_representative_pool()
+  * - Uses CapacitatedFacilityLocationBlock to formulate the selection problem
+  * - Handles different algorithms: Dupacova, BestFit, FirstFit, and MILP
   *
-  * @param size The desired size of the reduced scenario pool
-  * @return true if reduction was successful, false otherwise (fallback to random selection)
+  * @throws std::runtime_error If reduction fails due to configuration or solver issues
   */
- bool apply_scenario_reduction(ScenarioIndex size);
+ void apply_scenario_reduction();
 
   SMSpp_insert_in_factory_h;
 
@@ -534,4 +646,3 @@ private:
 /*--------------------------------------------------------------------------*/
 /*------------------- End file DiscreteScenarioSet.h -----------------------*/
 /*--------------------------------------------------------------------------*/
-
