@@ -2,7 +2,7 @@
 ################################ makefile ####################################
 ##############################################################################
 #                                                                            #
-#   makefile of test (for CapacitatedFacilityLocationBlock)                  #
+#   makefile of test for DiscreteScenarioSet                                 #
 #                                                                            #
 #                              Antonio Frangioni                             #
 #                          Dipartimento di Informatica                       #
@@ -17,7 +17,7 @@ NAME = StochasticBlock_test_discretescenarioset
 DIR = .
 
 # common flags
-COMMON_SW = -std=c++20 -ferror-limit=1 -Wno-enum-compare -DWITH_CAPACITATED_FACILITY_LOCATION -DWITH_MILPSOLVER
+COMMON_SW = -std=c++20 -ferror-limit=1 -Wno-enum-compare
 
 # debug switches
 SW_DEBUG = -g3 -glldb -fno-inline $(COMMON_SW) -DCLANG_1200_0_32_27_PATCH
@@ -53,9 +53,6 @@ release: $(DIR)/$(NAME)
 clean::
 	rm -f $(DIR)/*.o $(DIR)/*~ $(NAME)
 
-# Define the MILPSolver directory independently first
-MILPSSDR = ../../MILPSolver
-
 # define & include the necessary modules- - - - - - - - - - - - - - - - - - -
 # if a module is not used in the current configuration, just comment out the
 # corresponding include line
@@ -73,10 +70,6 @@ include $(SMS++SDR)/lib/makefile-inc
 StcBlkSDR = ../../StochasticBlock
 include $(StcBlkSDR)/makefile
 
-# CapacitatedFacilityLocationBlock
-CFLBkSDR = ../../CapacitatedFacilityLocationBlock
-include $(CFLBkSDR)/makefile-s
-
 # BundleSolver
 BNDSLVSDR = ../../BundleSolver
 include $(BNDSLVSDR)/makefile-s
@@ -85,25 +78,13 @@ include $(BNDSLVSDR)/makefile-s
 LgDSLVSDR = ../../LagrangianDualSolver
 include $(LgDSLVSDR)/makefile
 
-# MILPSolver - we need it for ScenarioReductionSolver
-include $(MILPSSDR)/makefile-c
-
-# LEMONSolver, assuming all dependencies (MCFBlock) are there already
-# (comment out if not required)
-# note: -std=c++20 is required if this is included
-#MCFLESDR = ../../LEMONSolver
-#include $(MCFLESDR)/makefile
-
-# Define explicit MILPS include paths to ensure it's found
-MILPS_INC = -I$(MILPSSDR)/include
-
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
 # object files - includes all necessary objects
-MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BNDSLVOBJ) $(LgDSLVOBJ) $(CFLBkOBJ) $(MCFBkOBJ) $(MCFLEOBJ) $(MILPSOBJ)
+MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BNDSLVOBJ) $(LgDSLVOBJ) $(MCFBkOBJ) $(MCFLEOBJ)
 
 # libraries - includes all necessary libraries
-MLIB =  $(BNDSLVLIB) $(LgDSLVLIB) $(CFLBkLIB) $(SMS++LIB) $(MCFBkLIB) $(MCFLELIB) $(MILPSLIB) $(StcBlkLIB)
+MLIB = $(BNDSLVLIB) $(LgDSLVLIB) $(SMS++LIB) $(MCFBkLIB) $(MCFLELIB) $(StcBlkLIB)
 
 # Final compilation target
 $(DIR)/$(NAME): $(MOBJ) $(DIR)/test_discretescenarioset.o
@@ -111,14 +92,13 @@ $(DIR)/$(NAME): $(MOBJ) $(DIR)/test_discretescenarioset.o
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
-# include directives - add MILPS_INC as an extra safety measure
-MINC =  $(SMS++INC) $(StcBlkINC) $(BNDSLVINC) $(LgDSLVINC) $(CFLBkINC) $(MCFBkINC) $(MCFLEINC) $(MILPSINC) $(MILPS_INC) -I../include
+# include directives
+MINC = $(SMS++INC) $(StcBlkINC) $(BNDSLVINC) $(LgDSLVINC) $(MCFBkINC) $(MCFLEINC) -I../include
 
 # includes
-MH =    $(SMS++H) $(StcBlkH) $(BNDSLVH) $(LgDSLVH) $(CFLBkH) $(MCFBkH) $(MCFLEH) $(MILPSH)
+MH = $(SMS++H) $(StcBlkH) $(BNDSLVH) $(LgDSLVH) $(MCFBkH) $(MCFLEH)
 
 # compile command
-
 $(DIR)/test_discretescenarioset.o: $(DIR)/test_discretescenarioset.cpp $(MH)
 	$(CC) -c $(DIR)/test_discretescenarioset.cpp -o $@ $(MINC) $(SW)
 
