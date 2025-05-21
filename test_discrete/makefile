@@ -70,6 +70,10 @@ include $(SMS++SDR)/lib/makefile-inc
 StcBlkSDR = ../../StochasticBlock
 include $(StcBlkSDR)/makefile
 
+# CapacitatedFacilityLocationBlock
+CFLBkSDR = ../../CapacitatedFacilityLocationBlock
+include $(CFLBkSDR)/makefile-s
+
 # BundleSolver
 BNDSLVSDR = ../../BundleSolver
 include $(BNDSLVSDR)/makefile-s
@@ -78,13 +82,16 @@ include $(BNDSLVSDR)/makefile-s
 LgDSLVSDR = ../../LagrangianDualSolver
 include $(LgDSLVSDR)/makefile
 
+# MILPSolver - we need it for ScenarioReductionSolver
+include $(MILPSSDR)/makefile-c
+
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
 # object files - includes all necessary objects
-MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BNDSLVOBJ) $(LgDSLVOBJ) $(MCFBkOBJ) $(MCFLEOBJ)
+MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BNDSLVOBJ) $(LgDSLVOBJ) $(CFLBkOBJ) $(MCFBkOBJ) $(MCFLEOBJ) $(MILPSOBJ)
 
 # libraries - includes all necessary libraries
-MLIB = $(BNDSLVLIB) $(LgDSLVLIB) $(SMS++LIB) $(MCFBkLIB) $(MCFLELIB) $(StcBlkLIB)
+MLIB =  $(BNDSLVLIB) $(LgDSLVLIB) $(CFLBkLIB) $(SMS++LIB) $(MCFBkLIB) $(MCFLELIB) $(MILPSLIB) $(StcBlkLIB)
 
 # Final compilation target
 $(DIR)/$(NAME): $(MOBJ) $(DIR)/test_discretescenarioset.o
@@ -92,14 +99,17 @@ $(DIR)/$(NAME): $(MOBJ) $(DIR)/test_discretescenarioset.o
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
-# include directives
-MINC = $(SMS++INC) $(StcBlkINC) $(BNDSLVINC) $(LgDSLVINC) $(MCFBkINC) $(MCFLEINC) -I../include
-
+# include directives - add MILPS_INC as an extra safety measure
+MINC =  $(SMS++INC) $(StcBlkINC) $(BNDSLVINC) $(LgDSLVINC) $(CFLBkINC) $(MCFBkINC) $(MCFLEINC) $(MILPSINC) $(MILPS_INC) -I../include
 # includes
-MH = $(SMS++H) $(StcBlkH) $(BNDSLVH) $(LgDSLVH) $(MCFBkH) $(MCFLEH)
+MH =    $(SMS++H) $(StcBlkH) $(BNDSLVH) $(LgDSLVH) $(CFLBkH) $(MCFBkH) $(MCFLEH) $(MILPSH)
 
 # compile command
 $(DIR)/test_discretescenarioset.o: $(DIR)/test_discretescenarioset.cpp $(MH)
 	$(CC) -c $(DIR)/test_discretescenarioset.cpp -o $@ $(MINC) $(SW)
+
+# distclean target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+distclean: clean
 
 ############################ End of makefile #################################

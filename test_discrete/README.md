@@ -4,16 +4,19 @@ Tests for the `DiscreteScenarioSet` class, part of the StochasticBlock module.
 
 ## Overview
 
-The `DiscreteScenarioSet` provides two pool types with multiple selection methods:
+The `DiscreteScenarioSet` provides functionality for scenario management and reduction with multiple selection methods:
 
-1. **Discrete Pool**:
+1. **Scenario Pool Management**:
    - Random selection: Uniform random subset of original scenarios
-   - Scenario reduction: Optimal subset selection using Wasserstein distance minimization (requires CapacitatedFacilityLocationBlock)
+   - Scenario reduction: Optimal subset selection using Wasserstein distance minimization
+   - Configuration-based initialization and customization
 
-2. **Continuous Pool**: 
-   - Representative scenarios via k-means clustering
+2. **Advanced Features**: 
+   - Clustered test data generation for realistic scenario distributions
+   - Wasserstein distance calculation for quantifying scenario reduction quality
+   - Exception safety and robustness in edge cases
 
-The implementation uses modern C++ features including range-based algorithms, structured bindings, std::optional, constexpr, lambda expressions, [[nodiscard]] attributes, and std::variant for pool types. The scenario reduction functionality integrates with SMS++ Configuration system for flexible algorithm customization.
+The implementation integrates with the SMS++ Configuration system for flexible algorithm customization and supports multiple scenario reduction algorithms.
 
 ## Running Tests
 
@@ -22,32 +25,30 @@ The implementation uses modern C++ features including range-based algorithms, st
 make
 
 # Run all tests
-./test_discretescenarioset
+./StochasticBlock_test_discretescenarioset
 
 # Run specific tests (by number)
-./test_discretescenarioset 1 2 3
+./StochasticBlock_test_discretescenarioset 1 8 9
 
 # Run with verbose output
-./test_discretescenarioset -v
+./StochasticBlock_test_discretescenarioset -v
 
-# Clean up temporary files without running tests
-./test_discretescenarioset --clean
+# Run a reduced set of tests (faster)
+./StochasticBlock_test_discretescenarioset -q
 ```
 
 ## Available Tests
 
-1. Basic Deserialization
-2. Input Validation
-3. Scenario Access
-4. Random Seed
-5. Empty State
-6. Pool Switching
-7. Probability Distribution
-8. Edge Cases
-9. Memory Management
-10. Large Scenario Set (Scalability)
-11. Continuous Pool
-12. Configuration Integration
-13. Scenario Reduction Functionality
+1. Basic Deserialization: Tests basic file loading and scenario deserialization
+2. Random Pool Initialization: Tests creating a random subset of scenarios
+3. Scenario Reduction Configuration: Tests configuration management
+8. Robust Configuration Handling: Tests loading and using embedded configurations
+9. Algorithm Comparison with Exception Safety: Tests multiple reduction algorithms with error handling
+10. Deterministic Results: Tests consistency of results with fixed seeds
+11. Stress Test with Robustness: Tests performance and stability with large datasets
+12. Edge Cases Handling: Tests behavior in boundary conditions
 
-Note: Tests 10 and 13 can take more time to run due to large dataset processing and optimization algorithms.
+Note:
+- Tests 1-3 are basic functionality tests that run quickly
+- Tests 8-12 are more comprehensive tests added from the improved test suite
+- Tests 10-11 may take more time to run and are excluded from the quick test mode (-q)
