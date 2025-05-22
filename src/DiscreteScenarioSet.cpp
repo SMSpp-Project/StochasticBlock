@@ -125,6 +125,16 @@ void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_confi
   f_scenario_reduction_config.second = solver_config;
 }
 
+// Set scenario reduction configuration with k parameter
+void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config, int k)
+{
+  // First set k_value with validation
+  set_k_value(k);
+  
+  // Then set the configurations
+  set_scenario_reduction_config(block_config, solver_config);
+}
+
 // Extract k parameter with validation
 int DiscreteScenarioSet::get_k_parameter(const BlockConfig* config) const
 {
@@ -132,16 +142,10 @@ int DiscreteScenarioSet::get_k_parameter(const BlockConfig* config) const
     throw std::runtime_error("Invalid configuration for getting k parameter");
   }
   
-  // In a production implementation, this would extract k from the ScenarioReductionConfig
-  // attributes that were stored during deserialization
-  
-  // Default value for testing - in a real implementation, this would come from
-  // netCDF attributes stored during deserialization
-  int k_value = 5; 
-  
   // Validate the k parameter
   if (k_value <= 0) {
-    throw std::runtime_error("Invalid k parameter: must be positive");
+    throw std::runtime_error("k parameter must be set before using scenario reduction. "
+                              "Use set_k_value() or set_scenario_reduction_config() with k parameter.");
   }
   
   if (static_cast<ScenarioIndex>(k_value) > nbScenarios) {
@@ -213,7 +217,6 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
       // Extract parameters directly from attributes in the ScenarioReductionConfig group
       
       // Extract k parameter
-      int k_value = 5; // Default value
       try {
         netCDF::NcGroupAtt kAtt = cfgGroup.getAtt("k");
         if (!kAtt.isNull()) {
@@ -277,13 +280,9 @@ void DiscreteScenarioSet::serialize(const netCDF::NcGroup& group) const
   
   // Serialize the scenario reduction configuration if it exists
   if (f_scenario_reduction_config.first && f_scenario_reduction_config.second) {
-    // Create a new group for the scenario reduction configuration
     netCDF::NcGroup cfgGroup = group.addGroup("ScenarioReductionConfig");
-    
-    // Store parameters directly as attributes in the ScenarioReductionConfig group
-    
+        
     // k parameter - number of scenarios to select
-    int k_value = 5; // Default value for testing
     cfgGroup.putAtt("k", netCDF::NcType::nc_INT, k_value);
     
     // ell parameter - power for Wasserstein distance
@@ -298,7 +297,7 @@ void DiscreteScenarioSet::serialize(const netCDF::NcGroup& group) const
     double rho = 0.0; // Default value for testing
     cfgGroup.putAtt("rho", netCDF::NcType::nc_DOUBLE, rho);
     
-    // shuffle parameter - optional solver parameter
+    // shuffle parameter - optional solver parameter for LocalSearch methods
     bool shuffle = false; // Default value for testing
     int shuffle_int = shuffle ? 1 : 0;
     cfgGroup.putAtt("shuffle", netCDF::NcType::nc_INT, shuffle_int);

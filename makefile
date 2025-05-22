@@ -33,7 +33,7 @@
 StcBlkOBJ = $(StcBlkSDR)/obj/DiscreteScenarioSet.o \
 	$(StcBlkSDR)/obj/StochasticBlock.o
 
-StcBlkINC = -I$(StcBlkSDR)/include -I$(StcBlkSDR)/../CapacitatedFacilityLocationBlock/include -I$(StcBlkSDR)/../BinaryKnapsackBlock/include -I$(StcBlkSDR)/../MCFBlock/include
+StcBlkINC = -I$(StcBlkSDR)/include -I$(StcBlkSDR)/../CapacitatedFacilityLocationBlock/include -I$(StcBlkSDR)/../BinaryKnapsackBlock/include -I$(StcBlkSDR)/../MCFBlock/include -I$(StcBlkSDR)/../MILPSolver/include
 
 StcBlkH   = $(StcBlkSDR)/include/ScenarioGenerator.h \
 	$(StcBlkSDR)/include/DiscreteScenarioSet.h \
@@ -43,7 +43,8 @@ StcBlkH   = $(StcBlkSDR)/include/ScenarioGenerator.h \
 	$(StcBlkSDR)/../BinaryKnapsackBlock/include/BinaryKnapsackBlock.h \
 	$(StcBlkSDR)/../BinaryKnapsackBlock/include/DPBinaryKnapsackSolver.h \
 	$(StcBlkSDR)/../MCFBlock/include/MCFBlock.h \
-	$(StcBlkSDR)/../MCFBlock/include/MCFSolver.h
+	$(StcBlkSDR)/../MCFBlock/include/MCFSolver.h \
+	$(StcBlkSDR)/../MILPSolver/include/MILPSolver.h
 
 # clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

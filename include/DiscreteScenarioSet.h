@@ -174,6 +174,28 @@ public:
   */
  void deserialize( const netCDF::NcGroup & group ) override;
 
+ /**
+  * @brief Serialize the object to a netCDF group
+  * 
+  * Extends the base class serialization to include scenario reduction configuration.
+  * Creates a "ScenarioReductionConfig" group if the configuration exists.
+  * 
+  * This method:
+  * 1. First calls the base class serialize to save basic scenario data
+  * 2. Checks if scenario reduction configuration exists
+  * 3. If it exists, creates a "ScenarioReductionConfig" group
+  * 4. Creates "BlockConfig" and "SolverConfig" subgroups
+  * 5. Writes parameters like k, ell, and algorithm to these groups
+  * 
+  * Implementation notes:
+  * - Only serializes the configuration if it exists
+  * - Follows SMS++ netCDF serialization patterns
+  * - Preserves all configuration parameters
+  * 
+  * @param group The netCDF group to serialize the object to
+  */
+ void serialize(const netCDF::NcGroup& group) const;
+
  virtual ~DiscreteScenarioSet();
 
 /** @} ---------------------------------------------------------------------*/
@@ -382,6 +404,18 @@ public:
   * @param solver_config BlockSolverConfig containing algorithm and solver settings
   */
  void set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config);
+ 
+ /**
+  * @brief Set the scenario reduction configuration with k parameter
+  * 
+  * Convenience method that sets both the configuration objects and the k parameter.
+  * This ensures that k_value is properly set for scenario reduction.
+  * 
+  * @param block_config BlockConfig containing reduction parameters 
+  * @param solver_config BlockSolverConfig containing algorithm and solver settings
+  * @param k Number of scenarios to select (must be > 0 and <= nbScenarios)
+  */
+ void set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config, int k);
 
 /** @} ---------------------------------------------------------------------*/
 /*---------------- METHODS FOR ScenarioReduction FIELDS --------------------*/
@@ -403,6 +437,17 @@ public:
  
  /// Check if the scenario pool has been initialized
  [[nodiscard]] bool is_pool_initialized() const;
+ 
+ /// Get the k parameter for scenario reduction
+ [[nodiscard]] int get_k_value() const { return k_value; }
+ 
+ /// Set the k parameter for scenario reduction
+ void set_k_value(int k) {
+     if (k <= 0) {
+         throw std::invalid_argument("k_value must be positive");
+     }
+     k_value = k;
+ }
  
  /// Access an individual scenario value
  [[nodiscard]] double get_scenario_value(ScenarioIndex scenario_idx, ScenarioSize component_idx) const {
@@ -443,27 +488,7 @@ protected:
 
  // Use base class deserialize and serialize from the public section
  
- /**
-  * @brief Serialize the object to a netCDF group
-  * 
-  * Extends the base class serialization to include scenario reduction configuration.
-  * Creates a "ScenarioReductionConfig" group if the configuration exists.
-  * 
-  * This method:
-  * 1. First calls the base class serialize to save basic scenario data
-  * 2. Checks if scenario reduction configuration exists
-  * 3. If it exists, creates a "ScenarioReductionConfig" group
-  * 4. Creates "BlockConfig" and "SolverConfig" subgroups
-  * 5. Writes parameters like k, ell, and algorithm to these groups
-  * 
-  * Implementation notes:
-  * - Only serializes the configuration if it exists
-  * - Follows SMS++ netCDF serialization patterns
-  * - Preserves all configuration parameters
-  * 
-  * @param group The netCDF group to serialize the object to
-  */
- void serialize(const netCDF::NcGroup& group) const;
+
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
@@ -500,6 +525,9 @@ private:
  /// Compile-time constants
  static constexpr double DEFAULT_EPSILON = 1e-10;
  static constexpr unsigned long DEFAULT_SEED = 1337;
+ 
+ /// Number of scenarios to select for scenario reduction
+ int k_value;
  
  /**
   * @brief Configuration for scenario reduction
