@@ -449,46 +449,6 @@ public:
      k_value = k;
  }
  
- /// Get the ell parameter (power for Wasserstein distance)
- [[nodiscard]] float get_ell_value() const { return ell_value; }
- 
- /// Set the ell parameter (power for Wasserstein distance)
- void set_ell_value(float ell) {
-     if (ell <= 0.0f) {
-         throw std::invalid_argument("ell_value must be positive");
-     }
-     ell_value = ell;
- }
- 
- /// Get the scenario reduction algorithm
- [[nodiscard]] const std::string& get_algorithm() const { return algorithm; }
- 
- /// Set the scenario reduction algorithm
- void set_algorithm(const std::string& algo) {
-     if (algo.empty()) {
-         throw std::invalid_argument("algorithm cannot be empty");
-     }
-     algorithm = algo;
- }
- 
- /// Get the rho parameter
- [[nodiscard]] double get_rho_value() const { return rho_value; }
- 
- /// Set the rho parameter
- void set_rho_value(double rho) { rho_value = rho; }
- 
- /// Get the shuffle parameter
- [[nodiscard]] bool get_shuffle_value() const { return shuffle_value; }
- 
- /// Set the shuffle parameter
- void set_shuffle_value(bool shuffle) { shuffle_value = shuffle; }
- 
- /// Get the random seed
- [[nodiscard]] unsigned long get_random_seed() const { return random_seed; }
- 
- /// Set the random seed
- void set_random_seed(unsigned long seed) { random_seed = seed; }
- 
  /// Access an individual scenario value
  [[nodiscard]] double get_scenario_value(ScenarioIndex scenario_idx, ScenarioSize component_idx) const {
      if (scenario_idx >= nbScenarios || component_idx >= scenarioSize) {
@@ -571,21 +531,6 @@ private:
  /// Number of scenarios to select for scenario reduction
  ScenarioIndex k_value;
  
- /// Power parameter for Wasserstein distance (typically 2.0 for squared Euclidean)
- float ell_value = DEFAULT_ELL_VALUE;
- 
- /// Scenario reduction algorithm name
- std::string algorithm = "Dupacova";
- 
- /// Solver parameter rho (0.0 for random, 1.0 for Dupačová initialization)
- double rho_value = DEFAULT_RHO_VALUE;
- 
- /// Whether to shuffle scenarios for LocalSearch algorithms
- bool shuffle_value = false;
- 
- /// Random seed for scenario reduction solver
- unsigned long random_seed = DEFAULT_SEED;
- 
  /**
   * @brief Configuration for scenario reduction
   * 
@@ -636,6 +581,31 @@ private:
 /** @name helper methods of the class
  * Miscellaneous functions
  * @{ */
+
+ /// Create scenario reduction configuration with specified parameters
+ /**
+  * @brief Creates a pair of BlockConfig and BlockSolverConfig for scenario reduction
+  * 
+  * If f_scenario_reduction_config is already set (not null), this method does nothing.
+  * Otherwise, it creates the configuration pair and stores it in f_scenario_reduction_config.
+  * 
+  * @param k Number of scenarios to select (mandatory)
+  * @param ell Power parameter for Wasserstein distance (default: 2.0)
+  * @param algorithm Scenario reduction algorithm name (default: "Dupacova")
+  * @param rho Solver parameter (0.0 for random, 1.0 for Dupačová initialization, default: 0.0)
+  * @param shuffle Whether to shuffle scenarios for LocalSearch algorithms (default: false)
+  * @param random_seed Random seed for scenario reduction solver (default: 1337)
+  * 
+  * @note The created configurations are owned by this DiscreteScenarioSet instance
+  *       and will be deleted in the destructor
+  */
+ void create_scenario_reduction_config(
+     ScenarioIndex k,
+     float ell = DEFAULT_ELL_VALUE,
+     const std::string& algorithm = "Dupacova",
+     double rho = DEFAULT_RHO_VALUE,
+     bool shuffle = false,
+     unsigned long random_seed = DEFAULT_SEED);
 
  /// update the variable poolSize
  /** Whenever a size for the pool has been given, update the

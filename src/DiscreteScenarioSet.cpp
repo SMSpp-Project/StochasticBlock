@@ -35,8 +35,9 @@
 
 using namespace SMSpp_di_unipi_it;
 
-// Needed for unique temporary filename generation
+// Needed for unique temporary filename generation and file operations
 #include <chrono>
+#include <cstdio>  // for std::remove
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
@@ -224,40 +225,6 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
         }
       } catch (...) {}
       
-      // Extract ell parameter
-      try {
-        netCDF::NcGroupAtt ellAtt = cfgGroup.getAtt("ell");
-        if (!ellAtt.isNull()) {
-          ellAtt.getValues(&ell_value);
-        }
-      } catch (...) {}
-      
-      // Extract algorithm parameter
-      try {
-        netCDF::NcGroupAtt algoAtt = cfgGroup.getAtt("algorithm");
-        if (!algoAtt.isNull()) {
-          algoAtt.getValues(algorithm);
-        }
-      } catch (...) {}
-      
-      // Extract rho parameter (optional)
-      try {
-        netCDF::NcGroupAtt rhoAtt = cfgGroup.getAtt("rho");
-        if (!rhoAtt.isNull()) {
-          rhoAtt.getValues(&rho_value);
-        }
-      } catch (...) {}
-      
-      // Extract shuffle parameter (optional)
-      int shuffle_int = shuffle_value ? 1 : 0; // Convert bool to int for netCDF
-      try {
-        netCDF::NcGroupAtt shuffleAtt = cfgGroup.getAtt("shuffle");
-        if (!shuffleAtt.isNull()) {
-          shuffleAtt.getValues(&shuffle_int);
-          shuffle_value = (shuffle_int != 0);
-        }
-      } catch (...) {}
-      
       // These parameters are stored internally in the netCDF attributes
       // In a production environment, the values would come from these attributes
       // For our implementation, we'll use the BlockConfig and BlockSolverConfig
@@ -283,22 +250,11 @@ void DiscreteScenarioSet::serialize(const netCDF::NcGroup& group) const
     // k parameter - number of scenarios to select
     cfgGroup.putAtt("k", netCDF::NcType::nc_INT, k_value);
     
-    // ell parameter - power for Wasserstein distance
-    cfgGroup.putAtt("ell", netCDF::NcType::nc_FLOAT, ell_value);
-    
-    // algorithm parameter - method to use for scenario reduction
-    cfgGroup.putAtt("algorithm", algorithm);
-    
-    // rho parameter - optional solver parameter
-    cfgGroup.putAtt("rho", netCDF::NcType::nc_DOUBLE, rho_value);
-    
-    // shuffle parameter - optional solver parameter for LocalSearch methods
-    int shuffle_int = shuffle_value ? 1 : 0;
-    cfgGroup.putAtt("shuffle", netCDF::NcType::nc_INT, shuffle_int);
-    
-    // In a production implementation, we would extract these values from 
-    // the configuration objects or from other sources. For the test implementation,
-    // we're using hardcoded values.
+    // TODO: This serialize method needs to be reworked to properly extract
+    // the other parameters (ell, algorithm, rho, shuffle, random_seed) from
+    // the BlockConfig and BlockSolverConfig objects and serialize them.
+    // Currently these parameters are stored in the configuration objects
+    // but not serialized to the netCDF file.
   }
 }
 
@@ -423,22 +379,23 @@ void DiscreteScenarioSet::apply_scenario_reduction()
   // Extract the k parameter (number of scenarios to select)
   DiscreteScenarioSet::ScenarioIndex k = get_k_parameter(f_scenario_reduction_config.first);
   
-  // Use the configured ell parameter (power for Wasserstein distance)
-  float ell = ell_value;
+  // TODO: Extract these parameters from the BlockConfig and BlockSolverConfig
+  // For now, use default values
+  float ell = DEFAULT_ELL_VALUE;
+  std::string algo = "Dupacova";
+  double rho = DEFAULT_RHO_VALUE;
+  bool shuffle = false;
+  unsigned long random_seed = DEFAULT_SEED;
   
-  // In a real implementation, we would extract from serialized netCDF attributes
+  // In a real implementation, we would extract from the configuration objects
   // Try to extract from BlockConfig if available
   if (f_scenario_reduction_config.first) {
-    // We could read different attributes here in the future
+    // TODO: Extract ell parameter from BlockConfig's static variables Configuration
   }
   
-  // Use the configured algorithm parameter
-  std::string algo = algorithm;
-  
-  // In a real implementation, we would extract from serialized netCDF attributes
   // Try to extract from BlockSolverConfig if available
   if (f_scenario_reduction_config.second) {
-    // We could read different attributes here in the future
+    // TODO: Extract algorithm, rho, shuffle, random_seed from BlockSolverConfig's ComputeConfig
   }
   
   // Clear existing selection
@@ -548,14 +505,9 @@ void DiscreteScenarioSet::apply_scenario_reduction()
         solver->set_algorithm(ScenarioReductionSolver::Algorithm::Dupacova);
       }
       
-      // Apply additional configuration parameters if available
-      // Use the configured rho parameter
-      solver->set_rho(rho_value);
-      
-      // Use the configured shuffle parameter
-      solver->set_shuffle(shuffle_value);
-      
-      // Use the configured random seed
+      // Apply additional configuration parameters
+      solver->set_rho(rho);
+      solver->set_shuffle(shuffle);
       solver->set_random_seed(static_cast<unsigned int>(random_seed));
       
       // Solve the scenario reduction problem
@@ -787,6 +739,141 @@ DiscreteScenarioSet::~DiscreteScenarioSet() {
     delete f_scenario_reduction_config.second;
     f_scenario_reduction_config.second = nullptr;
   }
+}
+
+/*--------------------------------------------------------------------------*/
+/*-------------------- HELPER METHODS IMPLEMENTATION -----------------------*/
+/*--------------------------------------------------------------------------*/
+
+void DiscreteScenarioSet::create_scenario_reduction_config(
+    ScenarioIndex k,
+    float ell,
+    const std::string& algorithm,
+    double rho,
+    bool shuffle,
+    unsigned long random_seed)
+{
+  // Check if configuration is already set
+  if (f_scenario_reduction_config.first != nullptr || 
+      f_scenario_reduction_config.second != nullptr) {
+    // Configuration already exists, do nothing
+    return;
+  }
+  
+  // Validate mandatory k parameter
+  if (k == 0) {
+    throw std::invalid_argument("k must be positive");
+  }
+  
+  // Validate optional parameters
+  if (ell <= 0.0f) {
+    throw std::invalid_argument("ell must be positive");
+  }
+  
+  if (algorithm.empty()) {
+    throw std::invalid_argument("algorithm cannot be empty");
+  }
+  
+  // Update k_value in the class (the only field that remains as a member)
+  k_value = k;
+  
+  // Create temporary txt files for the configurations
+  std::string block_config_content = R"(# BlockConfig for scenario reduction
+BlockConfig
+
+0  # not a differential configuration
+
+# static constraints Configuration - k parameter for scenario reduction
+SimpleConfiguration<int>
+)" + std::to_string(k) + R"(
+
+# dynamic constraints Configuration
+* # [none]
+
+# static variables Configuration - ell parameter
+SimpleConfiguration<double>
+)" + std::to_string(ell) + R"(
+
+# dynamic variables Configuration
+* # [none]
+
+# objective Configuration
+* # [none]
+
+# is_feasible Configuration
+* # [none]
+
+# is_optimal Configuration
+* # [none]
+
+# solution Configuration
+* # [none]
+
+# extra Configuration
+* # [none]
+)";
+
+  std::string solver_config_content = R"(# BlockSolverConfig for scenario reduction
+BlockSolverConfig
+
+0  # not a differential configuration
+
+1  # number of Solver
+ScenarioReductionSolver
+
+1  # number of ComputeConfig
+
+# ComputeConfig for ScenarioReductionSolver
+ComputeConfig
+
+1  # differential mode
+
+0  # number of integer parameters
+
+1  # number of double parameters
+dblRho )" + std::to_string(rho) + R"(
+
+1  # number of string parameters
+strAlgorithm )" + algorithm + R"(
+
+0  # number of vector-of-int parameters
+
+0  # number of vector-of-double parameters
+
+0  # number of vector-of-string parameters
+
+# extra Configuration with shuffle and random_seed
+SimpleConfiguration<std::pair<int,int>>
+)" + std::to_string(shuffle ? 1 : 0) + " " + std::to_string(random_seed) + R"(
+)";
+
+  // Create temporary files
+  std::string block_config_file = "/tmp/sr_block_config_" + 
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".txt";
+  std::string solver_config_file = "/tmp/sr_solver_config_" + 
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".txt";
+  
+  // Write configurations to files
+  std::ofstream block_file(block_config_file);
+  block_file << block_config_content;
+  block_file.close();
+  
+  std::ofstream solver_file(solver_config_file);
+  solver_file << solver_config_content;
+  solver_file.close();
+  
+  // Load configurations from files
+  BlockConfig* block_config = dynamic_cast<BlockConfig*>(
+      Configuration::deserialize(block_config_file));
+  BlockSolverConfig* solver_config = dynamic_cast<BlockSolverConfig*>(
+      Configuration::deserialize(solver_config_file));
+  
+  // Clean up temporary files
+  std::remove(block_config_file.c_str());
+  std::remove(solver_config_file.c_str());
+  
+  // Store the configuration pair
+  f_scenario_reduction_config = std::make_pair(block_config, solver_config);
 }
 
 /*--------------------------------------------------------------------------*/
