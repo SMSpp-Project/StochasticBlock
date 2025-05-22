@@ -415,7 +415,7 @@ public:
   * @param solver_config BlockSolverConfig containing algorithm and solver settings
   * @param k Number of scenarios to select (must be > 0 and <= nbScenarios)
   */
- void set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config, int k);
+ void set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex k);
 
 /** @} ---------------------------------------------------------------------*/
 /*---------------- METHODS FOR ScenarioReduction FIELDS --------------------*/
@@ -439,15 +439,55 @@ public:
  [[nodiscard]] bool is_pool_initialized() const;
  
  /// Get the k parameter for scenario reduction
- [[nodiscard]] int get_k_value() const { return k_value; }
+ [[nodiscard]] ScenarioIndex get_k_value() const { return k_value; }
  
  /// Set the k parameter for scenario reduction
- void set_k_value(int k) {
-     if (k <= 0) {
+ void set_k_value(ScenarioIndex k) {
+     if (k == 0) {
          throw std::invalid_argument("k_value must be positive");
      }
      k_value = k;
  }
+ 
+ /// Get the ell parameter (power for Wasserstein distance)
+ [[nodiscard]] float get_ell_value() const { return ell_value; }
+ 
+ /// Set the ell parameter (power for Wasserstein distance)
+ void set_ell_value(float ell) {
+     if (ell <= 0.0f) {
+         throw std::invalid_argument("ell_value must be positive");
+     }
+     ell_value = ell;
+ }
+ 
+ /// Get the scenario reduction algorithm
+ [[nodiscard]] const std::string& get_algorithm() const { return algorithm; }
+ 
+ /// Set the scenario reduction algorithm
+ void set_algorithm(const std::string& algo) {
+     if (algo.empty()) {
+         throw std::invalid_argument("algorithm cannot be empty");
+     }
+     algorithm = algo;
+ }
+ 
+ /// Get the rho parameter
+ [[nodiscard]] double get_rho_value() const { return rho_value; }
+ 
+ /// Set the rho parameter
+ void set_rho_value(double rho) { rho_value = rho; }
+ 
+ /// Get the shuffle parameter
+ [[nodiscard]] bool get_shuffle_value() const { return shuffle_value; }
+ 
+ /// Set the shuffle parameter
+ void set_shuffle_value(bool shuffle) { shuffle_value = shuffle; }
+ 
+ /// Get the random seed
+ [[nodiscard]] unsigned long get_random_seed() const { return random_seed; }
+ 
+ /// Set the random seed
+ void set_random_seed(unsigned long seed) { random_seed = seed; }
  
  /// Access an individual scenario value
  [[nodiscard]] double get_scenario_value(ScenarioIndex scenario_idx, ScenarioSize component_idx) const {
@@ -525,9 +565,26 @@ private:
  /// Compile-time constants
  static constexpr double DEFAULT_EPSILON = 1e-10;
  static constexpr unsigned long DEFAULT_SEED = 1337;
+ static constexpr float DEFAULT_ELL_VALUE = 2.0f;
+ static constexpr double DEFAULT_RHO_VALUE = 0.0;
  
  /// Number of scenarios to select for scenario reduction
- int k_value;
+ ScenarioIndex k_value;
+ 
+ /// Power parameter for Wasserstein distance (typically 2.0 for squared Euclidean)
+ float ell_value = DEFAULT_ELL_VALUE;
+ 
+ /// Scenario reduction algorithm name
+ std::string algorithm = "Dupacova";
+ 
+ /// Solver parameter rho (0.0 for random, 1.0 for Dupačová initialization)
+ double rho_value = DEFAULT_RHO_VALUE;
+ 
+ /// Whether to shuffle scenarios for LocalSearch algorithms
+ bool shuffle_value = false;
+ 
+ /// Random seed for scenario reduction solver
+ unsigned long random_seed = DEFAULT_SEED;
  
  /**
   * @brief Configuration for scenario reduction
@@ -623,7 +680,7 @@ private:
   * @return The validated value of k
   * @throws std::runtime_error If the k parameter is invalid (not positive or too large)
   */
- int get_k_parameter(const BlockConfig* config) const;
+ ScenarioIndex get_k_parameter(const BlockConfig* config) const;
  
  /// Determines if scenario reduction should be used based on configuration
  /** This function checks if scenario reduction is configured properly and

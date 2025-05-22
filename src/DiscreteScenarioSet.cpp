@@ -126,7 +126,7 @@ void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_confi
 }
 
 // Set scenario reduction configuration with k parameter
-void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config, int k)
+void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex k)
 {
   // First set k_value with validation
   set_k_value(k);
@@ -136,19 +136,19 @@ void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_confi
 }
 
 // Extract k parameter with validation
-int DiscreteScenarioSet::get_k_parameter(const BlockConfig* config) const
+DiscreteScenarioSet::ScenarioIndex DiscreteScenarioSet::get_k_parameter(const BlockConfig* config) const
 {
   if (!config) {
     throw std::runtime_error("Invalid configuration for getting k parameter");
   }
   
   // Validate the k parameter
-  if (k_value <= 0) {
+  if (k_value == 0) {
     throw std::runtime_error("k parameter must be set before using scenario reduction. "
                               "Use set_k_value() or set_scenario_reduction_config() with k parameter.");
   }
   
-  if (static_cast<ScenarioIndex>(k_value) > nbScenarios) {
+  if (k_value > nbScenarios) {
     throw std::runtime_error("Invalid k parameter: cannot exceed number of scenarios");
   }
   
@@ -225,7 +225,6 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
       } catch (...) {}
       
       // Extract ell parameter
-      float ell_value = 2.0f; // Default value
       try {
         netCDF::NcGroupAtt ellAtt = cfgGroup.getAtt("ell");
         if (!ellAtt.isNull()) {
@@ -234,7 +233,6 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
       } catch (...) {}
       
       // Extract algorithm parameter
-      std::string algorithm = "Dupacova"; // Default algorithm
       try {
         netCDF::NcGroupAtt algoAtt = cfgGroup.getAtt("algorithm");
         if (!algoAtt.isNull()) {
@@ -243,20 +241,20 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
       } catch (...) {}
       
       // Extract rho parameter (optional)
-      double rho = 0.0; // Default value
       try {
         netCDF::NcGroupAtt rhoAtt = cfgGroup.getAtt("rho");
         if (!rhoAtt.isNull()) {
-          rhoAtt.getValues(&rho);
+          rhoAtt.getValues(&rho_value);
         }
       } catch (...) {}
       
       // Extract shuffle parameter (optional)
-      int shuffle = 0; // Default value (false)
+      int shuffle_int = shuffle_value ? 1 : 0; // Convert bool to int for netCDF
       try {
         netCDF::NcGroupAtt shuffleAtt = cfgGroup.getAtt("shuffle");
         if (!shuffleAtt.isNull()) {
-          shuffleAtt.getValues(&shuffle);
+          shuffleAtt.getValues(&shuffle_int);
+          shuffle_value = (shuffle_int != 0);
         }
       } catch (...) {}
       
@@ -286,20 +284,16 @@ void DiscreteScenarioSet::serialize(const netCDF::NcGroup& group) const
     cfgGroup.putAtt("k", netCDF::NcType::nc_INT, k_value);
     
     // ell parameter - power for Wasserstein distance
-    float ell_value = 2.0f; // Default value for testing
     cfgGroup.putAtt("ell", netCDF::NcType::nc_FLOAT, ell_value);
     
     // algorithm parameter - method to use for scenario reduction
-    std::string algorithm = "Dupacova"; // Default value for testing
     cfgGroup.putAtt("algorithm", algorithm);
     
     // rho parameter - optional solver parameter
-    double rho = 0.0; // Default value for testing
-    cfgGroup.putAtt("rho", netCDF::NcType::nc_DOUBLE, rho);
+    cfgGroup.putAtt("rho", netCDF::NcType::nc_DOUBLE, rho_value);
     
     // shuffle parameter - optional solver parameter for LocalSearch methods
-    bool shuffle = false; // Default value for testing
-    int shuffle_int = shuffle ? 1 : 0;
+    int shuffle_int = shuffle_value ? 1 : 0;
     cfgGroup.putAtt("shuffle", netCDF::NcType::nc_INT, shuffle_int);
     
     // In a production implementation, we would extract these values from 
@@ -409,10 +403,10 @@ bool DiscreteScenarioSet::should_use_scenario_reduction(ScenarioIndex size) cons
   
   try {
     // Try to get the k parameter and validate it
-    int k = get_k_parameter(f_scenario_reduction_config.first);
+    DiscreteScenarioSet::ScenarioIndex k = get_k_parameter(f_scenario_reduction_config.first);
     
     // If k is valid, scenario reduction can be used
-    return (k > 0 && static_cast<ScenarioIndex>(k) <= nbScenarios);
+    return (k > 0 && k <= nbScenarios);
   } catch (const std::exception& e) {
     // If parameter extraction fails, don't use scenario reduction
     return false;
@@ -427,10 +421,10 @@ void DiscreteScenarioSet::apply_scenario_reduction()
   }
   
   // Extract the k parameter (number of scenarios to select)
-  int k = get_k_parameter(f_scenario_reduction_config.first);
+  DiscreteScenarioSet::ScenarioIndex k = get_k_parameter(f_scenario_reduction_config.first);
   
-  // Extract the ell parameter (power for Wasserstein distance)
-  float ell = 2.0f; // Default to squared Euclidean distance
+  // Use the configured ell parameter (power for Wasserstein distance)
+  float ell = ell_value;
   
   // In a real implementation, we would extract from serialized netCDF attributes
   // Try to extract from BlockConfig if available
@@ -438,8 +432,8 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     // We could read different attributes here in the future
   }
   
-  // Use algorithm parameter
-  std::string algorithm = "Dupacova"; // Default algorithm
+  // Use the configured algorithm parameter
+  std::string algo = algorithm;
   
   // In a real implementation, we would extract from serialized netCDF attributes
   // Try to extract from BlockSolverConfig if available
@@ -519,7 +513,7 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     solver->set_ell(ell);
     
     // Configure the solver based on the selected algorithm
-    if (algorithm == "MILP") {
+    if (algo == "MILP") {
       // Create a MILP solver for exact scenario selection
       auto milpSolver = std::make_unique<MILPSolver>();
       
@@ -543,11 +537,11 @@ void DiscreteScenarioSet::apply_scenario_reduction()
       }
     } else {
       // Configure the heuristic solver based on the algorithm
-      if (algorithm == "Dupacova") {
+      if (algo == "Dupacova") {
         solver->set_algorithm(ScenarioReductionSolver::Algorithm::Dupacova);
-      } else if (algorithm == "BestFit") {
+      } else if (algo == "BestFit") {
         solver->set_algorithm(ScenarioReductionSolver::Algorithm::BestFit);
-      } else if (algorithm == "FirstFit") {
+      } else if (algo == "FirstFit") {
         solver->set_algorithm(ScenarioReductionSolver::Algorithm::FirstFit);
       } else {
         // Unknown algorithm, fall back to default
@@ -555,18 +549,14 @@ void DiscreteScenarioSet::apply_scenario_reduction()
       }
       
       // Apply additional configuration parameters if available
-      // Use hardcoded value for rho parameter
-      double rho = 0.0; // Default value
-      solver->set_rho(rho);
+      // Use the configured rho parameter
+      solver->set_rho(rho_value);
       
-      // Use hardcoded value for shuffle parameter
-      bool shuffle = false; // Default value
-      solver->set_shuffle(shuffle);
+      // Use the configured shuffle parameter
+      solver->set_shuffle(shuffle_value);
       
-      // Get random_seed parameter
-      // In a production implementation, we would extract this from netCDF attributes
-      unsigned int seed = DEFAULT_SEED; // Default value
-      solver->set_random_seed(seed);
+      // Use the configured random seed
+      solver->set_random_seed(static_cast<unsigned int>(random_seed));
       
       // Solve the scenario reduction problem
       int status = solver->compute();
