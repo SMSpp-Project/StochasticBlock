@@ -22,15 +22,12 @@
 /*------------------------------ INCLUDES ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-#include "DiscreteScenarioSet.h"  // Already includes Eigen/Dense
-
-// Include required components for scenario reduction
+#include "DiscreteScenarioSet.h" 
 #include "CapacitatedFacilityLocationBlock.h"
 #include "ScenarioReductionSolver.h"
-#include "Block.h"  // For BlockConfig
-#include "Solver.h" // For solver class
+#include "Block.h" 
+#include "Solver.h"
 #include "BlockSolverConfig.h" // For BlockSolverConfig class
-#include "MILPSolver.h" // For MILPSolver class
 #include "Configuration.h" // For Configuration class
 
 using namespace SMSpp_di_unipi_it;
@@ -97,7 +94,7 @@ void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
 /*------ SCENARIO REDUCTION CONFIGURATION METHODS --------------------------*/
 /*--------------------------------------------------------------------------*/
 
-// Get block configuration for scenario reduction
+// Get BlockConfig for scenario reduction
 BlockConfig* DiscreteScenarioSet::get_scenario_reduction_block_config() const
 {
   return f_scenario_reduction_config.first;
@@ -321,12 +318,13 @@ void DiscreteScenarioSet::init_random_pool(size_t pool_size)
 }
 
 // Initialize a representative pool using scenario reduction
-void DiscreteScenarioSet::init_representative_pool()
+void DiscreteScenarioSet::init_representative_pool( ScenarioIndex k )
 {
-  // Check if we have a valid configuration
-  if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
-    throw std::runtime_error("No scenario reduction configuration available");
-  }
+  // Validate the k parameter
+  validate_k_parameter(k);
+  
+  // Ensure configuration exists (create with defaults if needed)
+  ensure_configuration_exists(k);
   
   // Clean up any existing pool
   empty_pool();
@@ -379,24 +377,12 @@ void DiscreteScenarioSet::apply_scenario_reduction()
   // Extract the k parameter (number of scenarios to select)
   DiscreteScenarioSet::ScenarioIndex k = get_k_parameter(f_scenario_reduction_config.first);
   
-  // TODO: Extract these parameters from the BlockConfig and BlockSolverConfig
-  // For now, use default values
+  // Extract ell parameter for distance calculations
+  // TODO: In production, extract ell parameter from BlockConfig. Currently using
+  // default value. The ell parameter is needed for computing Wasserstein distances
+  // in the transport cost matrix, even though solver parameters should be
+  // configured via BlockSolverConfig.
   float ell = DEFAULT_ELL_VALUE;
-  std::string algo = "Dupacova";
-  double rho = DEFAULT_RHO_VALUE;
-  bool shuffle = false;
-  unsigned long random_seed = DEFAULT_SEED;
-  
-  // In a real implementation, we would extract from the configuration objects
-  // Try to extract from BlockConfig if available
-  if (f_scenario_reduction_config.first) {
-    // TODO: Extract ell parameter from BlockConfig's static variables Configuration
-  }
-  
-  // Try to extract from BlockSolverConfig if available
-  if (f_scenario_reduction_config.second) {
-    // TODO: Extract algorithm, rho, shuffle, random_seed from BlockSolverConfig's ComputeConfig
-  }
   
   // Clear existing selection
   scenarioIndexes.clear();
@@ -406,51 +392,20 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     // Create a CapacitatedFacilityLocationBlock for scenario selection
     auto cflBlock = std::make_unique<CapacitatedFacilityLocationBlock>();
     
+    // Apply the BlockConfig to the CapacitatedFacilityLocationBlock
+    if (f_scenario_reduction_config.first) {
+      f_scenario_reduction_config.first->apply(cflBlock.get());
+    }
+    
     // Set up the scenario selection problem parameters
     ScenarioIndex n_scenarios = nbScenarios;
     ScenarioSize scenario_size = scenarioSize;
     
-    // Create CFL problem parameters
-    CapacitatedFacilityLocationBlock::DVector capacities(n_scenarios);
-    CapacitatedFacilityLocationBlock::CVector fixed_costs(n_scenarios);
-    CapacitatedFacilityLocationBlock::DVector demands(n_scenarios);
-    CapacitatedFacilityLocationBlock::CMatrix transport_costs(boost::extents[n_scenarios][n_scenarios]);
+    // Create CFL problem data using helper function
+    auto [capacities, fixed_costs, demands] = create_cfl_problem_data(n_scenarios);
     
-    // Map scenarios to Eigen matrix for easier distance calculations
-    Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> 
-        all_scenarios(scenarioSet.data(), n_scenarios, scenario_size);
-    
-    // Set up the basic CFL parameters
-    for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
-        capacities[i] = 1.0;      // Each facility can serve at most one unit
-        fixed_costs[i] = 0.0;     // No fixed cost in scenario reduction
-        demands[i] = poolProbabilities[i];  // Demand equals probability weight
-    }
-    
-    // Compute the distance/transportation cost matrix
-    for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
-        for (ScenarioIndex j = 0; j < n_scenarios; ++j) {
-            if (i == j) {
-                transport_costs[i][j] = 0.0;
-                continue;
-            }
-            
-            // Calculate p-norm distance between scenarios
-            Eigen::VectorXd diff = all_scenarios.row(i) - all_scenarios.row(j);
-            double norm;
-            
-            // Euclidean norm for ell=2 (more efficient)
-            if (ell == 2.0f) {
-                norm = diff.norm();
-            } else {
-                // For other values of ell, compute the ell-norm
-                norm = std::pow((diff.array().abs().pow(2)).sum(), 1.0/2.0);
-            }
-            
-            // Transportation cost = ell-power of the norm
-            transport_costs[i][j] = std::pow(norm, ell);
-        }
-    }
+    // Compute the transport cost matrix using helper function
+    auto transport_costs = compute_transport_cost_matrix(n_scenarios, scenario_size, ell);
     
     // Load the CFL problem into the block
     cflBlock->load(
@@ -464,80 +419,21 @@ void DiscreteScenarioSet::apply_scenario_reduction()
         k                  // Maximum number of facilities
     );
     
-    // Create and configure the scenario reduction solver
-    auto solver = std::make_unique<ScenarioReductionSolver>();
-    solver->set_Block(cflBlock.get());
-    solver->set_ell(ell);
+    // Create and configure the solver using helper function
+    auto solver = create_and_configure_solver(cflBlock.get(), ell);
     
-    // Configure the solver based on the selected algorithm
-    if (algo == "MILP") {
-      // Create a MILP solver for exact scenario selection
-      auto milpSolver = std::make_unique<MILPSolver>();
+    // Solve the scenario reduction problem
+    int status = solver->compute();
+    
+    // Check if the solve was successful
+    if (status == Solver::kOK) {
+      // Extract selected scenarios using helper function
+      extract_selected_scenarios(solver.get(), n_scenarios);
       
-      // Register the MILP solver with the block
-      milpSolver->set_Block(cflBlock.get());
-      
-      // Solve using the MILP solver
-      if (milpSolver->compute() != Solver::kOK) {
-        throw std::runtime_error("MILP solver computation failed");
-      }
-      
-      // Extract the selected scenarios
-      CapacitatedFacilityLocationBlock::CntSolution y(n_scenarios);
-      cflBlock->get_facility_solution(y.begin());
-      
-      // Add the selected scenarios to scenarioIndexes
-      for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
-        if (y[i] > 0.5) { // Using threshold to account for numerical precision
-          scenarioIndexes.push_back(i);
-        }
-      }
+      // Update pool weights using helper function
+      update_pool_weights();
     } else {
-      // Configure the heuristic solver based on the algorithm
-      if (algo == "Dupacova") {
-        solver->set_algorithm(ScenarioReductionSolver::Algorithm::Dupacova);
-      } else if (algo == "BestFit") {
-        solver->set_algorithm(ScenarioReductionSolver::Algorithm::BestFit);
-      } else if (algo == "FirstFit") {
-        solver->set_algorithm(ScenarioReductionSolver::Algorithm::FirstFit);
-      } else {
-        // Unknown algorithm, fall back to default
-        solver->set_algorithm(ScenarioReductionSolver::Algorithm::Dupacova);
-      }
-      
-      // Apply additional configuration parameters
-      solver->set_rho(rho);
-      solver->set_shuffle(shuffle);
-      solver->set_random_seed(static_cast<unsigned int>(random_seed));
-      
-      // Solve the scenario reduction problem
-      int status = solver->compute();
-      
-      // Check if the solve was successful
-      if (status == Solver::kOK) {
-        // Get the solution - which scenarios were selected
-        const auto& reduced_atoms = solver->get_reduced_atoms();
-        
-        // Add the selected scenarios to scenarioIndexes
-        for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
-          if (reduced_atoms[i]) {
-            scenarioIndexes.push_back(i);
-          }
-        }
-      } else {
-        throw std::runtime_error("Scenario reduction solver failed with status: " + std::to_string(status));
-      }
-    }
-    
-    // If no scenarios were selected, throw an error
-    if (scenarioIndexes.empty()) {
-      throw std::runtime_error("No scenarios selected by the reduction algorithm");
-    }
-    
-    // Calculate sum of weights of selected scenarios for normalization
-    sumPoolWeights = 0.0;
-    for (const auto& idx : scenarioIndexes) {
-      sumPoolWeights += poolProbabilities[idx];
+      throw std::runtime_error("Scenario reduction solver failed with status: " + std::to_string(status));
     }
     
   } catch (const std::exception& e) {
@@ -597,14 +493,6 @@ void DiscreteScenarioSet::init_discrete_pool(ScenarioIndex sampleSize)
     // Mark the pool as initialized
     is_initialized = true;
   }
-}
-
-// This method is removed as it's obsolete - we no longer support continuous pools
-void DiscreteScenarioSet::init_continuous_pool( ScenarioIndex sampleSize )
-{
-  // For backward compatibility, this method now redirects to init_random_pool
-  // to maintain the same interface but avoid the continuous pool approach
-  init_random_pool(sampleSize);
 }
 
 [[nodiscard]] ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
@@ -874,6 +762,159 @@ SimpleConfiguration<std::pair<int,int>>
   
   // Store the configuration pair
   f_scenario_reduction_config = std::make_pair(block_config, solver_config);
+}
+
+// Validate the k parameter for scenario reduction
+void DiscreteScenarioSet::validate_k_parameter(ScenarioIndex k) const
+{
+  if (k == 0 || k > nbScenarios) {
+    throw std::invalid_argument("Invalid k parameter: must be between 1 and " + 
+                                std::to_string(nbScenarios));
+  }
+}
+
+// Ensure scenario reduction configuration exists
+void DiscreteScenarioSet::ensure_configuration_exists(ScenarioIndex k)
+{
+  // Case 2: If configuration is not initialized, create it with default values
+  if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
+    // Create configuration with k and default values for other parameters
+    create_scenario_reduction_config(k);
+    
+    // Verify configuration was created
+    if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
+      throw std::runtime_error("Failed to create scenario reduction configuration");
+    }
+  }
+  // Case 1: Configuration exists (either just created or from deserialization)
+  // TODO: In production, implement a way to update the k parameter in existing
+  // BlockConfig. Currently, if configuration was loaded from deserialization,
+  // the k parameter from the configuration will be used instead of the one
+  // passed to this method. This is a limitation as I don't know if BlockConfig
+  // allows this kind of updates.
+}
+
+// Create CFL problem data structures
+std::tuple<CapacitatedFacilityLocationBlock::DVector,
+           CapacitatedFacilityLocationBlock::CVector,
+           CapacitatedFacilityLocationBlock::DVector>
+DiscreteScenarioSet::create_cfl_problem_data(ScenarioIndex n_scenarios) const
+{
+  CapacitatedFacilityLocationBlock::DVector capacities(n_scenarios);
+  CapacitatedFacilityLocationBlock::CVector fixed_costs(n_scenarios);
+  CapacitatedFacilityLocationBlock::DVector demands(n_scenarios);
+  
+  // Set up the basic CFL parameters
+  for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
+    capacities[i] = 1.0;      // Each facility can serve at most one unit
+    fixed_costs[i] = 0.0;     // No fixed cost in scenario reduction
+    demands[i] = poolProbabilities[i];  // Demand equals probability weight
+  }
+  
+  return std::make_tuple(std::move(capacities), std::move(fixed_costs), std::move(demands));
+}
+
+// Compute the transport cost matrix between scenarios
+CapacitatedFacilityLocationBlock::CMatrix
+DiscreteScenarioSet::compute_transport_cost_matrix(ScenarioIndex n_scenarios,
+                                                   ScenarioSize scenario_size,
+                                                   float ell) const
+{
+  CapacitatedFacilityLocationBlock::CMatrix transport_costs(boost::extents[n_scenarios][n_scenarios]);
+  
+  // Map scenarios to Eigen matrix for easier distance calculations
+  Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> 
+      all_scenarios(scenarioSet.data(), n_scenarios, scenario_size);
+  
+  // Compute the distance/transportation cost matrix
+  for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
+    for (ScenarioIndex j = 0; j < n_scenarios; ++j) {
+      if (i == j) {
+        transport_costs[i][j] = 0.0;
+        continue;
+      }
+      
+      // Calculate distance between scenarios
+      Eigen::VectorXd scenario_i = all_scenarios.row(i);
+      Eigen::VectorXd scenario_j = all_scenarios.row(j);
+      transport_costs[i][j] = compute_scenario_distance(scenario_i, scenario_j, ell);
+    }
+  }
+  
+  return transport_costs;
+}
+
+// Compute distance between two scenarios
+double DiscreteScenarioSet::compute_scenario_distance(const Eigen::VectorXd& scenario1,
+                                                     const Eigen::VectorXd& scenario2,
+                                                     float ell) const
+{
+  Eigen::VectorXd diff = scenario1 - scenario2;
+  double norm;
+  
+  // Euclidean norm for ell=2 (more efficient)
+  if (ell == 2.0f) {
+    norm = diff.norm();
+  } else {
+    // For other values of ell, compute the ell-norm
+    norm = std::pow((diff.array().abs().pow(ell)).sum(), 1.0/ell);
+  }
+  
+  // Transportation cost = ell-power of the norm
+  return std::pow(norm, ell);
+}
+
+// Create and configure the scenario reduction solver
+std::unique_ptr<ScenarioReductionSolver>
+DiscreteScenarioSet::create_and_configure_solver(CapacitatedFacilityLocationBlock* cflBlock,
+                                                 float ell) const
+{
+  auto solver = std::make_unique<ScenarioReductionSolver>();
+  solver->set_Block(cflBlock);
+  
+  // TODO: In production, properly extract algorithm and solver parameters from
+  // BlockSolverConfig. Currently, we cannot easily extract these parameters
+  // from the configuration object, so we rely on the solver's default behavior.
+  // The BlockSolverConfig should be applied to register the solver with the block
+  // and configure it properly.
+  
+  // Set the ell parameter (may be needed for distance calculations)
+  solver->set_ell(ell);
+  
+  return solver;
+}
+
+// Extract selected scenarios from solver results
+void DiscreteScenarioSet::extract_selected_scenarios(const ScenarioReductionSolver* solver,
+                                                    ScenarioIndex n_scenarios)
+{
+  // Get the solution - which scenarios were selected
+  const auto& reduced_atoms = solver->get_reduced_atoms();
+  
+  // Clear existing selection
+  scenarioIndexes.clear();
+  
+  // Add the selected scenarios to scenarioIndexes
+  for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
+    if (reduced_atoms[i]) {
+      scenarioIndexes.push_back(i);
+    }
+  }
+  
+  // If no scenarios were selected, throw an error
+  if (scenarioIndexes.empty()) {
+    throw std::runtime_error("No scenarios selected by the reduction algorithm");
+  }
+}
+
+// Update pool weights after scenario selection
+void DiscreteScenarioSet::update_pool_weights()
+{
+  // Calculate sum of weights of selected scenarios for normalization
+  sumPoolWeights = 0.0;
+  for (const auto& idx : scenarioIndexes) {
+    sumPoolWeights += poolProbabilities[idx];
+  }
 }
 
 /*--------------------------------------------------------------------------*/

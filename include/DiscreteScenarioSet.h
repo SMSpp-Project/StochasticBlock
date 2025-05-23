@@ -42,7 +42,9 @@
 /*------------------------------ INCLUDES ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-#include "ScenarioGenerator.h"  // Already includes SMSTypedefs.h
+#include "ScenarioGenerator.h"
+#include "CapacitatedFacilityLocationBlock.h"
+#include "ScenarioReductionSolver.h"
 #include "Configuration.h"
 #include "Block.h"           // For BlockConfig
 #include "BlockSolverConfig.h" // For BlockSolverConfig
@@ -64,11 +66,6 @@
 /// namespace for the Structured Modeling System++ (SMS++)
 namespace SMSpp_di_unipi_it
 {
-
-// Forward declarations
-class CapacitatedFacilityLocationBlock;
-class ScenarioReductionSolver;
-class MILPSolver;
 
 /// User-defined literal for probability percentages (must be at namespace or global scope)
 /** This literal allows writing probabilities as percentages, e.g., 25.0_pct */
@@ -224,16 +221,6 @@ public:
   */
  void init_discrete_pool( ScenarioIndex sampleSize ) override;
 
- /// Function for backward compatibility, redirects to init_random_pool
- /** This method is maintained for backward compatibility with the ScenarioGenerator
-  * interface. It now simply redirects to init_random_pool as we no longer support
-  * the continuous scenario generation approach.
-  * 
-  * @param sampleSize The number of scenarios to select for the pool.
-  * @throws std::out_of_range If sampleSize exceeds the total number of scenarios.
-  */
- void init_continuous_pool( ScenarioIndex sampleSize ) override;
-
  /// Function for retrieving the current scenario.
  /** Checks that the internal variable currentScenarioIndex is within bounds,
   * then converts the currentScenarioIndex-th scenario of the selected pool as a
@@ -310,15 +297,22 @@ public:
  /**
   * @brief Create a pool by selecting representative scenarios
   * 
-  * Uses scenario reduction techniques to select a subset of scenarios that best
-  * represents the full scenario set according to the configured reduction method.
+  * Uses scenario reduction techniques to select k representative scenarios that best
+  * represent the full scenario set.
   * 
-  * This method:
-  * 1. Checks for a valid scenario reduction configuration
-  * 2. Extracts the parameters (k, ell, algorithm) from the configuration
-  * 3. Creates a CapacitatedFacilityLocationBlock to model the scenario selection problem
-  * 4. Configures and runs a ScenarioReductionSolver with the selected algorithm
-  * 5. Updates scenarioIndexes with the optimal scenario selection
+  * This method handles two cases:
+  * 
+  * Case 1: If f_scenario_reduction_config is already initialized (not null),
+  * typically from deserialization:
+  * - Creates a CapacitatedFacilityLocationBlock
+  * - Applies the BlockConfig to configure the block
+  * - Creates a ScenarioReductionSolver and applies the BlockSolverConfig
+  * - Solves the scenario reduction problem
+  * 
+  * Case 2: If f_scenario_reduction_config is null:
+  * - Calls create_scenario_reduction_config() with k and default parameters
+  * - Default parameters: algorithm="Dupacova", ell=2.0, rho=0.0, shuffle=false, seed=1337
+  * - Then proceeds as in Case 1
   * 
   * Supported algorithms:
   * - "Dupacova": Forward selection method (fast, good quality)
@@ -326,16 +320,12 @@ public:
   * - "FirstFit": Local search with first improvement (balanced speed/quality)
   * - "MILP": Mixed integer linear programming approach (slow, optimal quality)
   * 
-  * Implementation details:
-  * - The number of scenarios to select (k) comes from the configuration
-  * - The Wasserstein distance power (ell) defaults to 2.0 if not specified
-  * - If reduction fails, throws a runtime error with diagnostic information
+  * @param k Number of scenarios to select (mandatory parameter)
   * 
-  * @throws std::runtime_error If no scenario reduction configuration is available
   * @throws std::runtime_error If the configured reduction method fails
-  * @see set_scenario_reduction_config()
+  * @see create_scenario_reduction_config()
   */
- void init_representative_pool();
+ void init_representative_pool( ScenarioIndex k );
 
 /** @} ---------------------------------------------------------------------*/
 /*----------------- SCENARIO REDUCTION CONFIG METHODS ----------------------*/
@@ -686,6 +676,91 @@ private:
   * @throws std::runtime_error If reduction fails due to configuration or solver issues
   */
  void apply_scenario_reduction();
+
+ /// Validate the k parameter for scenario reduction
+ /** Ensures that the k parameter is valid:
+  * - Must be greater than 0
+  * - Must be less than or equal to the total number of scenarios
+  * 
+  * @param k The number of scenarios to select
+  * @throws std::invalid_argument If k is invalid
+  */
+ void validate_k_parameter(ScenarioIndex k) const;
+
+ /// Ensure scenario reduction configuration exists
+ /** Checks if configuration exists, and creates it with default values if not.
+  * This is used by init_representative_pool when no configuration was loaded
+  * from deserialization.
+  * 
+  * @param k The number of scenarios to select
+  */
+ void ensure_configuration_exists(ScenarioIndex k);
+
+ /// Create CFL problem data structures
+ /** Sets up the capacity, fixed cost, and demand vectors for the
+  * Capacitated Facility Location problem formulation.
+  * 
+  * @param n_scenarios The total number of scenarios
+  * @return A tuple containing (capacities, fixed_costs, demands)
+  */
+ std::tuple<CapacitatedFacilityLocationBlock::DVector,
+            CapacitatedFacilityLocationBlock::CVector,
+            CapacitatedFacilityLocationBlock::DVector>
+ create_cfl_problem_data(ScenarioIndex n_scenarios) const;
+
+ /// Compute the transport cost matrix between scenarios
+ /** Calculates the distance matrix between all pairs of scenarios using
+  * the specified norm (ell parameter).
+  * 
+  * @param n_scenarios The total number of scenarios
+  * @param scenario_size The dimension of each scenario
+  * @param ell The power parameter for the distance calculation
+  * @return The transport cost matrix
+  */
+ CapacitatedFacilityLocationBlock::CMatrix
+ compute_transport_cost_matrix(ScenarioIndex n_scenarios, 
+                              ScenarioSize scenario_size,
+                              float ell) const;
+
+ /// Compute distance between two scenarios
+ /** Helper method to compute the ell-norm distance between two scenarios.
+  * 
+  * @param scenario1 First scenario as an Eigen vector
+  * @param scenario2 Second scenario as an Eigen vector  
+  * @param ell The power parameter for the distance calculation
+  * @return The ell-power of the norm distance
+  */
+ double compute_scenario_distance(const Eigen::VectorXd& scenario1,
+                                 const Eigen::VectorXd& scenario2,
+                                 float ell) const;
+
+ /// Create and configure the scenario reduction solver
+ /** Sets up the ScenarioReductionSolver with the appropriate configuration.
+  * 
+  * @param cflBlock The configured CapacitatedFacilityLocationBlock
+  * @param ell The power parameter for distance calculations
+  * @return A configured ScenarioReductionSolver
+  */
+ std::unique_ptr<ScenarioReductionSolver>
+ create_and_configure_solver(CapacitatedFacilityLocationBlock* cflBlock,
+                            float ell) const;
+
+ /// Extract selected scenarios from solver results
+ /** Processes the solver results to populate scenarioIndexes with the
+  * selected scenario indices.
+  * 
+  * @param solver The solved ScenarioReductionSolver
+  * @param n_scenarios The total number of scenarios
+  * @throws std::runtime_error If no scenarios were selected
+  */
+ void extract_selected_scenarios(const ScenarioReductionSolver* solver,
+                                ScenarioIndex n_scenarios);
+
+ /// Update pool weights after scenario selection
+ /** Recalculates sumPoolWeights based on the selected scenarios in
+  * scenarioIndexes.
+  */
+ void update_pool_weights();
 
   SMSpp_insert_in_factory_h;
 

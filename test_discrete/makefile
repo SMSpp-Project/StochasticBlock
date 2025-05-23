@@ -100,7 +100,7 @@ $(DIR)/$(NAME): $(MOBJ) $(DIR)/test_discretescenarioset.o
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
 # include directives - add MILPS_INC as an extra safety measure
-MINC =  $(SMS++INC) $(StcBlkINC) $(BNDSLVINC) $(LgDSLVINC) $(CFLBkINC) $(MCFBkINC) $(MCFLEINC) $(MILPSINC) $(MILPS_INC) -I../include
+MINC =  $(SMS++INC) $(StcBlkINC) $(BNDSLVINC) $(LgDSLVINC) $(CFLBkINC) $(MCFBkINC) $(MCFLEINC) $(MILPSINC) $(MILPS_INC) -I../include -I../build
 # includes
 MH =    $(SMS++H) $(StcBlkH) $(BNDSLVH) $(LgDSLVH) $(CFLBkH) $(MCFBkH) $(MCFLEH) $(MILPSH)
 
