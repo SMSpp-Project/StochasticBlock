@@ -203,24 +203,6 @@ public:
 
  void set_seed( unsigned long seed ) override;
 
- /// Function to select a subset from the input scenario pool
- /** The function init_discrete_pool selects a subset of scenarios among the
-  * ones that were deserialized from the input. It saves this subset of indices
-  * in the variable scenarioIndexes.
-  * 
-  * This approach preserves the original scenarios without generating new ones,
-  * making it appropriate for scenario reduction when you need to maintain the
-  * original scenarios and just want to select a representative subset.
-  * 
-  * If scenario reduction is configured, the function will first try to use
-  * the appropriate scenario reduction method. If that fails or if no 
-  * configuration is available, it falls back to random selection.
-  * 
-  * @param sampleSize The number of scenarios to select for the pool.
-  * @throws std::out_of_range If sampleSize exceeds the total number of scenarios.
-  */
- void init_discrete_pool( ScenarioIndex sampleSize ) override;
-
  /// Function for retrieving the current scenario.
  /** Checks that the internal variable currentScenarioIndex is within bounds,
   * then converts the currentScenarioIndex-th scenario of the selected pool as a
@@ -272,60 +254,39 @@ public:
  *  @{ */
 
  /**
-  * @brief Create a pool by randomly selecting scenarios
+  * @brief Randomly select scenarios from the available set
   * 
-  * Randomly selects a subset of scenarios from the full scenario set without
-  * any optimization. Each scenario has an equal probability of being selected.
+  * Creates a pool by randomly selecting scenarios with uniform probability.
+  * This provides an unbiased sample suitable for simulation and validation
+  * of decisions made using a smaller representative set.
   * 
-  * This method:
-  * 1. Validates that pool_size is <= nbScenarios
-  * 2. Resets any existing pool (discrete or continuous)
-  * 3. Sets up the internal state for a discrete pool
-  * 4. Generates random indices to select scenarios
-  * 5. Updates sumPoolWeights to normalize probabilities
-  * 
-  * Implementation details:
-  * - Uses std::sample with the internal RNG for unbiased selection
-  * - Stores selected indices in scenarioIndexes
-  * - Computes sumPoolWeights for probability normalization
-  * 
-  * @param pool_size Number of scenarios to include in the pool (must be ≤ total scenarios)
-  * @throws std::invalid_argument If pool_size exceeds the total number of scenarios
+  * @param pool_size Number of scenarios to randomly select
+  * @throws std::invalid_argument If pool_size exceeds the available scenarios
   */
- void init_random_pool(size_t pool_size);
+ void init_random_pool(ScenarioIndex pool_size) override;
 
  /**
-  * @brief Create a pool by selecting representative scenarios
+  * @brief Select the most representative scenarios using optimization
   * 
-  * Uses scenario reduction techniques to select k representative scenarios that best
-  * represent the full scenario set.
+  * Creates a pool of k scenarios that best approximate the full distribution
+  * by minimizing the Wasserstein distance. This produces a high-quality
+  * subset for building optimization models that capture the essential
+  * characteristics of the uncertainty.
   * 
-  * This method handles two cases:
+  * The method can use different algorithms (configurable via set_scenario_reduction_config):
+  * - "Dupacova": Fast forward selection with good quality
+  * - "BestFit": Better quality through local search
+  * - "FirstFit": Balanced speed and quality
+  * - "MILP": Optimal selection (slowest)
   * 
-  * Case 1: If f_scenario_reduction_config is already initialized (not null),
-  * typically from deserialization:
-  * - Creates a CapacitatedFacilityLocationBlock
-  * - Applies the BlockConfig to configure the block
-  * - Creates a ScenarioReductionSolver and applies the BlockSolverConfig
-  * - Solves the scenario reduction problem
+  * If no configuration is provided, uses Dupacova algorithm by default.
   * 
-  * Case 2: If f_scenario_reduction_config is null:
-  * - Calls create_scenario_reduction_config() with k and default parameters
-  * - Default parameters: algorithm="Dupacova", ell=2.0, rho=0.0, shuffle=false, seed=1337
-  * - Then proceeds as in Case 1
-  * 
-  * Supported algorithms:
-  * - "Dupacova": Forward selection method (fast, good quality)
-  * - "BestFit": Local search with best improvement (slower, better quality)
-  * - "FirstFit": Local search with first improvement (balanced speed/quality)
-  * - "MILP": Mixed integer linear programming approach (slow, optimal quality)
-  * 
-  * @param k Number of scenarios to select (mandatory parameter)
-  * 
-  * @throws std::runtime_error If the configured reduction method fails
-  * @see create_scenario_reduction_config()
+  * @param k Number of representative scenarios to select
+  * @throws std::invalid_argument If k is invalid (0 or > available scenarios)
+  * @throws std::runtime_error If the optimization fails
+  * @see set_scenario_reduction_config() to customize the selection algorithm
   */
- void init_representative_pool( ScenarioIndex k );
+ void init_representative_pool( ScenarioIndex k ) override;
 
 /** @} ---------------------------------------------------------------------*/
 /*----------------- SCENARIO REDUCTION CONFIG METHODS ----------------------*/
@@ -547,9 +508,6 @@ private:
   * for selected scenarios. */
  std::vector< double > poolProbabilities;
 
-/** @} ---------------------------------------------------------------------*/
-/*------------------------- FIELDS FOR DISCRETE POOL -------------------------*/
-/*--------------------------------------------------------------------------*/
 /** @name Fields for the discrete pool
    * When the scenario pool is made of a discrete subset of the input scenarios,
    * it is characterized by a std::vector< ScenarioIndex > and the probability
@@ -558,11 +516,7 @@ private:
    * belong to the scenario pool.
  * @{ */
 
- /// holder for the sum of the weights inside the discrete pool
- /** Variable which holds the sum of the weights of the scenarios that were
-  * chosen to be part of the discrete pool, see init_discrete_pool(...).
-  * This variable is set back to 0.0 if the continuous pool is used,
-  * see init_continuous_pool(...). */
+ /// holder for the sum of the weights inside the discrete pool. */
  double sumPoolWeights;
 
 /** @} ---------------------------------------------------------------------*/

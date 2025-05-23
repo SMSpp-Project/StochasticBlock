@@ -292,7 +292,7 @@ static void generateRandomSubset( size_t n , size_t k ,
 }
 
 // Initialize a pool with randomly selected scenarios
-void DiscreteScenarioSet::init_random_pool(size_t pool_size)
+void DiscreteScenarioSet::init_random_pool(ScenarioIndex pool_size)
 {
   // Clean up any existing pool
   empty_pool();
@@ -442,58 +442,6 @@ void DiscreteScenarioSet::apply_scenario_reduction()
   }
 }
 
-void DiscreteScenarioSet::init_discrete_pool(ScenarioIndex sampleSize)
-{
-  // Since we've removed the continuous pool approach, init_discrete_pool 
-  // now has the same functionality as init_random_pool but with additional
-  // support for scenario reduction when available
-
-  // Clean up existing pool
-  empty_pool();
-  
-  // Initialize basic pool parameters
-  sumPoolWeights = 0.0;
-  set_poolSize(sampleSize);
-  currentScenarioIndex = 0;
-
-  // Check if we should use scenario reduction based on configuration
-  bool used_reduction = false;
-  if (should_use_scenario_reduction(sampleSize)) {
-    try {
-      // Try to apply scenario reduction using the configuration
-      apply_scenario_reduction();
-      used_reduction = true;
-    } catch (const std::exception& e) {
-      // If scenario reduction fails, fall back to random selection
-      std::cerr << "Warning: Scenario reduction failed: " << e.what() << std::endl;
-      std::cerr << "Falling back to random scenario selection." << std::endl;
-      used_reduction = false;
-    }
-  }
-  
-  // If scenario reduction was not used or failed, use standard random selection
-  if (!used_reduction) {
-    // We resize instead of reserve to ensure the container has the correct size
-    if (sampleSize > 0) {
-      scenarioIndexes.resize(sampleSize);
-    }
-    generateRandomSubset(nbScenarios, sampleSize, scenarioIndexes, rng);
-  }
-
-  // Save the total probability weights of the pool in sumPoolWeights
-  // Using std::accumulate with lambda for better readability and safety
-  sumPoolWeights = 0.0;
-  
-  if (sampleSize > 0 && !scenarioIndexes.empty()) {
-    sumPoolWeights = std::accumulate(scenarioIndexes.begin(), scenarioIndexes.end(), 0.0,
-      [this](double sum, ScenarioIndex index) -> double {
-        return sum + (index < poolProbabilities.size() ? poolProbabilities[index] : 0.0);
-      });
-    
-    // Mark the pool as initialized
-    is_initialized = true;
-  }
-}
 
 [[nodiscard]] ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
 {
