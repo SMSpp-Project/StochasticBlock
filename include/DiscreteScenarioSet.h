@@ -191,7 +191,7 @@ public:
   * 
   * @param group The netCDF group to serialize the object to
   */
- void serialize(const netCDF::NcGroup& group) const;
+ void serialize(netCDF::NcGroup& group) const override;
 
  virtual ~DiscreteScenarioSet();
 
@@ -695,7 +695,7 @@ private:
   * @param ell The power parameter for distance calculations
   * @return A configured ScenarioReductionSolver
   */
- std::unique_ptr<ScenarioReductionSolver>
+ ScenarioReductionSolver*
  create_and_configure_solver(CapacitatedFacilityLocationBlock* cflBlock,
                             float ell) const;
 

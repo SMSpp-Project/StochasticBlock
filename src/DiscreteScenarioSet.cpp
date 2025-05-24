@@ -35,6 +35,7 @@ using namespace SMSpp_di_unipi_it;
 // Needed for unique temporary filename generation and file operations
 #include <chrono>
 #include <cstdio>  // for std::remove
+#include <numeric> // for std::accumulate
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
@@ -140,17 +141,30 @@ DiscreteScenarioSet::ScenarioIndex DiscreteScenarioSet::get_k_parameter(const Bl
     throw std::runtime_error("Invalid configuration for getting k parameter");
   }
   
+  // Extract k from the extra configuration
+  ScenarioIndex k = 0;
+  if (config->f_extra_Configuration) {
+    auto* simple_config = dynamic_cast<SimpleConfiguration<int>*>(config->f_extra_Configuration);
+    if (simple_config) {
+      k = simple_config->f_value;
+    } else {
+      throw std::runtime_error("Extra configuration is not a SimpleConfiguration<int>");
+    }
+  } else {
+    throw std::runtime_error("No extra configuration found containing k parameter");
+  }
+  
   // Validate the k parameter
-  if (k_value == 0) {
-    throw std::runtime_error("k parameter must be set before using scenario reduction. "
-                              "Use set_k_value() or set_scenario_reduction_config() with k parameter.");
+  if (k == 0) {
+    throw std::runtime_error("k parameter must be set in configuration (value is 0)");
   }
   
-  if (k_value > nbScenarios) {
-    throw std::runtime_error("Invalid k parameter: cannot exceed number of scenarios");
+  if (k > nbScenarios) {
+    throw std::runtime_error("Invalid k parameter: " + std::to_string(k) + 
+                             " exceeds number of scenarios (" + std::to_string(nbScenarios) + ")");
   }
   
-  return k_value;
+  return k;
 }
 
 /*--------------------------------------------------------------------------*/
@@ -159,6 +173,8 @@ DiscreteScenarioSet::ScenarioIndex DiscreteScenarioSet::get_k_parameter(const Bl
 
 void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
 {
+  // ScenarioGenerator::deserialize is pure virtual, so we start directly here
+  
   // Reset state to properly handle multiple deserializations
   currentScenarioIndex = 0;
   poolSize = 0;
@@ -181,77 +197,111 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
     f_scenario_reduction_config.second = nullptr;
   }
   
-  // Compute the two dimensions of the scenarioPool
+  // Deserialize mandatory dimensions
   ::deserialize_dim( group , "NumberScenarios" , nbScenarios , false );
   ::deserialize_dim( group , "ScenarioSize" , scenarioSize , false );
+  
+  if (nbScenarios == 0) {
+    throw std::invalid_argument("NumberScenarios must be positive");
+  }
+  if (scenarioSize == 0) {
+    throw std::invalid_argument("ScenarioSize must be positive");
+  }
 
-  // Deserialize the Scenarios inside the scenarioPool
+  // Deserialize mandatory scenarios data
   scenarioSet.resize( boost::extents[ nbScenarios ][ scenarioSize ] );
   ::deserialize( group , "Scenarios" , scenarioSet , true , false );
 
-  // If weights are not present, assume uniform weights
-  // Use a lambda to create uniform weights when needed
-  auto createUniformWeights = [this]() {
-    // Create vector with uniform weights
-    return std::vector<double>(nbScenarios, 1.0 / nbScenarios);
-  };
-
-  // Load probabilities or create uniform ones
+  // Deserialize probabilities (optional, default to uniform)
   bool probsLoaded = ::deserialize(group, "poolProbabilities", nbScenarios, poolProbabilities);
   
   if (!probsLoaded || poolProbabilities.size() != nbScenarios) {
-    poolProbabilities = createUniformWeights();
+    // Create uniform weights
+    poolProbabilities.assign(nbScenarios, 1.0 / nbScenarios);
   }
   
-  // Check for scenario reduction configuration group
+  // Validate probabilities sum to approximately 1.0
+  double sum = std::accumulate(poolProbabilities.begin(), poolProbabilities.end(), 0.0);
+  if (std::abs(sum - 1.0) > 1e-6) {
+    throw std::invalid_argument("Scenario probabilities must sum to 1.0, got: " + std::to_string(sum));
+  }
+  
+  // Deserialize scenario reduction configuration (optional)
   try {
-    // Check if the ScenarioReductionConfig group exists
     netCDF::NcGroup cfgGroup = group.getGroup("ScenarioReductionConfig");
     if (!cfgGroup.isNull()) {
-      // Create configuration objects
-      BlockConfig* block_cfg = new BlockConfig();
-      BlockSolverConfig* solver_cfg = new BlockSolverConfig();
+      // Deserialize BlockConfig and BlockSolverConfig from their respective subgroups
+      BlockConfig* block_cfg = nullptr;
+      BlockSolverConfig* solver_cfg = nullptr;
       
-      // Extract parameters directly from attributes in the ScenarioReductionConfig group
-      
-      // Extract k parameter
       try {
-        netCDF::NcGroupAtt kAtt = cfgGroup.getAtt("k");
-        if (!kAtt.isNull()) {
-          kAtt.getValues(&k_value);
+        auto blockGroup = cfgGroup.getGroup("BlockConfig");
+        if (!blockGroup.isNull()) {
+          block_cfg = dynamic_cast<BlockConfig*>(Configuration::new_Configuration(blockGroup));
         }
-      } catch (...) {}
+      } catch (...) {
+        // BlockConfig group not found, continue
+      }
       
-      // These parameters are stored internally in the netCDF attributes
-      // In a production environment, the values would come from these attributes
-      // For our implementation, we'll use the BlockConfig and BlockSolverConfig
-      // objects as containers, but we won't be using set_parameter/get_parameter
+      try {
+        auto solverGroup = cfgGroup.getGroup("BlockSolverConfig");
+        if (!solverGroup.isNull()) {
+          solver_cfg = dynamic_cast<BlockSolverConfig*>(Configuration::new_Configuration(solverGroup));
+        }
+      } catch (...) {
+        // BlockSolverConfig group not found, continue
+      }
       
-      // Store the configurations
-      set_scenario_reduction_config(block_cfg, solver_cfg);
+      // If we got valid configurations, store them
+      if (block_cfg && solver_cfg) {
+        set_scenario_reduction_config(block_cfg, solver_cfg);
+        
+        // Sync k_value with the configuration
+        try {
+          k_value = get_k_parameter(block_cfg);
+        } catch (const std::exception& e) {
+          // If k parameter extraction fails, keep default k_value = 0
+          k_value = 0;
+        }
+      } else {
+        // Clean up partial configurations
+        delete block_cfg;
+        delete solver_cfg;
+      }
     }
   } catch (const std::exception& e) {
-    // Configuration not found or invalid, just continue without it
+    // Configuration group not found or invalid, continue without it
   }
 }
 
-void DiscreteScenarioSet::serialize(const netCDF::NcGroup& group) const
+void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
 {
-  // First serialize the base data
-  // (Scenarios and poolProbabilities are assumed to be serialized elsewhere)
+  // Always call base class serialize first
+  ScenarioGenerator::serialize(group);
   
-  // Serialize the scenario reduction configuration if it exists
+  // Serialize mandatory dimensions
+  auto nbScenariosDim = group.addDim("NumberScenarios", nbScenarios);
+  auto scenarioSizeDim = group.addDim("ScenarioSize", scenarioSize);
+  
+  // Serialize mandatory scenarios data
+  auto scenariosVar = group.addVar("Scenarios", netCDF::NcDouble(), {nbScenariosDim, scenarioSizeDim});
+  scenariosVar.putVar(scenarioSet.data());
+  
+  // Serialize probabilities
+  auto probsVar = group.addVar("poolProbabilities", netCDF::NcDouble(), nbScenariosDim);
+  probsVar.putVar(poolProbabilities.data());
+  
+  // Serialize scenario reduction configuration if it exists
   if (f_scenario_reduction_config.first && f_scenario_reduction_config.second) {
     netCDF::NcGroup cfgGroup = group.addGroup("ScenarioReductionConfig");
-        
-    // k parameter - number of scenarios to select
-    cfgGroup.putAtt("k", netCDF::NcType::nc_INT, k_value);
     
-    // TODO: This serialize method needs to be reworked to properly extract
-    // the other parameters (ell, algorithm, rho, shuffle, random_seed) from
-    // the BlockConfig and BlockSolverConfig objects and serialize them.
-    // Currently these parameters are stored in the configuration objects
-    // but not serialized to the netCDF file.
+    // Serialize BlockConfig
+    auto blockGroup = cfgGroup.addGroup("BlockConfig");
+    f_scenario_reduction_config.first->serialize(blockGroup);
+    
+    // Serialize BlockSolverConfig  
+    auto solverGroup = cfgGroup.addGroup("BlockSolverConfig");
+    f_scenario_reduction_config.second->serialize(solverGroup);
   }
 }
 
@@ -377,12 +427,15 @@ void DiscreteScenarioSet::apply_scenario_reduction()
   // Extract the k parameter (number of scenarios to select)
   DiscreteScenarioSet::ScenarioIndex k = get_k_parameter(f_scenario_reduction_config.first);
   
-  // Extract ell parameter for distance calculations
-  // TODO: In production, extract ell parameter from BlockConfig. Currently using
-  // default value. The ell parameter is needed for computing Wasserstein distances
-  // in the transport cost matrix, even though solver parameters should be
-  // configured via BlockSolverConfig.
+  // Extract ell parameter for distance calculations from BlockConfig
   float ell = DEFAULT_ELL_VALUE;
+  if (f_scenario_reduction_config.first->f_static_variables_Configuration) {
+    auto* ell_config = dynamic_cast<SimpleConfiguration<double>*>(
+        f_scenario_reduction_config.first->f_static_variables_Configuration);
+    if (ell_config) {
+      ell = static_cast<float>(ell_config->f_value);
+    }
+  }
   
   // Clear existing selection
   scenarioIndexes.clear();
@@ -419,8 +472,8 @@ void DiscreteScenarioSet::apply_scenario_reduction()
         k                  // Maximum number of facilities
     );
     
-    // Create and configure the solver using helper function
-    auto solver = create_and_configure_solver(cflBlock.get(), ell);
+    // Configure the solver using helper function
+    ScenarioReductionSolver* solver = create_and_configure_solver(cflBlock.get(), ell);
     
     // Solve the scenario reduction problem
     int status = solver->compute();
@@ -428,7 +481,7 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     // Check if the solve was successful
     if (status == Solver::kOK) {
       // Extract selected scenarios using helper function
-      extract_selected_scenarios(solver.get(), n_scenarios);
+      extract_selected_scenarios(solver, n_scenarios);
       
       // Update pool weights using helper function
       update_pool_weights();
@@ -610,8 +663,8 @@ void DiscreteScenarioSet::create_scenario_reduction_config(
     throw std::invalid_argument("algorithm cannot be empty");
   }
   
-  // Update k_value in the class (the only field that remains as a member)
-  k_value = k;
+  // Note: k_value member variable is set during deserialization or via set_k_value()
+  // The configuration created here stores k in f_extra_Configuration for consistency
   
   // Create temporary txt files for the configurations
   std::string block_config_content = R"(# BlockConfig for scenario reduction
@@ -619,9 +672,8 @@ BlockConfig
 
 0  # not a differential configuration
 
-# static constraints Configuration - k parameter for scenario reduction
-SimpleConfiguration<int>
-)" + std::to_string(k) + R"(
+# static constraints Configuration
+* # [none]
 
 # dynamic constraints Configuration
 * # [none]
@@ -645,8 +697,9 @@ SimpleConfiguration<double>
 # solution Configuration
 * # [none]
 
-# extra Configuration
-* # [none]
+# extra Configuration - k parameter for scenario reduction
+SimpleConfiguration<int>
+)" + std::to_string(k) + R"(
 )";
 
   std::string solver_config_content = R"(# BlockSolverConfig for scenario reduction
@@ -813,22 +866,27 @@ double DiscreteScenarioSet::compute_scenario_distance(const Eigen::VectorXd& sce
 }
 
 // Create and configure the scenario reduction solver
-std::unique_ptr<ScenarioReductionSolver>
+ScenarioReductionSolver*
 DiscreteScenarioSet::create_and_configure_solver(CapacitatedFacilityLocationBlock* cflBlock,
                                                  float ell) const
 {
-  auto solver = std::make_unique<ScenarioReductionSolver>();
-  solver->set_Block(cflBlock);
+  // Apply the BlockSolverConfig to register and configure the solver
+  if (f_scenario_reduction_config.second) {
+    f_scenario_reduction_config.second->apply(cflBlock);
+  }
   
-  // TODO: In production, properly extract algorithm and solver parameters from
-  // BlockSolverConfig. Currently, we cannot easily extract these parameters
-  // from the configuration object, so we rely on the solver's default behavior.
-  // The BlockSolverConfig should be applied to register the solver with the block
-  // and configure it properly.
+  // Get the registered solver (ScenarioReductionSolver)
+  auto* base_solver = cflBlock->get_registered_solvers().front();
+  auto* solver = dynamic_cast<ScenarioReductionSolver*>(base_solver);
   
-  // Set the ell parameter (may be needed for distance calculations)
+  if (!solver) {
+    throw std::runtime_error("Failed to get ScenarioReductionSolver from block");
+  }
+  
+  // Set the ell parameter (needed for distance calculations)
   solver->set_ell(ell);
   
+  // Return the solver pointer (block owns it)
   return solver;
 }
 

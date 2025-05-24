@@ -387,6 +387,20 @@ class ScenarioGenerator
  virtual void deserialize( const netCDF::NcGroup & group ) = 0;
 
 /*--------------------------------------------------------------------------*/
+ /// serialize the current ScenarioGenerator to netCDF::NcGroup
+ /** Method to serialize the ScenarioGenerator to a netCDF::NcGroup.
+  * This is the counterpart to deserialize() and should save all the 
+  * information required to reconstruct the ScenarioGenerator state.
+  * 
+  * The base class implementation is empty since there is no base state
+  * to serialize. Derived classes should override this method to save
+  * their specific data.
+  * 
+  * @param group The netCDF group to serialize to
+  */
+ virtual void serialize( netCDF::NcGroup & group ) const {}
+
+/*--------------------------------------------------------------------------*/
  /// destructor
 
  virtual ~ScenarioGenerator() = default; 
