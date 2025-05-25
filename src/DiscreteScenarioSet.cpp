@@ -884,7 +884,7 @@ DiscreteScenarioSet::create_and_configure_solver(CapacitatedFacilityLocationBloc
   }
   
   // Set the ell parameter (needed for distance calculations)
-  solver->set_ell(ell);
+  solver->set_par(ScenarioReductionSolver::dblEll, static_cast<double>(ell));
   
   // Return the solver pointer (block owns it)
   return solver;
