@@ -236,17 +236,18 @@ void ScenarioReductorBlock::deserialize( const netCDF::NcGroup & group )
  }
 
  // read N
- ::deserialize_dim( group , "N" , N );
+ deserialize_dim( group , "N" , N );
 
  // read M
- ::deserialize_dim( group , "M" , M );
+ deserialize_dim( group , "M" , M );
 
  // read dim
- ::deserialize_dim( group , "dim" , dim );
+ deserialize_dim( group , "dim" , dim );
 
  // read AtomsP
  atomsP.resize( boost::extents[ get_N() ][ get_dim() ] );
- ::deserialize( group , "atomsP" , atomsP , true , false );
+ ::deserialize( group , "atomsP" , { get_N() , get_dim() } ,
+                atomsP , true , false );
 
  // read weightsP, if not present, assume uniform weights
  if( ! ::deserialize( group , "weightsP" , get_N() , weightsP ) ) {

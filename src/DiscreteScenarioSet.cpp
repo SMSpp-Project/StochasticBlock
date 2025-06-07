@@ -173,13 +173,14 @@ void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
 void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
 {
   // Compute the two dimensions of the scenarioPool
-  ::deserialize_dim( group , "NumberScenarios" , nbScenarios , false );
+  deserialize_dim( group , "NumberScenarios" , nbScenarios , false );
 
-  ::deserialize_dim( group , "ScenarioSize" , scenarioSize , false );
+  deserialize_dim( group , "ScenarioSize" , scenarioSize , false );
 
   // Deserialize the Scenarios inside the scenarioPool
   scenarioSet.resize( boost::extents[ nbScenarios ][ scenarioSize ] );
-  ::deserialize( group , "Scenarios" , scenarioSet , true , false );
+  ::deserialize( group , "Scenarios" , { nbScenarios , scenarioSize } ,
+                 scenarioSet , true , false );
 
   // If weights are not present, assume uniform weights
   if( ! ::deserialize( group , "ScenarioProbabilities",
