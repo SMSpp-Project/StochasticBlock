@@ -58,9 +58,8 @@ public:
 
  template< typename T >
  CoutSuppressor & operator<<( const T & data ) {
-  if( verbose ) {
+  if( verbose )
    std::cout << data;
-  }
   return( *this );
  }
 
@@ -79,7 +78,7 @@ void simpleNetCDF( const std::string & filename , bool probas ) {
  netCDF::NcFile dataFile( filename , netCDF::NcFile::replace );
  netCDF::NcDim scenarioDim = dataFile.addDim( "NumberScenarios" , 5 );
  netCDF::NcDim dimensionDim = dataFile.addDim( "ScenarioSize" , 10 );
- netCDF::NcVar dataVar = dataFile.addVar( "Scenarios" , netCDF::ncDouble ,
+ netCDF::NcVar dataVar = dataFile.addVar( "Scenarios" , netCDF::NcType::nc_DOUBLE ,
                                           { scenarioDim , dimensionDim } );
  std::vector< double > scenarios( scenarioDim.getSize() *
                                   dimensionDim.getSize() , 0.5 );
@@ -88,7 +87,7 @@ void simpleNetCDF( const std::string & filename , bool probas ) {
  of that var should be false then the default should still make it the
  constant vector 1/5 */
  netCDF::NcVar probVar = dataFile.addVar( "ScenarioProbabilities" ,
-                                          netCDF::ncDouble ,
+                                          netCDF::NcType::nc_DOUBLE ,
                                           scenarioDim );
  if( probas ) {
   std::vector< double > probabilities( scenarioDim.getSize() ,
@@ -129,13 +128,13 @@ void randomNetCDF( const std::string & filename ) {
  netCDF::NcFile dataFile( filename , netCDF::NcFile::replace );
  netCDF::NcDim scenarioDim = dataFile.addDim( "NumberScenarios" , 5 );
  netCDF::NcDim dimensionDim = dataFile.addDim( "ScenarioSize" , 10 );
- netCDF::NcVar dataVar = dataFile.addVar( "Scenarios" , netCDF::ncDouble ,
+ netCDF::NcVar dataVar = dataFile.addVar( "Scenarios" , netCDF::NcType::nc_DOUBLE ,
                                           { scenarioDim , dimensionDim } );
  std::vector< double > scenarios = TruncatedNormalVector(
   scenarioDim.getSize() * dimensionDim.getSize() , mean , stddev , -20.0 , 20.0 );
 
  netCDF::NcVar probVar = dataFile.addVar( "ScenarioProbabilities" ,
-                                          netCDF::ncDouble , scenarioDim );
+                                          netCDF::NcType::nc_DOUBLE , scenarioDim );
  std::vector< double > probabilities( scenarioDim.getSize() ,
                                       1.0 / scenarioDim.getSize() );
  probVar.putVar( probabilities.data() );
