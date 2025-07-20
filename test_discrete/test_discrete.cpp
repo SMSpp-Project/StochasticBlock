@@ -21,7 +21,7 @@
 
 #include <iostream>
 #include <netcdf>
-#include <sstream> // to conditionnaly kill the cout
+#include <sstream> // to conditionally kill the cout
 
 /*--------------------------------------------------------------------------*/
 /*-------------------------------- USING -----------------------------------*/
