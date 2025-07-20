@@ -2,7 +2,7 @@
 ################################ makefile ####################################
 ##############################################################################
 #                                                                            #
-#   makefile of test (for StochasticBlock)                                   #
+#   makefile of test_discrete (for StochasticBlock)                          #
 #                                                                            #
 #                              Antonio Frangioni                             #
 #                          Dipartimento di Informatica                       #
@@ -11,7 +11,7 @@
 ##############################################################################
 
 # module name
-NAME = StochasticBlock_test_discrete
+NAME = test_discrete
 
 # basic directory
 DIR = .
