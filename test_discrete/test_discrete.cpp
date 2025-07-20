@@ -51,7 +51,7 @@ public:
 
  ~CoutSuppressor( ) {
   if( ! verbose ) {
-   // Restore std::cout's original stream buffer
+   // Restore std::cout original stream buffer
    std::cout.rdbuf( old_buf );
   }
  }
@@ -201,7 +201,7 @@ void test_init_random_pool( ) {
 
   std::cout << "    Number of different scenarios: " << dss.get_nbScenarios()
    << std::endl;
-  std::cout << "    Pool initizalizations with various sizes" << std::endl;
+  std::cout << "    Pool initializations with various sizes" << std::endl;
   for( int size : { -1 , 1 , 3 , 1000000 } ) {
    try {
     std::cout << "        Size = " << size << std::endl << "          ";
@@ -250,7 +250,7 @@ int main( int argc , char ** argv ) {
  }
 
  // This message will always print
- std::cout << "Test_discret done" << std::endl;
+ std::cout << "Test_discrete done" << std::endl;
 
  return( 0 );
 }
