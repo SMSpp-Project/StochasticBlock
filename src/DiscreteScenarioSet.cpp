@@ -210,7 +210,8 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
 
   // Deserialize mandatory scenarios data
   scenarioSet.resize( boost::extents[ nbScenarios ][ scenarioSize ] );
-  ::deserialize( group , "Scenarios" , scenarioSet , true , false );
+  std::vector< std::size_t > sizes = { nbScenarios, scenarioSize };
+  ::deserialize( group , "Scenarios" , sizes , scenarioSet , true , false );
 
   // Deserialize probabilities (optional, default to uniform)
   bool probsLoaded = ::deserialize(group, "poolProbabilities", nbScenarios, poolProbabilities);

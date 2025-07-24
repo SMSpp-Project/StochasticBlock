@@ -74,6 +74,14 @@ include $(StcBlkSDR)/makefile
 CFLBkSDR = ../../CapacitatedFacilityLocationBlock
 include $(CFLBkSDR)/makefile-s
 
+# BinaryKnapsackBlock (needed by CapacitatedFacilityLocationBlock)
+BKPBkSDR = ../../BinaryKnapsackBlock
+include $(BKPBkSDR)/makefile
+
+# MCFBlock (needed by CapacitatedFacilityLocationBlock)  
+MCFBkSDR = ../../MCFBlock
+include $(MCFBkSDR)/makefile
+
 # BundleSolver
 BNDSLVSDR = ../../BundleSolver
 include $(BNDSLVSDR)/makefile-s
@@ -89,10 +97,10 @@ include $(MILPSSDR)/makefile-c
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
 # object files - includes all necessary objects
-MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BNDSLVOBJ) $(LgDSLVOBJ) $(CFLBkOBJ) $(MCFBkOBJ) $(MCFLEOBJ)
+MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BNDSLVOBJ) $(LgDSLVOBJ) $(CFLBkOBJ) $(BKPBkOBJ) $(MCFLEOBJ)
 
 # libraries - includes all necessary libraries
-MLIB =  $(BNDSLVLIB) $(LgDSLVLIB) $(CFLBkLIB) $(SMS++LIB) $(MCFBkLIB) $(MCFLELIB) $(MILPSLIB) $(StcBlkLIB)
+MLIB =  $(BNDSLVLIB) $(LgDSLVLIB) $(CFLBkLIB) $(BKPBkLIB) $(SMS++LIB) $(MCFLELIB) $(MILPSLIB) $(StcBlkLIB)
 
 # Final compilation target
 $(DIR)/$(NAME): $(MOBJ) $(DIR)/test_discretescenarioset.o
@@ -101,9 +109,9 @@ $(DIR)/$(NAME): $(MOBJ) $(DIR)/test_discretescenarioset.o
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
 # include directives - add MILPS_INC as an extra safety measure
-MINC =  $(SMS++INC) $(StcBlkINC) $(BNDSLVINC) $(LgDSLVINC) $(CFLBkINC) $(MCFBkINC) $(MCFLEINC) $(MILPSINC) $(MILPS_INC) -I../include -I../build
+MINC =  $(SMS++INC) $(StcBlkINC) $(BNDSLVINC) $(LgDSLVINC) $(CFLBkINC) $(BKPBkINC) $(MCFBkINC) $(MCFLEINC) $(MILPSINC) $(MILPS_INC) -I../include -I../build
 # includes
-MH =    $(SMS++H) $(StcBlkH) $(BNDSLVH) $(LgDSLVH) $(CFLBkH) $(MCFBkH) $(MCFLEH) $(MILPSH)
+MH =    $(SMS++H) $(StcBlkH) $(BNDSLVH) $(LgDSLVH) $(CFLBkH) $(BKPBkH) $(MCFBkH) $(MCFLEH) $(MILPSH)
 
 # compile command
 $(DIR)/test_discretescenarioset.o: $(DIR)/test_discretescenarioset.cpp $(MH)
