@@ -11,7 +11,7 @@
 ##############################################################################
 
 # module name - must match the binary name and source file
-NAME = StochasticBlock_test_discretescenarioset
+NAME = test_discretescenarioset
 
 # basic directory
 DIR = .
@@ -103,7 +103,7 @@ MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BNDSLVOBJ) $(LgDSLVOBJ) $(CFLBkOBJ) $(BKPBkOBJ
 MLIB =  $(BNDSLVLIB) $(LgDSLVLIB) $(CFLBkLIB) $(BKPBkLIB) $(SMS++LIB) $(MCFLELIB) $(MILPSLIB) $(StcBlkLIB)
 
 # Final compilation target
-$(DIR)/$(NAME): $(MOBJ) $(DIR)/test_discretescenarioset.o
+$(DIR)/$(NAME): $(MOBJ) $(DIR)/$(NAME).o
 	$(CC) -o $(DIR)/$(NAME) $^ $(MLIB) $(SW)
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
@@ -114,8 +114,8 @@ MINC =  $(SMS++INC) $(StcBlkINC) $(BNDSLVINC) $(LgDSLVINC) $(CFLBkINC) $(BKPBkIN
 MH =    $(SMS++H) $(StcBlkH) $(BNDSLVH) $(LgDSLVH) $(CFLBkH) $(BKPBkH) $(MCFBkH) $(MCFLEH) $(MILPSH)
 
 # compile command
-$(DIR)/test_discretescenarioset.o: $(DIR)/test_discretescenarioset.cpp $(MH)
-	$(CC) -c $(DIR)/test_discretescenarioset.cpp -o $@ $(MINC) $(SW)
+$(DIR)/$(NAME).o: $(DIR)/$(NAME).cpp $(MH)
+	$(CC) -c $(DIR)/$(NAME).cpp -o $@ $(MINC) $(SW)
 
 # distclean target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
