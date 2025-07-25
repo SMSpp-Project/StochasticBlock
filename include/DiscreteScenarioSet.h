@@ -48,6 +48,7 @@
 #include "Configuration.h"
 #include "Block.h"           // For BlockConfig
 #include "BlockSolverConfig.h" // For BlockSolverConfig
+#include "Solver.h"          // For Solver base class
 
 #include <Eigen/Dense>  // For vector operations
 
@@ -695,7 +696,7 @@ private:
   * @param ell The power parameter for distance calculations
   * @return A configured ScenarioReductionSolver
   */
- ScenarioReductionSolver*
+ Solver*
  create_and_configure_solver(CapacitatedFacilityLocationBlock* cflBlock,
                             float ell) const;
 
@@ -707,7 +708,8 @@ private:
   * @param n_scenarios The total number of scenarios
   * @throws std::runtime_error If no scenarios were selected
   */
- void extract_selected_scenarios(const ScenarioReductionSolver* solver,
+ void extract_selected_scenarios(const Solver* solver,
+                                const CapacitatedFacilityLocationBlock* cflBlock,
                                 ScenarioIndex n_scenarios);
 
  /// Update pool weights after scenario selection
