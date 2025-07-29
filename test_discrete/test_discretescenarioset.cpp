@@ -355,8 +355,10 @@ TestResult test_milp_scenario_reduction() {
     const int scenario_size = 5;
     const int k = 3;
     
-    // Test with CPXMILPSolver (others can be added if available)
-    string solver_name = "CPXMILPSolver";
+    // Test with multiple solvers
+    vector<string> solver_names = {"CPXMILPSolver", "HiGHSMILPSolver"};
+    
+    for (const auto& solver_name : solver_names) {
     
     try {
         // Create distinct scenarios for better testing
@@ -413,11 +415,14 @@ TestResult test_milp_scenario_reduction() {
         // Clean up
         remove(filename.c_str());
         
-        return {true, "MILPSolver scenario reduction successful with " + solver_name};
+        cout << "MILPSolver scenario reduction successful with " << solver_name << endl;
         
     } catch (const exception& e) {
-        return {true, "MILPSolver not available or test skipped: " + string(e.what())};
+        cout << solver_name << " not available or test skipped: " << e.what() << endl;
     }
+    }
+    
+    return {true, "MILPSolver scenario reduction tests completed"};
 }
 
 REGISTER_TEST("MILPSolver Scenario Reduction", test_milp_scenario_reduction);
