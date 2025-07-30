@@ -8,15 +8,11 @@
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  * 
- * \author Romain Pujol \n
- *         Dipartimento di Informatica \n
- *         Universita' di Pisa \n
- * 
  * \author Benoît Tran \n
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  *
- * \copyright &copy; by Antonio Frangioni, Romain Pujol and Benoît Tran
+ * \copyright &copy; by Antonio Frangioni and Benoît Tran
  */
 /*--------------------------------------------------------------------------*/
 /*---------------------------- IMPLEMENTATION ------------------------------*/

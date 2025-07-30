@@ -673,7 +673,7 @@ private:
   * @return The transport cost matrix
   */
  CapacitatedFacilityLocationBlock::CMatrix
- compute_transport_cost_matrix(ScenarioIndex n_scenarios, 
+ virtual compute_transport_cost_matrix(ScenarioIndex n_scenarios, 
                               ScenarioSize scenario_size,
                               float ell) const;
 
@@ -685,7 +685,7 @@ private:
   * @param ell The power parameter for the distance calculation
   * @return The ell-power of the norm distance
   */
- double compute_scenario_distance(const Eigen::VectorXd& scenario1,
+ virtual double compute_scenario_distance(const Eigen::VectorXd& scenario1,
                                  const Eigen::VectorXd& scenario2,
                                  float ell) const;
 

@@ -763,8 +763,7 @@ SimpleConfiguration<double>
 
 # extra Configuration - k parameter for scenario reduction
 SimpleConfiguration<int>
-)" + std::to_string(k) + R"(
-)";
+)" + std::to_string(k) + "\n";
 
   std::string solver_config_content = R"(# BlockSolverConfig for scenario reduction
 BlockSolverConfig
@@ -914,19 +913,8 @@ double DiscreteScenarioSet::compute_scenario_distance(const Eigen::VectorXd& sce
                                                      const Eigen::VectorXd& scenario2,
                                                      float ell) const
 {
-  Eigen::VectorXd diff = scenario1 - scenario2;
-  double norm;
-  
-  // Euclidean norm for ell=2 (more efficient)
-  if (ell == 2.0f) {
-    norm = diff.norm();
-  } else {
-    // For other values of ell, compute the ell-norm
-    norm = std::pow((diff.array().abs().pow(ell)).sum(), 1.0/ell);
-  }
-  
-  // Transportation cost = ell-power of the norm
-  return std::pow(norm, ell);
+  // Transportation cost = ell-power of the euclidean norm
+  return std::pow((scenario1 - scenario2).norm(), ell);
 }
 
 // Create and configure the scenario reduction solver

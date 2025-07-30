@@ -13,9 +13,6 @@
  * - BlockSolverConfig serialization/deserialization
  * - Configuration persistence in DiscreteScenarioSet
  * 
- * The tests follow the pattern established in tests/CapacitatedFacilityLocation/test_minimal.cpp
- * for proper BlockSolverConfig usage.
- * 
  * \author Benoît Tran \n
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
