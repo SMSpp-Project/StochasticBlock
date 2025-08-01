@@ -50,35 +50,26 @@ The `DiscreteScenarioSet` class provides scenario reduction capabilities when bu
 
 Scenario reduction can be configured in three ways:
 
-1. **Using ScenarioReductionConfig class**: The preferred method using a dedicated configuration class:
+1. **Manual Configuration**: Create BlockConfig and BlockSolverConfig objects:
    ```cpp
-   // Create a new configuration with required parameters
-   auto config = new ScenarioReductionConfig(10);  // 10 scenarios to select
+   // Create BlockConfig with k parameter
+   auto* block_config = new BlockConfig();
+   block_config->f_extra_Configuration = new SimpleConfiguration<int>(10);  // k=10
+   block_config->f_static_variables_Configuration = new SimpleConfiguration<double>(2.0);  // ell=2.0
    
-   // Customize configuration
-   config->set_ell(1.5f);  // Use l1.5-Wasserstein distance
-   config->set_algorithm("BestFit");  // Use BestFit algorithm
-   
-   // Use configuration with consistency checking
-   if (!config->check_consistency()) {
-       std::cerr << "Configuration has issues!" << std::endl;
-   }
+   // Create BlockSolverConfig for solver selection
+   auto* solver_config = new BlockSolverConfig(true);  // differential mode
+   solver_config->add_ComputeConfig("ScenarioReductionSolver", nullptr);  // For Dupacova algorithm
+   // Or for MILP solver:
+   // solver_config->add_ComputeConfig("CPXMILPSolver", compute_config);
    
    // Apply to scenario set
-   discreteScenarioSet.set_scenario_reduction_config(config);
+   discreteScenarioSet.set_scenario_reduction_config(block_config, solver_config);
    ```
 
-2. **From netCDF File**: Include a `ScenarioReductionConfig` group in your scenario data file:
-   ```
-   ScenarioReductionConfig/
-   ├── CFLConfig/
-   │   ├── k = [int] (number of scenarios to select)
-   │   └── ell = [float] (Wasserstein distance power, default: 2.0)
-   └── SolverConfig/
-       └── algorithm = [string] ("Dupacova", "BestFit", "FirstFit", or "MILP")
-   ```
+2. **From netCDF File**: The DiscreteScenarioSet can deserialize previously saved configurations from netCDF files. When a `ScenarioReductionConfig` group is present in the file, it will be loaded automatically. Note that this requires the configuration to have been previously serialized using DiscreteScenarioSet's serialize method - you cannot manually create this structure in the netCDF file as it contains serialized BlockConfig and BlockSolverConfig objects. Will be fixed soonish.
 
-3. **Legacy Manual Configuration**: The original approach using generic configuration objects:
+3. **Alternative Configuration Approach**: Using nested configuration objects:
    ```cpp
    auto config = new BlockConfig(false);  // Not differential
    auto cflConfig = new BlockConfig(false);
