@@ -471,8 +471,10 @@ void DiscreteScenarioSet::apply_scenario_reduction()
   DiscreteScenarioSet::ScenarioIndex k = get_k_parameter(f_scenario_reduction_config.first);
   
   // DEBUG: Log k parameter
+  #ifndef NDEBUG
   std::cout << "DEBUG [apply_scenario_reduction]: k (max scenarios to select) = " << k << std::endl;
   std::cout << "DEBUG [apply_scenario_reduction]: total scenarios available = " << nbScenarios << std::endl;
+  #endif
   
   // Extract ell parameter for distance calculations from BlockConfig
   float ell = DEFAULT_ELL_VALUE;
@@ -503,11 +505,13 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     auto transport_costs = compute_transport_cost_matrix(n_scenarios, scenario_size, ell);
     
     // Load the CFL problem into the block FIRST
+    #ifndef NDEBUG
     std::cout << "DEBUG [apply_scenario_reduction]: Creating CFL block with:" << std::endl;
     std::cout << "  - n_facilities = " << n_scenarios << std::endl;
     std::cout << "  - n_customers = " << n_scenarios << std::endl;
     std::cout << "  - balanced = false" << std::endl;
     std::cout << "  - max_open_facilities = " << k << std::endl;
+    #endif
     
     cflBlock->load(
         n_scenarios,       // Number of facilities
@@ -526,21 +530,29 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     }
     
     // Generate abstract variables and constraints
+    #ifndef NDEBUG
     std::cout << "DEBUG [apply_scenario_reduction]: Generating abstract variables" << std::endl;
+    #endif
     cflBlock->generate_abstract_variables();
     
     // Generate constraints with wc=7 to include max facilities constraint
+    #ifndef NDEBUG
     std::cout << "DEBUG [apply_scenario_reduction]: Generating abstract constraints with wc=7" << std::endl;
+    #endif
     SimpleConfiguration<int> constraint_config(7);  // wc = 7 to generate all constraints
     cflBlock->generate_abstract_constraints(&constraint_config);
     
     // Configure the solver using helper function
     Solver* solver = create_and_configure_solver(cflBlock.get(), ell);
+    #ifndef NDEBUG
     std::cout << "DEBUG [apply_scenario_reduction]: Using solver: " << solver->classname() << std::endl;
+    #endif
     
     // Solve the scenario reduction problem
     int status = solver->compute();
+    #ifndef NDEBUG
     std::cout << "DEBUG [apply_scenario_reduction]: Solver status = " << status << std::endl;
+    #endif
     
     // Check if the solve was successful
     if (status == Solver::kOK) {
@@ -969,8 +981,10 @@ void DiscreteScenarioSet::extract_selected_scenarios(const Solver* solver,
                                                     const CapacitatedFacilityLocationBlock* cflBlock,
                                                     ScenarioIndex n_scenarios)
 {
+  #ifndef NDEBUG
   std::cout << "DEBUG [extract_selected_scenarios]: Starting extraction for solver: " 
             << solver->classname() << std::endl;
+  #endif
   
   // Clear existing selection
   scenarioIndexes.clear();
@@ -978,7 +992,9 @@ void DiscreteScenarioSet::extract_selected_scenarios(const Solver* solver,
   // Check if it's a ScenarioReductionSolver
   auto* scenario_solver = dynamic_cast<const ScenarioReductionSolver*>(solver);
   if (scenario_solver) {
+    #ifndef NDEBUG
     std::cout << "DEBUG [extract_selected_scenarios]: Using ScenarioReductionSolver path" << std::endl;
+    #endif
     // Get the solution - which scenarios were selected
     const auto& reduced_atoms = scenario_solver->get_reduced_atoms();
     
@@ -989,12 +1005,16 @@ void DiscreteScenarioSet::extract_selected_scenarios(const Solver* solver,
       }
     }
   } else {
+    #ifndef NDEBUG
     std::cout << "DEBUG [extract_selected_scenarios]: Using MILPSolver path" << std::endl;
+    #endif
     
     // For MILPSolver or other solvers, we need to read the y variables from the block
     // First ensure the solver has written the solution to the block
     const_cast<Solver*>(solver)->get_var_solution();
+    #ifndef NDEBUG
     std::cout << "DEBUG [extract_selected_scenarios]: Solution written to block" << std::endl;
+    #endif
     
     // Read variable values directly from the block variables
     for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
@@ -1006,7 +1026,9 @@ void DiscreteScenarioSet::extract_selected_scenarios(const Solver* solver,
       
       // Get value from the variable directly
       double y_value = y_var->get_value();
+      #ifndef NDEBUG
       std::cout << "DEBUG [extract_selected_scenarios]: y[" << i << "] = " << y_value << std::endl;
+      #endif
       
       // Check if facility i is open (y[i] > 0.5)
       if (y_value > 0.5) {
@@ -1015,8 +1037,10 @@ void DiscreteScenarioSet::extract_selected_scenarios(const Solver* solver,
     }
   }
   
+  #ifndef NDEBUG
   std::cout << "DEBUG [extract_selected_scenarios]: Selected " << scenarioIndexes.size() 
             << " scenarios" << std::endl;
+  #endif
   
   // If no scenarios were selected, throw an error
   if (scenarioIndexes.empty()) {

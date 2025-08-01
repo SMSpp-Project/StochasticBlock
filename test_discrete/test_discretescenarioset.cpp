@@ -4,14 +4,33 @@
 /** @file
  * Test suite for DiscreteScenarioSet class
  * 
- * This comprehensive test validates:
+ * This comprehensive test suite validates:
+ * 
+ * Test 1 - Basic Loading and Sanity Checks:
  * - Basic scenario loading and deserialization
+ * - Parameter validation for init_representative_pool (k=0, k>nbScenarios)
+ * 
+ * Test 2 - Random Pool:
  * - init_random_pool functionality
- * - init_representative_pool with various k parameters
+ * 
+ * Test 3 - Scenario Reduction Algorithms:
  * - Scenario reduction with ScenarioReductionSolver algorithms
- * - Scenario reduction with MILPSolver implementations
- * - BlockSolverConfig serialization/deserialization
- * - Configuration persistence in DiscreteScenarioSet
+ * - Tests multiple algorithms (Dupacova, BestFit, FirstFit)
+ * 
+ * Test 4 - MILPSolver Scenario Reduction:
+ * - Scenario reduction with MILPSolver implementations (CPLEX, HiGHS)
+ * - Validates exact k scenarios are selected
+ * 
+ * Test 5 - Solver Configuration:
+ * - Valid solver configuration creation
+ * - Invalid solver configuration rejection
+ * 
+ * Test 6 - DSS Serialization with Config:
+ * - DiscreteScenarioSet serialization/deserialization
+ * - Configuration persistence
+ * 
+ * Test 7 - MILPSolver Parameters Debug:
+ * - Parameter handling for MILPSolver configurations
  * 
  * \author Benoît Tran \n
  *         Dipartimento di Informatica \n
@@ -80,14 +99,14 @@ void run_test(const string& name, function<TestResult()> test_func) {
     try {
         TestResult result = test_func();
         if (result.passed) {
-            cout << "✓ PASSED: " << result.message << endl;
+            cout << "PASSED: " << result.message << endl;
             tests_passed++;
         } else {
-            cout << "✗ FAILED: " << result.message << endl;
+            cout << "FAILED: " << result.message << endl;
             tests_failed++;
         }
     } catch (const exception& e) {
-        cout << "✗ FAILED with exception: " << e.what() << endl;
+        cout << "FAILED with exception: " << e.what() << endl;
         tests_failed++;
     }
 }
@@ -229,9 +248,10 @@ BlockSolverConfig* create_milp_solver_config(const string& solver_name = "CPXMIL
 /*---------------------------- TEST FUNCTIONS ------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-// Test 1: Basic loading and deserialization
-TestResult test_basic_loading() {
+// Test 1: Basic loading and sanity checks
+TestResult test_basic_loading_and_sanity_checks() {
     try {
+        // Part 1: Basic loading and deserialization
         auto dss = load_test_scenarios(20, 10);
         
         if (dss->get_nbScenarios() != 20) {
@@ -242,20 +262,7 @@ TestResult test_basic_loading() {
             return {false, "Expected scenario size 10, got " + to_string(dss->get_scenarioSize())};
         }
         
-        return {true, "Successfully loaded 20 scenarios of size 10"};
-        
-    } catch (const exception& e) {
-        return {false, string("Exception during loading: ") + e.what()};
-    }
-}
-
-REGISTER_TEST("Basic Loading", test_basic_loading);
-
-// Test 2: init_representative_pool with invalid k values
-TestResult test_invalid_k_parameters() {
-    try {
-        auto dss = load_test_scenarios(20, 10);
-        
+        // Part 2: Test invalid k parameters for init_representative_pool
         // Test k = 0
         try {
             dss->init_representative_pool(0);
@@ -272,16 +279,17 @@ TestResult test_invalid_k_parameters() {
             // Expected
         }
         
-        return {true, "Correctly rejected invalid k values (0 and >nbScenarios)"};
+        return {true, "Successfully loaded scenarios and validated parameter checks"};
         
     } catch (const exception& e) {
-        return {false, string("Setup failed: ") + e.what()};
+        return {false, string("Exception during test: ") + e.what()};
     }
 }
 
-REGISTER_TEST("Invalid k Parameters", test_invalid_k_parameters);
+REGISTER_TEST("Basic Loading and Sanity Checks", test_basic_loading_and_sanity_checks);
 
-// Test 3: init_random_pool functionality
+
+// Test 2: init_random_pool functionality
 TestResult test_random_pool() {
     try {
         const int dim = 5;
@@ -313,7 +321,7 @@ TestResult test_random_pool() {
 
 REGISTER_TEST("Random Pool", test_random_pool);
 
-// Test 4: Scenario reduction with ScenarioReductionSolver algorithms
+// Test 3: Scenario reduction with ScenarioReductionSolver algorithms
 TestResult test_scenario_reduction_algorithms() {
     const int num_scenarios = 15;
     const int scenario_size = 5;
@@ -350,7 +358,7 @@ TestResult test_scenario_reduction_algorithms() {
 
 REGISTER_TEST("Scenario Reduction Algorithms", test_scenario_reduction_algorithms);
 
-// Test 5: MILPSolver scenario reduction 
+// Test 4: MILPSolver scenario reduction 
 TestResult test_milp_scenario_reduction() {
     const int num_scenarios = 10;
     const int scenario_size = 5;
@@ -362,7 +370,7 @@ TestResult test_milp_scenario_reduction() {
     for (const auto& solver_name : solver_names) {
     
     try {
-        // Create distinct scenarios for better testing
+        // Create distinct scenarios
         string filename = "test_milp_scenarios.nc4";
         netCDF::NcFile dataFile(filename, netCDF::NcFile::replace);
         
@@ -405,12 +413,20 @@ TestResult test_milp_scenario_reduction() {
         int selected = dss->get_selected_scenario_count();
         cout << "Selected " << selected << " scenarios (expected " << k << ")" << endl;
         
-        // Note: MILPSolver might not successfully reduce to k scenarios due to 
-        // solver limitations, configuration issues, or problem characteristics.
-        // The fact that it runs without throwing an exception is a success.
-        if (selected > num_scenarios) {
+        // MILPSolver should now correctly reduce to exactly k scenarios
+        if (selected != k) {
             remove(filename.c_str());
-            return {false, "Invalid number of scenarios selected: " + to_string(selected) + " > " + to_string(num_scenarios)};
+            return {false, solver_name + " failed to select exactly " + to_string(k) + 
+                    " scenarios. Selected: " + to_string(selected)};
+        }
+        
+        // Verify that the selected scenarios are valid indices
+        for (size_t i = 0; i < selected; ++i) {
+            auto idx = dss->get_selected_scenario_index(i);
+            if (idx >= num_scenarios) {
+                remove(filename.c_str());
+                return {false, "Invalid scenario index selected: " + to_string(idx)};
+            }
         }
         
         // Clean up
@@ -428,15 +444,15 @@ TestResult test_milp_scenario_reduction() {
 
 REGISTER_TEST("MILPSolver Scenario Reduction", test_milp_scenario_reduction);
 
-// Test 6: BlockSolverConfig creation and usage
-TestResult test_config_creation() {
+// Test 5: Solver Configuration - tests both valid and invalid configurations
+TestResult test_solver_configuration() {
     const int k = 3;
     
     try {
-        // Test creating various solver configurations
-        vector<string> solver_names = {"CPXMILPSolver", "GRBMILPSolver", "ScenarioReductionSolver"};
+        // Part 1: Test creating valid solver configurations
+        vector<string> valid_solver_names = {"CPXMILPSolver", "GRBMILPSolver", "ScenarioReductionSolver"};
         
-        for (const auto& solver_name : solver_names) {
+        for (const auto& solver_name : valid_solver_names) {
             // Create configurations
             auto* block_config = create_block_config(k, 2.0);
             BlockSolverConfig* solver_config = nullptr;
@@ -466,16 +482,36 @@ TestResult test_config_creation() {
             }
         }
         
-        return {true, "Successfully created and tested various configurations"};
+        // Part 2: Test invalid solver configuration
+        {
+            auto dss = load_test_scenarios(10, 5);
+            
+            auto* block_config = create_block_config(5);
+            auto* solver_config = new BlockSolverConfig(true);
+            solver_config->add_ComputeConfig("InvalidSolver", nullptr);
+            
+            try {
+                dss->set_scenario_reduction_config(block_config, solver_config);
+                return {false, "Should have thrown exception for invalid solver"};
+            } catch (const invalid_argument& e) {
+                // Expected - invalid solver was correctly rejected
+                string error_msg = e.what();
+                if (error_msg.find("Unsupported solver for scenario reduction") == string::npos) {
+                    return {false, "Unexpected error message for invalid solver: " + error_msg};
+                }
+            }
+        }
+        
+        return {true, "Successfully created valid configurations and rejected invalid solver"};
         
     } catch (const exception& e) {
-        return {false, string("Config creation test failed: ") + e.what()};
+        return {false, string("Solver configuration test failed: ") + e.what()};
     }
 }
 
-REGISTER_TEST("Config Creation", test_config_creation);
+REGISTER_TEST("Solver Configuration", test_solver_configuration);
 
-// Test 7: DiscreteScenarioSet serialization with scenario reduction config
+// Test 6: DiscreteScenarioSet serialization with scenario reduction config
 TestResult test_dss_serialization_with_config() {
     const int k = 3;
     
@@ -520,7 +556,7 @@ TestResult test_dss_serialization_with_config() {
 
 REGISTER_TEST("DSS Serialization with Config", test_dss_serialization_with_config);
 
-// Test 8: MILPSolver Parameter Debugging
+// Test 7: MILPSolver Parameter Debugging
 TestResult test_milp_solver_parameters() {
     try {
         // Test parameter handling with different MILPSolver configurations
@@ -647,28 +683,6 @@ TestResult test_milp_solver_parameters() {
 
 REGISTER_TEST("MILPSolver Parameters Debug", test_milp_solver_parameters);
 
-// Test 9: Invalid solver configuration
-TestResult test_invalid_solver_config() {
-    try {
-        auto dss = load_test_scenarios(10, 5);
-        
-        auto* block_config = create_block_config(5);
-        auto* solver_config = new BlockSolverConfig(true);
-        solver_config->add_ComputeConfig("InvalidSolver", nullptr);
-        
-        try {
-            dss->set_scenario_reduction_config(block_config, solver_config);
-            return {false, "Should have thrown exception for invalid solver"};
-        } catch (const invalid_argument& e) {
-            return {true, "Correctly rejected invalid solver: " + string(e.what())};
-        }
-        
-    } catch (const exception& e) {
-        return {false, string("Test setup failed: ") + e.what()};
-    }
-}
-
-REGISTER_TEST("Invalid Solver Config", test_invalid_solver_config);
 
 /*--------------------------------------------------------------------------*/
 /*-------------------------------- MAIN ------------------------------------*/
