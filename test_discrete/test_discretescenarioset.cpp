@@ -4,8 +4,6 @@
 /** @file
  * Test suite for DiscreteScenarioSet class
  * 
- * This comprehensive test suite validates:
- * 
  * Test 1 - Basic Loading and Sanity Checks:
  * - Basic scenario loading and deserialization
  * - Parameter validation for init_representative_pool (k=0, k>nbScenarios)

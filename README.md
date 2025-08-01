@@ -28,6 +28,14 @@ following:
   (a vector) as parameter and sets the data of the inner `Block` according
   to its set of `DataMapping`
 
+### DiscreteScenarioSet
+
+The `DiscreteScenarioSet` class extends `ScenarioGenerator` to manage discrete sets of scenarios loaded from data files or generated programmatically. Key features include:
+
+- **Scenario Pool Management**: Supports both random sampling and representative pool selection
+- **Serialization**: Read/write scenarios from/to netCDF files with associated probabilities
+- **Scenario Reduction**: When built with `CapacitatedFacilityLocationBlock`, provides advanced scenario reduction capabilities (see below)
+
 ### Scenario Reduction
 
 The `DiscreteScenarioSet` class provides scenario reduction capabilities when built with the `CapacitatedFacilityLocationBlock` dependency. This feature allows for reducing a large set of scenarios to a smaller representative subset while minimizing the Wasserstein distance between the original and reduced distributions.
