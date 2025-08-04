@@ -158,17 +158,18 @@ public:
   * is equal to 1.0 / nbScenarios. 
   * 
   * If a "ScenarioReductionConfig" group is found during deserialization,
-  * it will be used to populate the scenario reduction configuration. This
-  * group should contain:
+  * it will be processed as follows:
+  * - k (int): Optional. If provided and > 0, init_representative_pool(k) 
+  *   will be called after deserialization completes.
+  * - ell (float): Optional. Power for Wasserstein distance (default 2.0).
+  * - BlockConfig/: Optional. Configuration for CapacitatedFacilityLocationBlock.
+  *   If k is provided but BlockConfig is not, a default will be generated.
+  * - BlockSolverConfig/: Optional. Configuration for the solver.
+  *   If k is provided but BlockSolverConfig is not, a default ScenarioReductionSolver 
+  *   configuration will be generated.
   * 
-  * - A "BlockConfig" group with parameters like:
-  *   - k: Number of scenarios to select
-  *   - ell: Power parameter for Wasserstein distance
-  * 
-  * - A "SolverConfig" group with parameters like:
-  *   - algorithm: Scenario reduction method to use 
-  *     (e.g., "Dupacova", "BestFit", "FirstFit", "MILP")
-  *   - Additional solver-specific settings
+  * Note: If k is provided, scenario reduction will be automatically applied
+  * after the scenarios are loaded.
   */
  void deserialize( const netCDF::NcGroup & group ) override;
 
@@ -369,6 +370,26 @@ public:
   */
  void set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex k);
 
+ /**
+  * @brief Set configuration for the DiscreteScenarioSet
+  * 
+  * This method overrides the base class set_config() to handle scenario
+  * reduction configuration. The Configuration object should contain:
+  * - k (optional): Number of scenarios to select. If provided and > 0,
+  *   init_representative_pool(k) will be called.
+  * - BlockConfig (optional): Configuration for the scenario reduction problem
+  * - BlockSolverConfig (optional): Configuration for the solver
+  * 
+  * If k is provided but BlockConfig or BlockSolverConfig are missing,
+  * defaults will be generated.
+  * 
+  * The method takes ownership of any configuration objects extracted from
+  * the Configuration.
+  * 
+  * @param config The Configuration object containing scenario reduction parameters
+  */
+ void set_config( Configuration* config ) override;
+
 /** @} ---------------------------------------------------------------------*/
 /*---------------- METHODS FOR ScenarioReduction FIELDS --------------------*/
 /*--------------------------------------------------------------------------*/
@@ -483,6 +504,9 @@ private:
  /// Number of scenarios to select for scenario reduction
  ScenarioIndex k_value;
  
+ /// Pending k value to apply after deserialization
+ ScenarioIndex pending_k_value = 0;
+ 
  /**
   * @brief Configuration for scenario reduction
   * 
@@ -527,30 +551,6 @@ private:
  * Miscellaneous functions
  * @{ */
 
- /// Create scenario reduction configuration with specified parameters
- /**
-  * @brief Creates a pair of BlockConfig and BlockSolverConfig for scenario reduction
-  * 
-  * If f_scenario_reduction_config is already set (not null), this method does nothing.
-  * Otherwise, it creates the configuration pair and stores it in f_scenario_reduction_config.
-  * 
-  * @param k Number of scenarios to select (mandatory)
-  * @param ell Power parameter for Wasserstein distance (default: 2.0)
-  * @param algorithm Scenario reduction algorithm name (default: "Dupacova")
-  * @param rho Solver parameter (0.0 for random, 1.0 for Dupačová initialization, default: 0.0)
-  * @param shuffle Whether to shuffle scenarios for LocalSearch algorithms (default: false)
-  * @param random_seed Random seed for scenario reduction solver (default: 1337)
-  * 
-  * @note The created configurations are owned by this DiscreteScenarioSet instance
-  *       and will be deleted in the destructor
-  */
- void create_scenario_reduction_config(
-     ScenarioIndex k,
-     float ell = DEFAULT_ELL_VALUE,
-     const std::string& algorithm = "Dupacova",
-     double rho = DEFAULT_RHO_VALUE,
-     bool shuffle = false,
-     unsigned long random_seed = DEFAULT_SEED);
 
  /// update the variable poolSize
  /** Whenever a size for the pool has been given, update the
@@ -605,7 +605,7 @@ private:
   * 2. A valid scenario reduction configuration must exist
   * 3. The configuration must have valid k and ell parameters
   *
-  * This method is called by init_discrete_pool() before attempting to use
+  * This method is called by init_representative_pool() before attempting to use
   * scenario reduction algorithms.
   *
   * @param size The desired size of the reduced scenario pool
@@ -613,7 +613,7 @@ private:
   */
  bool should_use_scenario_reduction(ScenarioIndex size) const;
  
- /// Helper method to apply scenario reduction for discrete pool
+ /// Helper method to apply scenario reduction
  /** This method applies scenario reduction to select a representative subset of scenarios
   * using the configured reduction method. It:
   * 
@@ -717,6 +717,34 @@ private:
   * scenarioIndexes.
   */
  void update_pool_weights();
+
+ /// Apply pending scenario reduction after deserialization
+ /** If a k value was provided during deserialization, this method
+  * will call init_representative_pool(k) to apply scenario reduction.
+  * This is called at the end of deserialize() to ensure all data
+  * is loaded before reduction is attempted.
+  */
+ void apply_pending_scenario_reduction();
+
+
+ /// Generate default BlockConfig for CFL
+ /** Creates a default BlockConfig suitable for CapacitatedFacilityLocationBlock
+  * with the specified k and ell parameters.
+  * 
+  * @param k Number of scenarios to select
+  * @param ell Power parameter for Wasserstein distance (default 2.0)
+  * @return A newly allocated BlockConfig (caller owns the pointer)
+  */
+ BlockConfig* generate_default_cfl_config(ScenarioIndex k, float ell = 2.0) const;
+
+ /// Generate default BlockSolverConfig for ScenarioReductionSolver
+ /** Creates a default BlockSolverConfig for the ScenarioReductionSolver
+  * with the specified algorithm.
+  * 
+  * @param algorithm Algorithm name (default "Dupacova")
+  * @return A newly allocated BlockSolverConfig (caller owns the pointer)
+  */
+ BlockSolverConfig* generate_default_solver_config(const std::string& algorithm = "Dupacova") const;
 
   SMSpp_insert_in_factory_h;
 

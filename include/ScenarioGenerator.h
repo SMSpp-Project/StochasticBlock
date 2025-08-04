@@ -70,6 +70,8 @@
 /*--------------------------------------------------------------------------*/
 
 #include "SMSTypedefs.h"
+#include "Configuration.h" // For Configuration class
+
 
 // Required for Scenario type but not available in SMSTypedefs.h yet
 // TODO: Consider adding to SMSTypedefs.h in a future update
@@ -494,6 +496,28 @@ class ScenarioGenerator
   */
 
   virtual void set_Block( Block* ){};
+
+/*--------------------------------------------------------------------------*/
+ /// setting configuration for the ScenarioGenerator
+ /** This method allows setting configuration parameters for the 
+  * ScenarioGenerator. The base class implementation does nothing, but
+  * derived classes can override this to accept configuration objects.
+  * 
+  * For example, DiscreteScenarioSet uses this to configure scenario
+  * reduction parameters including:
+  * - k: number of scenarios to select
+  * - ell: power parameter for Wasserstein distance
+  * - algorithm: scenario reduction method to use
+  * 
+  * The Configuration object passed should contain the appropriate
+  * parameters for the specific ScenarioGenerator implementation.
+  * Implementations should validate the configuration and may throw
+  * exceptions if invalid parameters are provided.
+  * 
+  * @param config The Configuration object containing parameters
+  */
+  
+  virtual void set_config( Configuration* config ) {}
 
 /** @} ---------------------------------------------------------------------*/
 /*-------------------- METHODS FOR READING THE SCENARIOS -------------------*/

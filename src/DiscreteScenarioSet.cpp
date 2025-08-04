@@ -22,13 +22,13 @@
 /*------------------------------ INCLUDES ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
+#include <span>  // Ensure span is available before other includes
 #include "DiscreteScenarioSet.h" 
 #include "CapacitatedFacilityLocationBlock.h"
 #include "ScenarioReductionSolver.h"
 #include "Block.h" 
 #include "Solver.h"
 #include "BlockSolverConfig.h" // For BlockSolverConfig class
-#include "Configuration.h" // For Configuration class
 
 using namespace SMSpp_di_unipi_it;
 
@@ -152,12 +152,12 @@ void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_confi
     }
   }
   
-  // Clean up existing configurations
-  if (f_scenario_reduction_config.first) {
+  // Clean up existing configurations if they are different from the new ones
+  if (f_scenario_reduction_config.first && f_scenario_reduction_config.first != block_config) {
     delete f_scenario_reduction_config.first;
   }
   
-  if (f_scenario_reduction_config.second) {
+  if (f_scenario_reduction_config.second && f_scenario_reduction_config.second != solver_config) {
     delete f_scenario_reduction_config.second;
   }
   
@@ -174,6 +174,83 @@ void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_confi
   
   // Then set the configurations
   set_scenario_reduction_config(block_config, solver_config);
+}
+
+// Set configuration from a Configuration object
+void DiscreteScenarioSet::set_config(Configuration* config)
+{
+  if (!config) {
+    return; // Nothing to do with null config
+  }
+  
+  // For scenario reduction, we expect the Configuration to directly contain
+  // k, BlockConfig, and BlockSolverConfig, not wrapped in ComputeConfig
+  
+  // First check if this is a BlockConfig (contains scenario reduction settings)
+  auto* block_config = dynamic_cast<BlockConfig*>(config);
+  if (block_config) {
+    // Extract k from the extra configuration
+    ScenarioIndex k = 0;
+    if (block_config->f_extra_Configuration) {
+      auto* k_config = dynamic_cast<SimpleConfiguration<int>*>(block_config->f_extra_Configuration);
+      if (k_config) {
+        k = k_config->f_value;
+      }
+    }
+    
+    if (k > 0) {
+      // Create solver config if not present (use default)
+      auto* solver_cfg = generate_default_solver_config("Dupacova");
+      set_scenario_reduction_config(block_config->clone(), solver_cfg, k);
+      
+      // If scenarios are already loaded, apply reduction immediately
+      if (nbScenarios > 0) {
+        init_representative_pool(k);
+      } else {
+        // Store k for later application
+        pending_k_value = k;
+      }
+    }
+    return;
+  }
+  
+  // Otherwise, check if it's a generic Configuration with sub-configs
+  // This would be the case when loaded from netCDF with ScenarioReductionConfig group
+  
+  // Try to extract k parameter directly
+  ScenarioIndex k = 0;
+  double ell = DEFAULT_ELL_VALUE;
+  
+  // Check for SimpleConfiguration<int> (just k)
+  auto* k_config = dynamic_cast<SimpleConfiguration<int>*>(config);
+  if (k_config) {
+    k = k_config->f_value;
+  } else {
+    // Check for SimpleConfiguration<vector<double>> format: [k, ell, ...]
+    auto* vec_config = dynamic_cast<SimpleConfiguration<std::vector<double>>*>(config);
+    if (vec_config && !vec_config->f_value.empty()) {
+      k = static_cast<ScenarioIndex>(vec_config->f_value[0]);
+      if (vec_config->f_value.size() > 1) {
+        ell = vec_config->f_value[1];
+      }
+    }
+  }
+  
+  // If we found k, create default configs and apply
+  if (k > 0) {
+    auto* block_cfg = generate_default_cfl_config(k, ell);
+    auto* solver_cfg = generate_default_solver_config("Dupacova");
+    
+    set_scenario_reduction_config(block_cfg, solver_cfg, k);
+    
+    // If scenarios are already loaded, apply reduction immediately
+    if (nbScenarios > 0) {
+      init_representative_pool(k);
+    } else {
+      // Store k for later application
+      pending_k_value = k;
+    }
+  }
 }
 
 // Extract k parameter with validation
@@ -273,47 +350,117 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   try {
     netCDF::NcGroup cfgGroup = group.getGroup("ScenarioReductionConfig");
     if (!cfgGroup.isNull()) {
-      // Deserialize BlockConfig and BlockSolverConfig from their respective subgroups
-      BlockConfig* block_cfg = nullptr;
-      BlockSolverConfig* solver_cfg = nullptr;
+      // Try to read k (optional - if present, will trigger init_representative_pool)
+      ScenarioIndex k = 0;
+      bool has_k = false;
+      try {
+        auto kVar = cfgGroup.getVar("k");
+        if (!kVar.isNull()) {
+          kVar.getVar(&k);
+          has_k = true;
+        }
+      } catch (...) {
+        // k not found, continue without it
+      }
       
+      // Try to read ell (optional, default 2.0)
+      float ell = 2.0f;
+      try {
+        auto ellVar = cfgGroup.getVar("ell");
+        if (!ellVar.isNull()) {
+          ellVar.getVar(&ell);
+        }
+      } catch (...) {
+        // ell not found, use default
+      }
+      
+      // Try to deserialize BlockConfig
+      BlockConfig* block_cfg = nullptr;
       try {
         auto blockGroup = cfgGroup.getGroup("BlockConfig");
         if (!blockGroup.isNull()) {
-          block_cfg = dynamic_cast<BlockConfig*>(Configuration::new_Configuration(blockGroup));
+          auto* cfg = Configuration::new_Configuration(blockGroup);
+          block_cfg = dynamic_cast<BlockConfig*>(cfg);
+          if (!block_cfg) {
+            delete cfg;
+            throw std::runtime_error("BlockConfig deserialization failed");
+          }
+          // Trust the user provided appropriate config after dynamic_cast succeeded
         }
       } catch (...) {
-        // BlockConfig group not found, continue
+        // No BlockConfig or invalid, will generate default if needed
+        block_cfg = nullptr;
       }
       
+      // Try to deserialize BlockSolverConfig
+      BlockSolverConfig* solver_cfg = nullptr;
       try {
         auto solverGroup = cfgGroup.getGroup("BlockSolverConfig");
         if (!solverGroup.isNull()) {
-          solver_cfg = dynamic_cast<BlockSolverConfig*>(Configuration::new_Configuration(solverGroup));
+          auto* cfg = Configuration::new_Configuration(solverGroup);
+          solver_cfg = dynamic_cast<BlockSolverConfig*>(cfg);
+          if (!solver_cfg) {
+            delete cfg;
+            throw std::runtime_error("BlockSolverConfig deserialization failed");
+          }
         }
       } catch (...) {
-        // BlockSolverConfig group not found, continue
+        // No BlockSolverConfig, will generate default if needed
+        solver_cfg = nullptr;
       }
       
-      // If we got valid configurations, store them
-      if (block_cfg && solver_cfg) {
-        set_scenario_reduction_config(block_cfg, solver_cfg);
-        
-        // Sync k_value with the configuration
-        try {
-          k_value = get_k_parameter(block_cfg);
-        } catch (const std::exception& e) {
-          // If k parameter extraction fails, keep default k_value = 0
-          k_value = 0;
+      // If k was provided, we need to set up for scenario reduction
+      if (has_k && k > 0) {
+        // Generate missing configs
+        if (!block_cfg) {
+          block_cfg = generate_default_cfl_config(k, ell);
+          if (!block_cfg) {
+            throw std::runtime_error("Failed to generate default BlockConfig");
+          }
+          if (!block_cfg->f_static_variables_Configuration) {
+            throw std::runtime_error("generate_default_cfl_config did not set f_static_variables_Configuration");
+          }
         }
-      } else {
-        // Clean up partial configurations
-        delete block_cfg;
-        delete solver_cfg;
+        if (!solver_cfg) {
+          solver_cfg = generate_default_solver_config();
+          if (!solver_cfg) {
+            throw std::runtime_error("Failed to generate default BlockSolverConfig");
+          }
+        }
+        
+        // Set the configuration
+        try {
+          set_scenario_reduction_config(block_cfg, solver_cfg);
+          k_value = k;
+          
+        } catch (const std::exception& e) {
+          // Clean up allocated configs on error
+          if (!block_cfg) delete block_cfg;
+          if (!solver_cfg) delete solver_cfg;
+          throw std::runtime_error(std::string("Failed to set scenario reduction config: ") + e.what());
+        }
+        
+        // Store k for later use (after all data is loaded)
+        pending_k_value = k;
+      } else if (block_cfg || solver_cfg) {
+        // Configs provided without k - just store them for later use
+        if (!block_cfg) {
+          block_cfg = generate_default_cfl_config(1, ell); // Dummy k=1
+        }
+        if (!solver_cfg) {
+          solver_cfg = generate_default_solver_config();
+        }
+        set_scenario_reduction_config(block_cfg, solver_cfg);
       }
     }
   } catch (const std::exception& e) {
-    // Configuration group not found or invalid, continue without it
+    // Log warning but continue - scenario reduction config is optional
+    std::cerr << "Warning: Failed to load ScenarioReductionConfig: " << e.what() << std::endl;
+  }
+  
+  // After all data is loaded, apply pending scenario reduction if requested
+  if (pending_k_value > 0) {
+    apply_pending_scenario_reduction();
   }
 }
 
@@ -337,6 +484,23 @@ void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
   // Serialize scenario reduction configuration if it exists
   if (f_scenario_reduction_config.first && f_scenario_reduction_config.second) {
     netCDF::NcGroup cfgGroup = group.addGroup("ScenarioReductionConfig");
+    
+    // Serialize k if available
+    if (k_value > 0) {
+      auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
+      kVar.putVar(&k_value);
+    }
+    
+    // Serialize ell if available from BlockConfig
+    if (f_scenario_reduction_config.first && f_scenario_reduction_config.first->f_static_variables_Configuration) {
+      auto* ell_config = dynamic_cast<SimpleConfiguration<double>*>(
+          f_scenario_reduction_config.first->f_static_variables_Configuration);
+      if (ell_config) {
+        float ell = static_cast<float>(ell_config->f_value);
+        auto ellVar = cfgGroup.addVar("ell", netCDF::ncFloat);
+        ellVar.putVar(&ell);
+      }
+    }
     
     // Serialize BlockConfig
     auto blockGroup = cfgGroup.addGroup("BlockConfig");
@@ -710,135 +874,6 @@ DiscreteScenarioSet::~DiscreteScenarioSet() {
 /*-------------------- HELPER METHODS IMPLEMENTATION -----------------------*/
 /*--------------------------------------------------------------------------*/
 
-void DiscreteScenarioSet::create_scenario_reduction_config(
-    ScenarioIndex k,
-    float ell,
-    const std::string& algorithm,
-    double rho,
-    bool shuffle,
-    unsigned long random_seed)
-{
-  // Check if configuration is already set
-  if (f_scenario_reduction_config.first != nullptr || 
-      f_scenario_reduction_config.second != nullptr) {
-    // Configuration already exists, do nothing
-    return;
-  }
-  
-  // Validate mandatory k parameter
-  if (k == 0) {
-    throw std::invalid_argument("k must be positive");
-  }
-  
-  // Validate optional parameters
-  if (ell <= 0.0f) {
-    throw std::invalid_argument("ell must be positive");
-  }
-  
-  if (algorithm.empty()) {
-    throw std::invalid_argument("algorithm cannot be empty");
-  }
-  
-  // Note: k_value member variable is set during deserialization or via set_k_value()
-  // The configuration created here stores k in f_extra_Configuration for consistency
-  
-  // Create temporary txt files for the configurations
-  std::string block_config_content = R"(# BlockConfig for scenario reduction
-BlockConfig
-
-0  # not a differential configuration
-
-# static constraints Configuration
-* # [none]
-
-# dynamic constraints Configuration
-* # [none]
-
-# static variables Configuration - ell parameter
-SimpleConfiguration<double>
-)" + std::to_string(ell) + R"(
-
-# dynamic variables Configuration
-* # [none]
-
-# objective Configuration
-* # [none]
-
-# is_feasible Configuration
-* # [none]
-
-# is_optimal Configuration
-* # [none]
-
-# solution Configuration
-* # [none]
-
-# extra Configuration - k parameter for scenario reduction
-SimpleConfiguration<int>
-)" + std::to_string(k) + "\n";
-
-  std::string solver_config_content = R"(# BlockSolverConfig for scenario reduction
-BlockSolverConfig
-
-0  # not a differential configuration
-
-1  # number of Solver
-ScenarioReductionSolver
-
-1  # number of ComputeConfig
-
-# ComputeConfig for ScenarioReductionSolver
-ComputeConfig
-
-1  # differential mode
-
-0  # number of integer parameters
-
-1  # number of double parameters
-dblRho )" + std::to_string(rho) + R"(
-
-1  # number of string parameters
-strAlgorithm )" + algorithm + R"(
-
-0  # number of vector-of-int parameters
-
-0  # number of vector-of-double parameters
-
-0  # number of vector-of-string parameters
-
-# extra Configuration with shuffle and random_seed
-SimpleConfiguration<std::pair<int,int>>
-)" + std::to_string(shuffle ? 1 : 0) + " " + std::to_string(random_seed) + R"(
-)";
-
-  // Create temporary files
-  std::string block_config_file = "/tmp/sr_block_config_" + 
-      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".txt";
-  std::string solver_config_file = "/tmp/sr_solver_config_" + 
-      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".txt";
-  
-  // Write configurations to files
-  std::ofstream block_file(block_config_file);
-  block_file << block_config_content;
-  block_file.close();
-  
-  std::ofstream solver_file(solver_config_file);
-  solver_file << solver_config_content;
-  solver_file.close();
-  
-  // Load configurations from files
-  BlockConfig* block_config = dynamic_cast<BlockConfig*>(
-      Configuration::deserialize(block_config_file));
-  BlockSolverConfig* solver_config = dynamic_cast<BlockSolverConfig*>(
-      Configuration::deserialize(solver_config_file));
-  
-  // Clean up temporary files
-  std::remove(block_config_file.c_str());
-  std::remove(solver_config_file.c_str());
-  
-  // Store the configuration pair
-  f_scenario_reduction_config = std::make_pair(block_config, solver_config);
-}
 
 // Validate the k parameter for scenario reduction
 void DiscreteScenarioSet::validate_k_parameter(ScenarioIndex k) const
@@ -854,8 +889,12 @@ void DiscreteScenarioSet::ensure_configuration_exists(ScenarioIndex k)
 {
   // Case 2: If configuration is not initialized, create it with default values
   if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
-    // Create configuration with k and default values for other parameters
-    create_scenario_reduction_config(k);
+    // Create default configurations
+    auto* block_cfg = generate_default_cfl_config(k, DEFAULT_ELL_VALUE);
+    auto* solver_cfg = generate_default_solver_config("Dupacova");
+    
+    // Set the configuration
+    set_scenario_reduction_config(block_cfg, solver_cfg);
     
     // Verify configuration was created
     if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
@@ -1056,6 +1095,45 @@ void DiscreteScenarioSet::update_pool_weights()
   for (const auto& idx : scenarioIndexes) {
     sumPoolWeights += poolProbabilities[idx];
   }
+}
+
+// Apply pending scenario reduction after deserialization
+void DiscreteScenarioSet::apply_pending_scenario_reduction()
+{
+  if (pending_k_value > 0 && pending_k_value <= nbScenarios) {
+    init_representative_pool(pending_k_value);
+    pending_k_value = 0;  // Clear the pending value
+  }
+}
+
+
+// Generate default BlockConfig for CFL
+BlockConfig* DiscreteScenarioSet::generate_default_cfl_config(ScenarioIndex k, float ell) const
+{
+  auto* config = new BlockConfig(false);  // not differential
+  
+  // Set k in extra_Configuration
+  config->f_extra_Configuration = new SimpleConfiguration<int>(k);
+  
+  // Set ell in static_variables_Configuration  
+  config->f_static_variables_Configuration = new SimpleConfiguration<double>(static_cast<double>(ell));
+  
+  // Add default constraint generation (all constraints)
+  // For now, leave this to the CapacitatedFacilityLocationBlock defaults
+  
+  
+  return config;
+}
+
+// Generate default BlockSolverConfig for ScenarioReductionSolver
+BlockSolverConfig* DiscreteScenarioSet::generate_default_solver_config(const std::string& algorithm) const
+{
+  auto* config = new BlockSolverConfig(true);  // differential
+  
+  // Add ScenarioReductionSolver configuration
+  config->add_ComputeConfig("ScenarioReductionSolver", nullptr);
+  
+  return config;
 }
 
 /*--------------------------------------------------------------------------*/
