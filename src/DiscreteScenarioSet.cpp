@@ -164,6 +164,14 @@ void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_confi
   // Set the new configurations
   f_scenario_reduction_config.first = block_config;
   f_scenario_reduction_config.second = solver_config;
+  
+  // Extract and set k_value from the BlockConfig if available
+  if (block_config && block_config->f_extra_Configuration) {
+    auto* k_config = dynamic_cast<SimpleConfiguration<int>*>(block_config->f_extra_Configuration);
+    if (k_config && k_config->f_value > 0) {
+      k_value = k_config->f_value;
+    }
+  }
 }
 
 // Set scenario reduction configuration with k parameter
@@ -887,7 +895,7 @@ void DiscreteScenarioSet::validate_k_parameter(ScenarioIndex k) const
 // Ensure scenario reduction configuration exists
 void DiscreteScenarioSet::ensure_configuration_exists(ScenarioIndex k)
 {
-  // Case 2: If configuration is not initialized, create it with default values
+  // If configuration is not initialized, create it with default values
   if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
     // Create default configurations
     auto* block_cfg = generate_default_cfl_config(k, DEFAULT_ELL_VALUE);
@@ -899,6 +907,19 @@ void DiscreteScenarioSet::ensure_configuration_exists(ScenarioIndex k)
     // Verify configuration was created
     if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
       throw std::runtime_error("Failed to create scenario reduction configuration");
+    }
+  } else {
+    // Configuration exists, but verify it has the correct k parameter
+    if (f_scenario_reduction_config.first && f_scenario_reduction_config.first->f_extra_Configuration) {
+      auto* k_config = dynamic_cast<SimpleConfiguration<int>*>(f_scenario_reduction_config.first->f_extra_Configuration);
+      if (!k_config) {
+        // Extra configuration exists but is not SimpleConfiguration<int>, fix it
+        delete f_scenario_reduction_config.first->f_extra_Configuration;
+        f_scenario_reduction_config.first->f_extra_Configuration = new SimpleConfiguration<int>(k);
+      }
+    } else if (f_scenario_reduction_config.first) {
+      // No extra configuration, add it
+      f_scenario_reduction_config.first->f_extra_Configuration = new SimpleConfiguration<int>(k);
     }
   }
   // Case 1: Configuration exists (either just created or from deserialization)

@@ -502,7 +502,7 @@ private:
  static constexpr double DEFAULT_RHO_VALUE = 0.0;
  
  /// Number of scenarios to select for scenario reduction
- ScenarioIndex k_value;
+ ScenarioIndex k_value = 0;
  
  /// Pending k value to apply after deserialization
  ScenarioIndex pending_k_value = 0;
