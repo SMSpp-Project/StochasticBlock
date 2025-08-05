@@ -208,7 +208,10 @@ void DiscreteScenarioSet::set_config(Configuration* config)
     
     if (k > 0) {
       // Create solver config if not present (use default)
-      auto* solver_cfg = generate_default_solver_config("Dupacova");
+      auto* solver_cfg = f_scenario_reduction_config.second;
+      if (!solver_cfg) {
+        solver_cfg = generate_default_solver_config("Dupacova");
+      }
       set_scenario_reduction_config(block_config->clone(), solver_cfg, k);
       
       // If scenarios are already loaded, apply reduction immediately
