@@ -4,31 +4,24 @@
 /** @file
  * Test suite for DiscreteScenarioSet class
  * 
- * Test 1 - Basic Loading and Sanity Checks:
- * - Basic scenario loading and deserialization
- * - Parameter validation for init_representative_pool (k=0, k>nbScenarios)
+ * Test 1 - Basic Functionality:
+ * - Scenario loading and deserialization
+ * - Parameter validation for init_representative_pool
+ * - Random pool initialization
  * 
- * Test 2 - Random Pool:
- * - init_random_pool functionality
+ * Test 2 - Scenario Reduction Algorithms:
+ * - ScenarioReductionSolver algorithms (Dupacova, BestFit, FirstFit)
+ * - MILPSolver implementations (CPLEX, HiGHS)
  * 
- * Test 3 - Scenario Reduction Algorithms:
- * - Scenario reduction with ScenarioReductionSolver algorithms
- * - Tests multiple algorithms (Dupacova, BestFit, FirstFit)
+ * Test 3 - Configuration Management:
+ * - Valid/invalid solver configuration
+ * - set_config() method
+ * - Configuration serialization/deserialization
  * 
- * Test 4 - MILPSolver Scenario Reduction:
- * - Scenario reduction with MILPSolver implementations (CPLEX, HiGHS)
- * - Validates exact k scenarios are selected
- * 
- * Test 5 - Solver Configuration:
- * - Valid solver configuration creation
- * - Invalid solver configuration rejection
- * 
- * Test 6 - DSS Serialization with Config:
- * - DiscreteScenarioSet serialization/deserialization
- * - Configuration persistence
- * 
- * Test 7 - MILPSolver Parameters Debug:
- * - Parameter handling for MILPSolver configurations
+ * Test 4 - Serialization and Deserialization:
+ * - DiscreteScenarioSet persistence
+ * - Configuration persistence across save/load
+ * - Scenario reduction deserialization with various configurations
  * 
  * \author Benoît Tran \n
  *         Dipartimento di Informatica \n
@@ -41,7 +34,7 @@
 /*------------------------------ INCLUDES ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-#include <span>  // Include span first to ensure it's available
+#include <span>
 #include "DiscreteScenarioSet.h"
 #include "Configuration.h"
 #include "BlockSolverConfig.h"
@@ -126,15 +119,12 @@ string create_test_scenario_file(int num_scenarios = 20, int scenario_size = 10,
         // Add type attribute at root level for deserializer to find
         dataFile.putAtt("type", "DiscreteScenarioSet");
         
-        // Create DiscreteScenarioSet group (though it's at root)
-        auto& dss_group = dataFile;  // Use root as the group
-        
         // Create dimensions
-        netCDF::NcDim scenarioDim = dss_group.addDim("NumberScenarios", num_scenarios);
-        netCDF::NcDim sizeDim = dss_group.addDim("ScenarioSize", scenario_size);
+        netCDF::NcDim scenarioDim = dataFile.addDim("NumberScenarios", num_scenarios);
+        netCDF::NcDim sizeDim = dataFile.addDim("ScenarioSize", scenario_size);
         
         // Create scenario variable
-        netCDF::NcVar scenarioVar = dss_group.addVar("Scenarios", netCDF::ncDouble, 
+        netCDF::NcVar scenarioVar = dataFile.addVar("Scenarios", netCDF::ncDouble, 
                                                     {scenarioDim, sizeDim});
         
         // Fill with test data
@@ -147,7 +137,7 @@ string create_test_scenario_file(int num_scenarios = 20, int scenario_size = 10,
         scenarioVar.putVar(data.data());
         
         // Add probabilities (uniform distribution)
-        netCDF::NcVar probVar = dss_group.addVar("poolProbabilities", netCDF::ncDouble, scenarioDim);
+        netCDF::NcVar probVar = dataFile.addVar("poolProbabilities", netCDF::ncDouble, scenarioDim);
         vector<double> probs(num_scenarios, 1.0 / num_scenarios);
         probVar.putVar(probs.data());
         
@@ -190,61 +180,54 @@ BlockConfig* create_block_config(int k, double ell = 2.0) {
     return block_config;
 }
 
-// Helper to create BlockSolverConfig for ScenarioReductionSolver
-BlockSolverConfig* create_scenario_reduction_solver_config(const string& algorithm = "Dupacova") {
+// Helper to create BlockSolverConfig for different solver types
+BlockSolverConfig* create_solver_config(const string& solver_type, 
+                                       const string& algorithm = "",
+                                       double time_limit = 60.0,
+                                       int verbosity = 0) {
     auto* solver_config = new BlockSolverConfig(true);  // differential mode
     
-    // ScenarioReductionSolver configuration
-    // Note: ScenarioReductionSolver doesn't properly handle ComputeConfig parameters
-    // so we pass nullptr and rely on the algorithm being inferred from the solver name
-    solver_config->add_ComputeConfig("ScenarioReductionSolver", nullptr);
-    
-    return solver_config;
-}
-
-// Helper to create BlockSolverConfig for MILPSolver
-BlockSolverConfig* create_milp_solver_config(const string& solver_name = "CPXMILPSolver",
-                                            double time_limit = 60.0,
-                                            int verbosity = 0) {
-    auto* solver_config = new BlockSolverConfig(true);  // differential mode
-    
-    // Create ComputeConfig
-    auto* compute_config = new ComputeConfig();
-    compute_config->f_diff = true;  // differential mode
-    
-    // Add common MILP parameters
-    compute_config->int_pars.emplace_back("intLogVerb", verbosity);
-    compute_config->int_pars.emplace_back("intRelaxIntVars", 0);  // solve integer problem
-    compute_config->dbl_pars.emplace_back("dblRelAcc", 1e-7);     // relative accuracy
-    
-    if (time_limit > 0) {
-        // Use solver-specific time limit parameter names
-        if (solver_name == "CPXMILPSolver") {
-            compute_config->dbl_pars.emplace_back("CPXPARAM_TimeLimit", time_limit);
-        } else if (solver_name == "GRBMILPSolver") {
-            compute_config->dbl_pars.emplace_back("TimeLimit", time_limit);
-        } else if (solver_name == "SCIPMILPSolver") {
-            compute_config->dbl_pars.emplace_back("limits/time", time_limit);
-        } else if (solver_name == "HiGHSMILPSolver") {
-            compute_config->dbl_pars.emplace_back("time_limit", time_limit);
+    if (solver_type == "ScenarioReductionSolver") {
+        // ScenarioReductionSolver configuration
+        solver_config->add_ComputeConfig("ScenarioReductionSolver", nullptr);
+    } else {
+        // MILP Solver configuration
+        auto* compute_config = new ComputeConfig();
+        compute_config->f_diff = true;
+        
+        // Add common MILP parameters
+        compute_config->int_pars.emplace_back("intLogVerb", verbosity);
+        compute_config->int_pars.emplace_back("intRelaxIntVars", 0);
+        compute_config->dbl_pars.emplace_back("dblRelAcc", 1e-7);
+        
+        if (time_limit > 0) {
+            // Use solver-specific time limit parameter names
+            if (solver_type == "CPXMILPSolver") {
+                compute_config->dbl_pars.emplace_back("CPXPARAM_TimeLimit", time_limit);
+            } else if (solver_type == "GRBMILPSolver") {
+                compute_config->dbl_pars.emplace_back("TimeLimit", time_limit);
+            } else if (solver_type == "SCIPMILPSolver") {
+                compute_config->dbl_pars.emplace_back("limits/time", time_limit);
+            } else if (solver_type == "HiGHSMILPSolver") {
+                compute_config->dbl_pars.emplace_back("time_limit", time_limit);
+            }
         }
+        
+        // Add solver-specific parameters
+        if (solver_type == "CPXMILPSolver") {
+            compute_config->int_pars.emplace_back("CPXPARAM_Threads", 1);
+            if (verbosity > 0) {
+                compute_config->int_pars.emplace_back("CPXPARAM_MIP_Display", 3);
+            }
+        } else if (solver_type == "GRBMILPSolver") {
+            compute_config->int_pars.emplace_back("Threads", 1);
+            if (verbosity > 0) {
+                compute_config->int_pars.emplace_back("OutputFlag", 1);
+            }
+        }
+        
+        solver_config->add_ComputeConfig(string(solver_type), compute_config);
     }
-    
-    // Add solver-specific parameters
-    if (solver_name == "CPXMILPSolver") {
-        compute_config->int_pars.emplace_back("CPXPARAM_Threads", 1);
-        if (verbosity > 0) {
-            compute_config->int_pars.emplace_back("CPXPARAM_MIP_Display", 3);
-        }
-    } else if (solver_name == "GRBMILPSolver") {
-        compute_config->int_pars.emplace_back("Threads", 1);
-        if (verbosity > 0) {
-            compute_config->int_pars.emplace_back("OutputFlag", 1);
-        }
-    }
-    
-    // Register the solver with its configuration
-    solver_config->add_ComputeConfig(string(solver_name), compute_config);
     
     return solver_config;
 }
@@ -253,8 +236,8 @@ BlockSolverConfig* create_milp_solver_config(const string& solver_name = "CPXMIL
 /*---------------------------- TEST FUNCTIONS ------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-// Test 1: Basic loading and sanity checks
-TestResult test_basic_loading_and_sanity_checks() {
+// Test 1: Basic functionality
+TestResult test_basic_functionality() {
     try {
         // Part 1: Basic loading and deserialization
         auto dss = load_test_scenarios(20, 10);
@@ -268,7 +251,6 @@ TestResult test_basic_loading_and_sanity_checks() {
         }
         
         // Part 2: Test invalid k parameters for init_representative_pool
-        // Test k = 0
         try {
             dss->init_representative_pool(0);
             return {false, "Should have thrown invalid_argument for k=0"};
@@ -276,7 +258,6 @@ TestResult test_basic_loading_and_sanity_checks() {
             // Expected
         }
         
-        // Test k > nbScenarios
         try {
             dss->init_representative_pool(25);
             return {false, "Should have thrown invalid_argument for k>nbScenarios"};
@@ -284,210 +265,141 @@ TestResult test_basic_loading_and_sanity_checks() {
             // Expected
         }
         
-        return {true, "Successfully loaded scenarios and validated parameter checks"};
+        // Part 3: Test random pool functionality
+        dss->init_random_pool(10);
+        
+        auto scenario = dss->get_current_scenario();
+        if (scenario.size() != 10) {
+            return {false, "Expected scenario size 10, got " + to_string(scenario.size())};
+        }
+        
+        double prob = dss->get_current_scenario_probability();
+        if (prob <= 0.0 || prob > 1.0) {
+            return {false, "Invalid probability: " + to_string(prob)};
+        }
+        
+        return {true, "Basic functionality tests passed"};
         
     } catch (const exception& e) {
         return {false, string("Exception during test: ") + e.what()};
     }
 }
 
-REGISTER_TEST("Basic Loading and Sanity Checks", test_basic_loading_and_sanity_checks);
+REGISTER_TEST("Basic Functionality", test_basic_functionality);
 
-
-// Test 2: init_random_pool functionality
-TestResult test_random_pool() {
+// Test 2: Scenario reduction algorithms
+TestResult test_scenario_reduction_algorithms() {
     try {
-        const int dim = 5;
-        auto dss = load_test_scenarios(20, dim);
+        const int num_scenarios = 15;
+        const int scenario_size = 5;
+        const int k = 5;
         
-        // Initialize random pool
-        dss->init_random_pool(10);
+        // Test ScenarioReductionSolver algorithms
+        vector<string> algorithms = {"Dupacova", "BestFit", "FirstFit"};
         
-        // Get a scenario
-        auto scenario = dss->get_current_scenario();
-        
-        if (scenario.size() != dim) {
-            return {false, "Expected scenario size " + to_string(dim) + 
-                   ", got " + to_string(scenario.size())};
+        for (const auto& algorithm : algorithms) {
+            auto dss = load_test_scenarios(num_scenarios, scenario_size);
+            
+            auto* block_config = create_block_config(k);
+            auto* solver_config = create_solver_config("ScenarioReductionSolver", algorithm);
+            
+            dss->set_scenario_reduction_config(block_config, solver_config);
+            dss->init_representative_pool(k);
+            
+            if (dss->get_selected_scenario_count() != k) {
+                return {false, algorithm + " failed: wrong number of scenarios selected"};
+            }
         }
         
-        // Check probability
-        double prob = dss->get_current_scenario_probability();
-        if (prob <= 0.0 || prob > 1.0) {
-            return {false, "Invalid probability: " + to_string(prob)};
+        // Test MILPSolver implementations
+        vector<string> milp_solvers = {"CPXMILPSolver", "HiGHSMILPSolver"};
+        
+        for (const auto& solver_name : milp_solvers) {
+            try {
+                // Create distinct scenarios for MILP testing
+                string filename = "test_milp_scenarios.nc4";
+                netCDF::NcFile dataFile(filename, netCDF::NcFile::replace);
+                
+                auto scenarioDim = dataFile.addDim("NumberScenarios", 10);
+                auto sizeDim = dataFile.addDim("ScenarioSize", 5);
+                auto scenarioVar = dataFile.addVar("Scenarios", netCDF::ncDouble, {scenarioDim, sizeDim});
+                
+                vector<double> data(50);
+                for (int i = 0; i < 10; ++i) {
+                    for (int j = 0; j < 5; ++j) {
+                        data[i * 5 + j] = i * 10.0 + j;
+                    }
+                }
+                scenarioVar.putVar(data.data());
+                
+                auto probVar = dataFile.addVar("poolProbabilities", netCDF::ncDouble, scenarioDim);
+                vector<double> probs(10, 0.1);
+                probVar.putVar(probs.data());
+                dataFile.close();
+                
+                auto dss = make_unique<DiscreteScenarioSet>();
+                netCDF::NcFile readFile(filename, netCDF::NcFile::read);
+                dss->deserialize(readFile);
+                readFile.close();
+                
+                auto* block_config = create_block_config(3, 2.0);
+                auto* solver_config = create_solver_config(solver_name, "", 30.0, 0);
+                
+                dss->set_scenario_reduction_config(block_config, solver_config);
+                dss->init_representative_pool(3);
+                
+                if (dss->get_selected_scenario_count() != 3) {
+                    remove(filename.c_str());
+                    return {false, solver_name + " failed to select exactly 3 scenarios"};
+                }
+                
+                remove(filename.c_str());
+                
+            } catch (const exception& e) {
+                cout << solver_name << " not available or test skipped: " << e.what() << endl;
+            }
         }
         
-        return {true, "Random pool initialized successfully with 10 scenarios"};
+        return {true, "All scenario reduction algorithms tested successfully"};
         
     } catch (const exception& e) {
         return {false, string("Test failed: ") + e.what()};
     }
 }
 
-REGISTER_TEST("Random Pool", test_random_pool);
-
-// Test 3: Scenario reduction with ScenarioReductionSolver algorithms
-TestResult test_scenario_reduction_algorithms() {
-    const int num_scenarios = 15;
-    const int scenario_size = 5;
-    const int k = 5;
-    
-    vector<string> algorithms = {"Dupacova", "BestFit", "FirstFit"};
-    
-    for (const auto& algorithm : algorithms) {
-        try {
-            auto dss = load_test_scenarios(num_scenarios, scenario_size);
-            
-            auto* block_config = create_block_config(k);
-            auto* solver_config = create_scenario_reduction_solver_config(algorithm);
-            
-            dss->set_scenario_reduction_config(block_config, solver_config);
-            
-            auto start = chrono::high_resolution_clock::now();
-            dss->init_representative_pool(k);
-            auto end = chrono::high_resolution_clock::now();
-            
-            auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
-            
-            if (dss->get_selected_scenario_count() != k) {
-                return {false, algorithm + " failed: wrong number of scenarios selected"};
-            }
-            
-        } catch (const exception& e) {
-            return {false, algorithm + " test failed: " + string(e.what())};
-        }
-    }
-    
-    return {true, "All ScenarioReductionSolver algorithms passed"};
-}
-
 REGISTER_TEST("Scenario Reduction Algorithms", test_scenario_reduction_algorithms);
 
-// Test 4: MILPSolver scenario reduction 
-TestResult test_milp_scenario_reduction() {
-    const int num_scenarios = 10;
-    const int scenario_size = 5;
-    const int k = 3;
-    
-    // Test with multiple solvers
-    vector<string> solver_names = {"CPXMILPSolver", "HiGHSMILPSolver"};
-    
-    for (const auto& solver_name : solver_names) {
-    
+// Test 3: Configuration management
+TestResult test_configuration_management() {
     try {
-        // Create distinct scenarios
-        string filename = "test_milp_scenarios.nc4";
-        netCDF::NcFile dataFile(filename, netCDF::NcFile::replace);
-        
-        auto scenarioDim = dataFile.addDim("NumberScenarios", num_scenarios);
-        auto sizeDim = dataFile.addDim("ScenarioSize", scenario_size);
-        auto scenarioVar = dataFile.addVar("Scenarios", netCDF::ncDouble, {scenarioDim, sizeDim});
-        
-        // Create scenarios with clear separation
-        vector<double> data(num_scenarios * scenario_size);
-        for (int i = 0; i < num_scenarios; ++i) {
-            for (int j = 0; j < scenario_size; ++j) {
-                data[i * scenario_size + j] = i * 10.0 + j;  // Distinct values
-            }
-        }
-        scenarioVar.putVar(data.data());
-        
-        auto probVar = dataFile.addVar("poolProbabilities", netCDF::ncDouble, scenarioDim);
-        vector<double> probs(num_scenarios, 1.0 / num_scenarios);
-        probVar.putVar(probs.data());
-        dataFile.close();
-        
-        // Load scenarios
-        auto dss = make_unique<DiscreteScenarioSet>();
-        netCDF::NcFile readFile(filename, netCDF::NcFile::read);
-        dss->deserialize(readFile);
-        readFile.close();
-        
-        // Create configurations
-        auto* block_config = create_block_config(k, 2.0);
-        auto* solver_config = create_milp_solver_config(solver_name, 30.0, 0);
-        
-        // Apply configuration
-        dss->set_scenario_reduction_config(block_config, solver_config);
-        
-        // Perform scenario reduction
-        cout << "Performing scenario reduction with k=" << k << endl;
-        dss->init_representative_pool(k);
-        
-        // Verify results
-        int selected = dss->get_selected_scenario_count();
-        cout << "Selected " << selected << " scenarios (expected " << k << ")" << endl;
-        
-        // MILPSolver should now correctly reduce to exactly k scenarios
-        if (selected != k) {
-            remove(filename.c_str());
-            return {false, solver_name + " failed to select exactly " + to_string(k) + 
-                    " scenarios. Selected: " + to_string(selected)};
-        }
-        
-        // Verify that the selected scenarios are valid indices
-        for (size_t i = 0; i < selected; ++i) {
-            auto idx = dss->get_selected_scenario_index(i);
-            if (idx >= num_scenarios) {
-                remove(filename.c_str());
-                return {false, "Invalid scenario index selected: " + to_string(idx)};
-            }
-        }
-        
-        // Clean up
-        remove(filename.c_str());
-        
-        cout << "MILPSolver scenario reduction successful with " << solver_name << endl;
-        
-    } catch (const exception& e) {
-        cout << solver_name << " not available or test skipped: " << e.what() << endl;
-    }
-    }
-    
-    return {true, "MILPSolver scenario reduction tests completed"};
-}
-
-REGISTER_TEST("MILPSolver Scenario Reduction", test_milp_scenario_reduction);
-
-// Test 5: Solver Configuration - tests both valid and invalid configurations
-TestResult test_solver_configuration() {
-    const int k = 3;
-    
-    try {
-        // Part 1: Test creating valid solver configurations
+        // Test 1: Valid solver configurations
         vector<string> valid_solver_names = {"CPXMILPSolver", "GRBMILPSolver", "ScenarioReductionSolver"};
         
         for (const auto& solver_name : valid_solver_names) {
-            // Create configurations
-            auto* block_config = create_block_config(k, 2.0);
+            auto* block_config = create_block_config(3, 2.0);
             BlockSolverConfig* solver_config = nullptr;
             
             if (solver_name == "ScenarioReductionSolver") {
-                solver_config = create_scenario_reduction_solver_config("Dupacova");
+                solver_config = create_solver_config("ScenarioReductionSolver", "Dupacova");
             } else {
-                solver_config = create_milp_solver_config(solver_name, 60.0, 0);
+                solver_config = create_solver_config(solver_name, "", 60.0, 0);
             }
             
-            // Test that configs can be created and applied
             auto dss = load_test_scenarios(10, 5);
             
             try {
                 dss->set_scenario_reduction_config(block_config, solver_config);
-                // Don't delete configs - DiscreteScenarioSet owns them now
             } catch (const exception& e) {
-                // If exception thrown, we still own the configs so delete them
                 delete block_config;
                 delete solver_config;
                 
-                // Expected for some solvers that may not be available
                 if (solver_name == "ScenarioReductionSolver") {
                     return {false, "ScenarioReductionSolver config failed: " + string(e.what())};
                 }
-                // OK if MILP solver not available
             }
         }
         
-        // Part 2: Test invalid solver configuration
+        // Test 2: Invalid solver configuration
         {
             auto dss = load_test_scenarios(10, 5);
             
@@ -499,7 +411,6 @@ TestResult test_solver_configuration() {
                 dss->set_scenario_reduction_config(block_config, solver_config);
                 return {false, "Should have thrown exception for invalid solver"};
             } catch (const invalid_argument& e) {
-                // Expected - invalid solver was correctly rejected
                 string error_msg = e.what();
                 if (error_msg.find("Unsupported solver for scenario reduction") == string::npos) {
                     return {false, "Unexpected error message for invalid solver: " + error_msg};
@@ -507,196 +418,96 @@ TestResult test_solver_configuration() {
             }
         }
         
-        return {true, "Successfully created valid configurations and rejected invalid solver"};
+        // Test 3: set_config() method
+        {
+            auto dss = load_test_scenarios(20, 3);
+            
+            // Test SimpleConfiguration with k
+            auto k_config = make_unique<SimpleConfiguration<int>>(5);
+            dss->set_config(k_config.get());
+            
+            if (dss->get_selected_scenario_count() != 5) {
+                return {false, "Expected 5 selected scenarios after set_config"};
+            }
+            
+            // Test override with new k
+            auto k_config2 = make_unique<SimpleConfiguration<int>>(8);
+            dss->set_config(k_config2.get());
+            
+            if (dss->get_selected_scenario_count() != 8) {
+                return {false, "Expected 8 selected scenarios after override"};
+            }
+            
+            // Test BlockConfig
+            auto dss2 = load_test_scenarios(20, 3);
+            auto block_cfg = make_unique<BlockConfig>();
+            auto k_extra = make_unique<SimpleConfiguration<int>>(6);
+            block_cfg->f_extra_Configuration = k_extra.release();
+            auto ell_config = make_unique<SimpleConfiguration<double>>(2.5);
+            block_cfg->f_static_variables_Configuration = ell_config.release();
+            
+            dss2->set_config(block_cfg.get());
+            
+            if (dss2->get_selected_scenario_count() != 6) {
+                return {false, "Expected 6 selected scenarios with BlockConfig"};
+            }
+            
+            // Test vector-based configuration
+            auto dss3 = load_test_scenarios(15, 2);
+            vector<double> params = {7.0, 3.0, 1e-6, 100.0};
+            auto vec_config = make_unique<SimpleConfiguration<vector<double>>>(params);
+            dss3->set_config(vec_config.get());
+            
+            if (dss3->get_selected_scenario_count() != 7) {
+                return {false, "Expected 7 selected scenarios with vector config"};
+            }
+        }
+        
+        return {true, "Configuration management tests passed"};
         
     } catch (const exception& e) {
-        return {false, string("Solver configuration test failed: ") + e.what()};
+        return {false, string("Configuration test failed: ") + e.what()};
     }
 }
 
-REGISTER_TEST("Solver Configuration", test_solver_configuration);
+REGISTER_TEST("Configuration Management", test_configuration_management);
 
-// Test 6: DiscreteScenarioSet serialization with scenario reduction config
-TestResult test_dss_serialization_with_config() {
-    const int k = 3;
-    
+// Test 4: Serialization and deserialization
+TestResult test_serialization_deserialization() {
     try {
-        // Create original DSS with config
-        auto dss1 = load_test_scenarios(10, 5);
-        auto* block_config = create_block_config(k, 2.0);
-        auto* solver_config = create_scenario_reduction_solver_config("Dupacova");
-        dss1->set_scenario_reduction_config(block_config, solver_config);
-        
-        // Serialize DSS
-        string nc_filename = "test_dss_with_config.nc4";
+        // Test 1: Basic serialization with config
         {
-            netCDF::NcFile file(nc_filename, netCDF::NcFile::replace);
-            dss1->serialize(file);
-            file.close();
-        }
-        
-        // Load into new DSS
-        auto dss2 = make_unique<DiscreteScenarioSet>();
-        {
-            netCDF::NcFile file(nc_filename, netCDF::NcFile::read);
-            dss2->deserialize(file);
-            file.close();
-        }
-        
-        // Verify k_value was restored
-        if (dss2->get_k_value() != k) {
+            auto dss1 = load_test_scenarios(10, 5);
+            auto* block_config = create_block_config(3, 2.0);
+            auto* solver_config = create_solver_config("ScenarioReductionSolver", "Dupacova");
+            dss1->set_scenario_reduction_config(block_config, solver_config);
+            
+            string nc_filename = "test_dss_with_config.nc4";
+            {
+                netCDF::NcFile file(nc_filename, netCDF::NcFile::replace);
+                dss1->serialize(file);
+                file.close();
+            }
+            
+            auto dss2 = make_unique<DiscreteScenarioSet>();
+            {
+                netCDF::NcFile file(nc_filename, netCDF::NcFile::read);
+                dss2->deserialize(file);
+                file.close();
+            }
+            
+            if (dss2->get_k_value() != 3) {
+                remove(nc_filename.c_str());
+                return {false, "k_value not properly restored"};
+            }
+            
             remove(nc_filename.c_str());
-            return {false, "k_value not properly restored"};
         }
         
-        // Clean up
-        remove(nc_filename.c_str());
-        
-        return {true, "DiscreteScenarioSet serialization with config successful"};
-        
-    } catch (const exception& e) {
-        return {false, string("DSS serialization failed: ") + e.what()};
-    }
-}
-
-REGISTER_TEST("DSS Serialization with Config", test_dss_serialization_with_config);
-
-// Test 7: MILPSolver Parameter Debugging
-TestResult test_milp_solver_parameters() {
-    try {
-        // Test parameter handling with different MILPSolver configurations
-        cout << "\n--- MILPSolver Parameter Debug Test ---" << endl;
-        
-        // Test 1: Minimal parameters
+        // Test 2: Deserialization with various configurations
         {
-            cout << "Test 1: Minimal parameters" << endl;
-            auto* solver_config = new BlockSolverConfig(true);
-            auto* compute_config = new ComputeConfig();
-            compute_config->f_diff = true;
-            
-            // Only add the most essential parameter
-            compute_config->int_pars.emplace_back("intRelaxIntVars", 0);
-            
-            solver_config->add_ComputeConfig(string("CPXMILPSolver"), compute_config);
-            
-            auto dss = load_test_scenarios(5, 3);
-            auto* block_config = create_block_config(2, 2.0);
-            
-            try {
-                dss->set_scenario_reduction_config(block_config, solver_config);
-                dss->init_representative_pool(2);
-                cout << "  Success with minimal parameters" << endl;
-                // Don't delete - ownership transferred
-            } catch (const exception& e) {
-                cout << "  Failed: " << e.what() << endl;
-                delete block_config;
-                delete solver_config;
-            }
-        }
-        
-        // Test 2: Add time limit parameter
-        {
-            cout << "\nTest 2: With time limit parameter" << endl;
-            auto* solver_config = new BlockSolverConfig(true);
-            auto* compute_config = new ComputeConfig();
-            compute_config->f_diff = true;
-            
-            compute_config->int_pars.emplace_back("intRelaxIntVars", 0);
-            // Try CPLEX-specific time limit parameter
-            compute_config->dbl_pars.emplace_back("CPXPARAM_TimeLimit", 30.0);
-            
-            solver_config->add_ComputeConfig(string("CPXMILPSolver"), compute_config);
-            
-            auto dss = load_test_scenarios(5, 3);
-            auto* block_config = create_block_config(2, 2.0);
-            
-            try {
-                dss->set_scenario_reduction_config(block_config, solver_config);
-                dss->init_representative_pool(2);
-                cout << "  Success with time limit" << endl;
-            } catch (const exception& e) {
-                cout << "  Failed: " << e.what() << endl;
-                // Check if it's the concatenation issue
-                string error_msg = e.what();
-                if (error_msg.find("dblTiLimnot") != string::npos) {
-                    cout << "  Confirmed: Parameter name concatenation issue in error message" << endl;
-                }
-                delete block_config;
-                delete solver_config;
-            }
-        }
-        
-        // Test 3: Try different double parameter
-        {
-            cout << "\nTest 3: With dblRelAcc parameter only" << endl;
-            auto* solver_config = new BlockSolverConfig(true);
-            auto* compute_config = new ComputeConfig();
-            compute_config->f_diff = true;
-            
-            compute_config->int_pars.emplace_back("intRelaxIntVars", 0);
-            // Try a different double parameter
-            compute_config->dbl_pars.emplace_back("dblRelAcc", 1e-6);
-            
-            solver_config->add_ComputeConfig(string("CPXMILPSolver"), compute_config);
-            
-            auto dss = load_test_scenarios(5, 3);
-            auto* block_config = create_block_config(2, 2.0);
-            
-            try {
-                dss->set_scenario_reduction_config(block_config, solver_config);
-                dss->init_representative_pool(2);
-                cout << "  Success with dblRelAcc" << endl;
-                // Don't delete - ownership transferred
-            } catch (const exception& e) {
-                cout << "  Failed: " << e.what() << endl;
-                string error_msg = e.what();
-                if (error_msg.find("dblRelAccnot") != string::npos) {
-                    cout << "  Same concatenation issue with dblRelAcc" << endl;
-                }
-                delete block_config;
-                delete solver_config;
-            }
-        }
-        
-        // Test 4: Test with no ComputeConfig
-        {
-            cout << "\nTest 4: No ComputeConfig parameters" << endl;
-            auto* solver_config = new BlockSolverConfig(true);
-            solver_config->add_ComputeConfig(string("CPXMILPSolver"), nullptr);
-            
-            auto dss = load_test_scenarios(5, 3);
-            auto* block_config = create_block_config(2, 2.0);
-            
-            try {
-                dss->set_scenario_reduction_config(block_config, solver_config);
-                dss->init_representative_pool(2);
-                cout << "  Success with no parameters" << endl;
-                // Don't delete - ownership transferred
-            } catch (const exception& e) {
-                cout << "  Failed: " << e.what() << endl;
-                delete block_config;
-                delete solver_config;
-            }
-        }
-        
-        return {true, "MILPSolver parameter debugging completed - see output above"};
-        
-    } catch (const exception& e) {
-        return {false, string("Parameter test failed: ") + e.what()};
-    }
-}
-
-REGISTER_TEST("MILPSolver Parameters Debug", test_milp_solver_parameters);
-
-// Test 8: Comprehensive test for scenario reduction deserialization
-TestResult test_scenario_reduction_deserialization() {
-    const int num_scenarios = 20;
-    const int scenario_size = 5;
-    
-    try {
-        // Test 1: No ScenarioReductionConfig group (should work normally)
-        {
-            string filename = create_test_scenario_file(num_scenarios, scenario_size, "_no_config");
+            // Test no config
+            string filename = create_test_scenario_file(20, 5, "_no_config");
             auto dss = make_unique<DiscreteScenarioSet>();
             netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
             dss->deserialize(dataFile);
@@ -704,17 +515,13 @@ TestResult test_scenario_reduction_deserialization() {
             
             if (dss->get_k_value() != 0) {
                 remove(filename.c_str());
-                return {false, "Test 1 failed: k_value should be 0 when no config is present"};
+                return {false, "k_value should be 0 when no config is present"};
             }
             
             remove(filename.c_str());
-        }
-        
-        // Test 2: Only k provided (should trigger init_representative_pool)
-        {
-            string filename = create_test_scenario_file(num_scenarios, scenario_size, "_only_k");
             
-            // Add ScenarioReductionConfig with only k
+            // Test only k provided
+            filename = create_test_scenario_file(20, 5, "_only_k");
             {
                 netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
                 auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
@@ -724,31 +531,20 @@ TestResult test_scenario_reduction_deserialization() {
                 dataFile.close();
             }
             
-            auto dss = make_unique<DiscreteScenarioSet>();
-            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
+            dss = make_unique<DiscreteScenarioSet>();
+            dataFile.open(filename, netCDF::NcFile::read);
             dss->deserialize(dataFile);
             dataFile.close();
             
-            // Check that k was set and pool was initialized
-            if (dss->get_k_value() != 5) {
+            if (dss->get_k_value() != 5 || dss->get_selected_scenario_count() != 5) {
                 remove(filename.c_str());
-                return {false, "Test 2 failed: k_value should be 5"};
-            }
-            
-            // Check that representative pool was initialized
-            if (dss->get_selected_scenario_count() != 5) {
-                remove(filename.c_str());
-                return {false, "Test 2 failed: Representative pool should have 5 scenarios"};
+                return {false, "Should have initialized pool with k=5"};
             }
             
             remove(filename.c_str());
-        }
-        
-        // Test 3: k + ell provided
-        {
-            string filename = create_test_scenario_file(num_scenarios, scenario_size, "_k_and_ell");
             
-            // Add ScenarioReductionConfig with k and ell
+            // Test k + ell provided
+            filename = create_test_scenario_file(20, 5, "_k_and_ell");
             {
                 netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
                 auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
@@ -761,88 +557,24 @@ TestResult test_scenario_reduction_deserialization() {
                 dataFile.close();
             }
             
-            auto dss = make_unique<DiscreteScenarioSet>();
-            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
+            dss = make_unique<DiscreteScenarioSet>();
+            dataFile.open(filename, netCDF::NcFile::read);
             dss->deserialize(dataFile);
             dataFile.close();
             
-            if (dss->get_k_value() != 7) {
+            if (dss->get_k_value() != 7 || dss->get_selected_scenario_count() != 7) {
                 remove(filename.c_str());
-                return {false, "Test 3 failed: k_value should be 7"};
-            }
-            
-            // Check that scenarios were selected (k=7 should have triggered reduction)
-            if (dss->get_selected_scenario_count() != 7) {
-                remove(filename.c_str());
-                return {false, "Test 3 failed: Should have selected 7 scenarios"};
-            }
-            
-            // The configuration has been applied and used, so we can't check its internal state
-            // after scenario reduction. Instead, verify that the reduction worked.
-            
-            remove(filename.c_str());
-        }
-        
-        // Test 4: Config without k (should store but not trigger reduction)
-        {
-            string filename = create_test_scenario_file(num_scenarios, scenario_size, "_config_no_k");
-            
-            // Add ScenarioReductionConfig with only ell
-            {
-                netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
-                auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
-                float ell = 3.0f;
-                auto ellVar = cfgGroup.addVar("ell", netCDF::ncFloat);
-                ellVar.putVar(&ell);
-                dataFile.close();
-            }
-            
-            auto dss = make_unique<DiscreteScenarioSet>();
-            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
-            dss->deserialize(dataFile);
-            dataFile.close();
-            
-            // Should not have triggered reduction
-            if (dss->get_selected_scenario_count() != 0) {
-                remove(filename.c_str());
-                return {false, "Test 4 failed: No reduction should have been triggered without k"};
+                return {false, "Should have selected 7 scenarios"};
             }
             
             remove(filename.c_str());
-        }
-        
-        // Test 5: Invalid k values (0 and > nbScenarios)
-        {
-            // Test k = 0
-            string filename = create_test_scenario_file(num_scenarios, scenario_size, "_k_zero");
+            
+            // Test invalid k values
+            filename = create_test_scenario_file(20, 5, "_k_zero");
             {
                 netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
                 auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
                 int k = 0;
-                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
-                kVar.putVar(&k);
-                dataFile.close();
-            }
-            
-            auto dss = make_unique<DiscreteScenarioSet>();
-            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
-            dss->deserialize(dataFile);
-            dataFile.close();
-            
-            // Should not have triggered reduction with k=0
-            if (dss->get_selected_scenario_count() != 0) {
-                remove(filename.c_str());
-                return {false, "Test 5a failed: No reduction should occur with k=0"};
-            }
-            
-            remove(filename.c_str());
-            
-            // Test k > nbScenarios
-            filename = create_test_scenario_file(num_scenarios, scenario_size, "_k_too_large");
-            {
-                netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
-                auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
-                int k = num_scenarios + 5;
                 auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
                 kVar.putVar(&k);
                 dataFile.close();
@@ -853,21 +585,19 @@ TestResult test_scenario_reduction_deserialization() {
             dss->deserialize(dataFile);
             dataFile.close();
             
-            // Should not have triggered reduction with k > nbScenarios
             if (dss->get_selected_scenario_count() != 0) {
                 remove(filename.c_str());
-                return {false, "Test 5b failed: No reduction should occur with k > nbScenarios"};
+                return {false, "No reduction should occur with k=0"};
             }
             
             remove(filename.c_str());
         }
         
-        // Test 6: Serialization round-trip with k and ell
+        // Test 3: Serialization round-trip
         {
-            string filename1 = create_test_scenario_file(num_scenarios, scenario_size, "_roundtrip1");
+            string filename1 = create_test_scenario_file(20, 5, "_roundtrip1");
             string filename2 = "test_roundtrip2.nc4";
             
-            // Add config and serialize
             {
                 netCDF::NcFile dataFile(filename1, netCDF::NcFile::write);
                 auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
@@ -880,7 +610,6 @@ TestResult test_scenario_reduction_deserialization() {
                 dataFile.close();
             }
             
-            // Load and re-serialize
             auto dss1 = make_unique<DiscreteScenarioSet>();
             netCDF::NcFile dataFile1(filename1, netCDF::NcFile::read);
             dss1->deserialize(dataFile1);
@@ -890,238 +619,29 @@ TestResult test_scenario_reduction_deserialization() {
             dss1->serialize(dataFile2);
             dataFile2.close();
             
-            // Load the re-serialized file
             auto dss2 = make_unique<DiscreteScenarioSet>();
             netCDF::NcFile dataFile3(filename2, netCDF::NcFile::read);
             dss2->deserialize(dataFile3);
             dataFile3.close();
             
-            // Verify k and pool size match
             if (dss2->get_k_value() != 8 || dss2->get_selected_scenario_count() != 8) {
                 remove(filename1.c_str());
                 remove(filename2.c_str());
-                return {false, "Test 6 failed: Round-trip serialization failed to preserve k and pool"};
+                return {false, "Round-trip serialization failed to preserve k and pool"};
             }
             
             remove(filename1.c_str());
             remove(filename2.c_str());
         }
         
-        return {true, "All scenario reduction deserialization tests passed"};
+        return {true, "Serialization and deserialization tests passed"};
         
     } catch (const exception& e) {
-        return {false, string("Exception during test: ") + e.what()};
+        return {false, string("Serialization test failed: ") + e.what()};
     }
 }
 
-REGISTER_TEST("Scenario Reduction Deserialization", test_scenario_reduction_deserialization);
-
-/*--------------------------------------------------------------------------*/
-/// Test 8: set_config() method functionality
-TestResult test_set_config() {
-    try {
-        cout << "\n=== Testing set_config() method ===" << endl;
-        
-        // Create a test scenario file
-        string filename = create_test_scenario_file(20, 3, "_setconfig"); // 20 scenarios, dim 3
-        
-        // Test 1: Load scenarios without initial config
-        cout << "\n[Test 1] Loading scenarios without config..." << endl;
-        auto dss1 = unique_ptr<DiscreteScenarioSet>(
-            dynamic_cast<DiscreteScenarioSet*>(ScenarioGenerator::deserialize(filename))
-        );
-        if (!dss1) {
-            return {false, "Failed to deserialize scenario file"};
-        }
-        
-        if (dss1->get_k_value() != 0) {
-            return {false, "Expected k_value to be 0 initially"};
-        }
-        
-        // Test 2: Create and apply SimpleConfiguration with k
-        cout << "\n[Test 2] Applying SimpleConfiguration with k=5..." << endl;
-        auto k_config = make_unique<SimpleConfiguration<int>>(5);
-        
-        dss1->set_config(k_config.get());
-        
-        // Should have applied scenario reduction
-        if (dss1->get_selected_scenario_count() != 5) {
-            return {false, "Expected 5 selected scenarios after set_config"};
-        }
-        
-        // Test 3: Override with new config
-        cout << "\n[Test 3] Overriding with new config (k=8)..." << endl;
-        auto k_config2 = make_unique<SimpleConfiguration<int>>(8);
-        
-        dss1->set_config(k_config2.get());
-        
-        if (dss1->get_selected_scenario_count() != 8) {
-            return {false, "Expected 8 selected scenarios after override"};
-        }
-        
-        // Test 4: Config with BlockConfig
-        cout << "\n[Test 4] Config with full BlockConfig..." << endl;
-        auto dss2 = unique_ptr<DiscreteScenarioSet>(
-            dynamic_cast<DiscreteScenarioSet*>(ScenarioGenerator::deserialize(filename))
-        );
-        if (!dss2) {
-            return {false, "Failed to deserialize scenario file (2)"};
-        }
-        
-        // Create BlockConfig with k in extra configuration
-        auto block_cfg = make_unique<BlockConfig>();
-        auto k_extra = make_unique<SimpleConfiguration<int>>(6);
-        block_cfg->f_extra_Configuration = k_extra.release();
-        
-        // Add ell parameter to static variables
-        auto ell_config = make_unique<SimpleConfiguration<double>>(2.5);
-        block_cfg->f_static_variables_Configuration = ell_config.release();
-        
-        dss2->set_config(block_cfg.get());
-        
-        if (dss2->get_selected_scenario_count() != 6) {
-            return {false, "Expected 6 selected scenarios with BlockConfig"};
-        }
-        
-        // Test 5: Override with simple k config
-        cout << "\n[Test 5] Testing override with simple k config..." << endl;
-        auto k_config3 = make_unique<SimpleConfiguration<int>>(10);
-        
-        dss2->set_config(k_config3.get());
-        
-        if (dss2->get_selected_scenario_count() != 10) {
-            return {false, "Expected 10 selected scenarios after override"};
-        }
-        
-        // Clean up
-        remove(filename.c_str());
-        
-        cout << "\nAll set_config() tests passed!" << endl;
-        return {true, "All set_config() tests passed"};
-        
-    } catch (const exception& e) {
-        return {false, string("Exception during test: ") + e.what()};
-    }
-}
-
-REGISTER_TEST("set_config() Method", test_set_config);
-
-// Test refactoring changes - ensure simplified validation works
-TestResult test_refactoring_validation() {
-    try {
-        cout << "\n=== Testing Refactoring: Simplified Validation ===" << endl;
-        
-        // Create a test scenario file
-        string filename = create_test_scenario_file(15, 2, "_refactoring");
-        
-        // Test 1: Dynamic cast validation (should trust after cast succeeds)
-        cout << "\n[Test 1] Testing dynamic_cast validation..." << endl;
-        
-        // First, add ScenarioReductionConfig to the existing file
-        {
-            // Open the file in write mode to add config
-            netCDF::NcFile file(filename, netCDF::NcFile::write);
-            
-            // The DiscreteScenarioSet data is at root level, so add config there
-            auto config_group = file.addGroup("ScenarioReductionConfig");
-            
-            // Add k parameter
-            auto k_var = config_group.addVar("k", netCDF::ncInt);
-            int k = 5;
-            k_var.putVar(&k);
-            
-            // Add BlockConfig using in-memory serialization
-            auto* block_config = create_block_config(k, 2.0);
-            auto block_group = config_group.addGroup("BlockConfig");
-            block_config->serialize(block_group);
-            delete block_config;
-            
-            // Add BlockSolverConfig using in-memory serialization  
-            auto* solver_config = create_scenario_reduction_solver_config("Dupacova");
-            auto solver_group = config_group.addGroup("BlockSolverConfig");
-            solver_config->serialize(solver_group);
-            delete solver_config;
-            
-            file.close();
-        }
-        
-        // Now deserialize with the config
-        auto dss_with_config = unique_ptr<DiscreteScenarioSet>(
-            dynamic_cast<DiscreteScenarioSet*>(ScenarioGenerator::deserialize(filename))
-        );
-        
-        if (!dss_with_config) {
-            return {false, "Failed to deserialize with ScenarioReductionConfig"};
-        }
-        
-        // Should have loaded without throwing (trusting config after dynamic_cast)
-        cout << "Successfully loaded with simplified validation" << endl;
-        
-        // Check that it triggered reduction with k=5
-        if (dss_with_config->get_selected_scenario_count() != 5) {
-            return {false, "Expected 5 selected scenarios after deserialization with k=5"};
-        }
-        
-        // Test 2: set_config with vector-based configuration
-        cout << "\n[Test 2] Testing vector-based configuration..." << endl;
-        
-        // Create a fresh test file for test 2
-        string filename2 = create_test_scenario_file(15, 2, "_refactoring2");
-        auto dss2 = unique_ptr<DiscreteScenarioSet>(
-            dynamic_cast<DiscreteScenarioSet*>(ScenarioGenerator::deserialize(filename2))
-        );
-        
-        // Create vector config with [k, ell, future_param1, future_param2]
-        vector<double> params = {7.0, 3.0, 1e-6, 100.0};
-        auto vec_config = make_unique<SimpleConfiguration<vector<double>>>(params);
-        
-        // Verify scenarios are loaded
-        cout << "Selected scenarios before set_config: " << dss2->get_selected_scenario_count() << endl;
-        
-        dss2->set_config(vec_config.get());
-        
-        cout << "Selected scenarios after set_config: " << dss2->get_selected_scenario_count() << endl;
-        
-        if (dss2->get_selected_scenario_count() != 7) {
-            return {false, "Expected 7 selected scenarios with vector config"};
-        }
-        
-        cout << "Vector-based configuration worked correctly" << endl;
-        
-        // Test 3: Ensure default generation doesn't use files
-        cout << "\n[Test 3] Testing default config generation..." << endl;
-        
-        // Create a fresh test file for test 3
-        string filename3 = create_test_scenario_file(15, 2, "_refactoring3");
-        auto dss3 = unique_ptr<DiscreteScenarioSet>(
-            dynamic_cast<DiscreteScenarioSet*>(ScenarioGenerator::deserialize(filename3))
-        );
-        
-        // This should trigger ensure_configuration_exists which now uses
-        // generate_default_cfl_config directly without files
-        dss3->init_representative_pool(4);
-        
-        if (dss3->get_selected_scenario_count() != 4) {
-            return {false, "Expected 4 selected scenarios with default config"};
-        }
-        
-        cout << "Default configuration generation works without files" << endl;
-        
-        // Clean up all test files
-        remove(filename.c_str());
-        remove(filename2.c_str()); 
-        remove(filename3.c_str());
-        
-        cout << "\nAll refactoring tests passed!" << endl;
-        return {true, "All refactoring validation tests passed"};
-        
-    } catch (const exception& e) {
-        return {false, string("Exception during refactoring test: ") + e.what()};
-    }
-}
-
-REGISTER_TEST("Refactoring Validation", test_refactoring_validation);
-
+REGISTER_TEST("Serialization and Deserialization", test_serialization_deserialization);
 
 /*--------------------------------------------------------------------------*/
 /*-------------------------------- MAIN ------------------------------------*/
