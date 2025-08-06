@@ -945,8 +945,8 @@ DiscreteScenarioSet::create_cfl_problem_data(ScenarioIndex n_scenarios) const
   
   // Set up the basic CFL parameters
   for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
-    capacities[i] = 1.0;      // Each facility can serve at most one unit
-    fixed_costs[i] = 0.0;     // No fixed cost in scenario reduction
+    capacities[i] = 1.0;      // Capacities = weights of the reduced distribution
+    fixed_costs[i] = 0.0;     // No fixed cost in scenario reduction, but we do have a constraint on the maximal number of facilities that can (should) be opened.
     demands[i] = poolProbabilities[i];  // Demand equals probability weight
   }
   
@@ -1009,9 +1009,7 @@ DiscreteScenarioSet::create_and_configure_solver(CapacitatedFacilityLocationBloc
                             solver_name == "HiGHSMILPSolver");
       
       if (is_milp_solver) {
-        // For MILPSolver, we need to ensure the ComputeConfig parameters are properly set
-        // The configuration should already be properly formatted if loaded from file
-        // or created with proper parameter names
+        // Additional checks when using for MILPSolver?
       }
     }
     
