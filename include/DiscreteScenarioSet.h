@@ -2,29 +2,25 @@
 /*-------------------- File DiscreteScenarioSet.h --------------------------*/
 /*--------------------------------------------------------------------------*/
 /** @file
- * Header file for the *concrete* class DiscreteScenarioSet that is an
- * implementation of ScenarioGenerator suited to the case where the input
- * distribution is contained in a netCDF file as a collection of vectors.
- * 
- * The class provides methods for scenario selection and management:
- * - Scenario Pool Selection:
- *   - Using random selection (always available)
- *   - Using scenario reduction via Wasserstein distance minimization
+ * Header file for the *concrete* class DiscreteScenarioSet, an implementation
+ * of ScenarioGenerator for discrete probability distributions stored in netCDF
+ * files.
  *
- * The scenario reduction functionality can be configured through a Configuration 
- * object loaded from a netCDF file or set programmatically. It integrates with 
- * the CapacitatedFacilityLocationBlock module to implement scenario selection methods 
- * based on the Wasserstein distance metric.
+ * DiscreteScenarioSet manages collections of scenarios loaded from netCDF files
+ * and provides scenario selection methods including random sampling
+ * and Wasserstein distance-based scenario reduction. When configured with
+ * appropriate solvers, it can perform optimal or heuristic scenario reduction
+ * based on Wasserstein distance minimization.
  *
  * \author Antonio Frangioni \n
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  *
- * \author Benoit Tran \n
+ * \author Benoît Tran \n
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  *
- * \copyright &copy; by Antonio Frangioni and Benoit Tran
+ * \copyright &copy; by Antonio Frangioni, Benoît Tran
  */
 
 /*--------------------------------------------------------------------------*/
@@ -59,39 +55,56 @@
 namespace SMSpp_di_unipi_it
 {
 
-/// User-defined literal for probability percentages (must be at namespace or global scope)
-/** This literal allows writing probabilities as percentages, e.g., 25.0_pct */
-constexpr double operator"" _pct(long double percentage) {
-    return static_cast<double>(percentage / 100.0);
-}
 /*--------------------------------------------------------------------------*/
 /*--------------------- CLASS DiscreteScenarioSet --------------------------*/
 /*--------------------------------------------------------------------------*/
 /*--------------------------- GENERAL NOTES --------------------------------*/
 /*--------------------------------------------------------------------------*/
-
-/// DiscreteScenarioSet to sample from a collection of scenarios
-/** DiscreteScenarioSet is an implementation of the ScenarioGenerator class.
- * As such, it provides methods to sample from an input distribution and manipulate
- * a scenarioPool.
+/// concrete ScenarioGenerator for discrete probability distributions
+/** The DiscreteScenarioSet class is a concrete implementation of ScenarioGenerator
+ * that manages discrete probability distributions represented as collections of
+ * scenario vectors.
  *
- * In the specific context of DiscreteScenarioSet, the distribution to sample
- * from is assumed to be a discrete probability distribution characterized
- * by a collection of scenarios. Scenarios are assumed to be contained in a
- * netCDF file, and DiscreteScenarioSet provides methods to deserialize the scenarios
- * from the netCDF file. The deserialized scenarios are stored in a
- * boost::multi_array< double, 2 >.
+ * ### Data Management
  *
- * DiscreteScenarioSet implements scenario selection from the input pool:
- * 
- * - Selects a *subset* of the input scenarioPool via:
- *   - Random selection (always available) via init_random_pool()
- *   - Scenario reduction via init_representative_pool() (requires proper configuration)
- *   - The subset is characterized by the set of indexes of the selected scenarios
+ * Scenarios are loaded from netCDF files and stored internally as a
+ * boost::multi_array<double, 2> where each row represents a scenario vector.
+ * The class supports both uniform and weighted probability distributions over
+ * the scenarios.
  *
- * The method get_current_scenario() allows the user to query one element in
- * the selected pool. The get_current_scenario_probability() method returns
- * the normalized probability of the current scenario.
+ * ### Scenario Selection Methods
+ *
+ * DiscreteScenarioSet provides two primary methods for selecting scenario subsets:
+ *
+ * - **Random Selection** (init_random_pool()): Randomly samples k scenarios from
+ *   the full set, always available without additional configuration
+ *
+ * - **Scenario Reduction** (init_representative_pool()): Selects a representative
+ *   subset that minimizes the Wasserstein distance between the original and reduced
+ *   distributions. This requires configuration via set_scenario_reduction_config(),
+ *   set_config(), or automatically loaded during netCDF deserialization
+ *
+ * ### Configuration and Persistence
+ *
+ * The class supports configuration through:
+ * - Direct parameter setting via set_scenario_reduction_config()
+ * - Configuration objects via set_config()
+ * - Persistence through netCDF serialization/deserialization
+ *
+ * Scenario reduction parameters and solver configurations can be saved to and
+ * loaded from netCDF files, enabling reproducible scenario selection.
+ *
+ * ### Usage Pattern
+ *
+ * 1. Load scenarios via deserialize() or direct construction
+ * 2. Configure scenario reduction (optional) via set_config() or
+ *    set_scenario_reduction_config()
+ * 3. Initialize pool via init_random_pool() or init_representative_pool()
+ * 4. Access scenarios via get_current_scenario() and iterate via
+ *    get_next_scenario()
+ *
+ * @see ScenarioGenerator for the base interface
+ * @see ScenarioReductionSolver for the reduction algorithms
  */
 
 class DiscreteScenarioSet : public ScenarioGenerator
