@@ -23,6 +23,7 @@
 /*--------------------------------------------------------------------------*/
 
 #include <span>  // Ensure span is available before other includes
+#include <algorithm>  // For std::sort
 #include "DiscreteScenarioSet.h" 
 #include "CapacitatedFacilityLocationBlock.h"
 #include "ScenarioReductionSolver.h"
@@ -230,7 +231,7 @@ void DiscreteScenarioSet::set_config(Configuration* config)
   
   // Try to extract k parameter directly
   ScenarioIndex k = 0;
-  double ell = DEFAULT_ELL_VALUE;
+  double ell_value = DEFAULT_ELL_VALUE;
   
   // Check for SimpleConfiguration<int> (just k)
   auto* k_config = dynamic_cast<SimpleConfiguration<int>*>(config);
@@ -242,14 +243,19 @@ void DiscreteScenarioSet::set_config(Configuration* config)
     if (vec_config && !vec_config->f_value.empty()) {
       k = static_cast<ScenarioIndex>(vec_config->f_value[0]);
       if (vec_config->f_value.size() > 1) {
-        ell = vec_config->f_value[1];
+        ell_value = vec_config->f_value[1];
       }
     }
   }
   
+  // Store ell value if provided
+  if (ell_value > 0) {
+    this->ell = static_cast<float>(ell_value);
+  }
+  
   // If we found k, create default configs and apply
   if (k > 0) {
-    auto* block_cfg = generate_default_cfl_config(k, ell);
+    auto* block_cfg = generate_default_cfl_config(k);
     auto* solver_cfg = generate_default_solver_config("Dupacova");
     
     set_scenario_reduction_config(block_cfg, solver_cfg, k);
@@ -375,15 +381,18 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
       }
       
       // Try to read ell (optional, default 2.0)
-      float ell = 2.0f;
+      float ell_value = 2.0f;
       try {
         auto ellVar = cfgGroup.getVar("ell");
         if (!ellVar.isNull()) {
-          ellVar.getVar(&ell);
+          ellVar.getVar(&ell_value);
         }
       } catch (...) {
         // ell not found, use default
       }
+      
+      // Store ell as an internal variable
+      this->ell = ell_value;
       
       // Try to deserialize BlockConfig
       BlockConfig* block_cfg = nullptr;
@@ -424,12 +433,9 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
       if (has_k && k > 0) {
         // Generate missing configs
         if (!block_cfg) {
-          block_cfg = generate_default_cfl_config(k, ell);
+          block_cfg = generate_default_cfl_config(k);
           if (!block_cfg) {
             throw std::runtime_error("Failed to generate default BlockConfig");
-          }
-          if (!block_cfg->f_static_variables_Configuration) {
-            throw std::runtime_error("generate_default_cfl_config did not set f_static_variables_Configuration");
           }
         }
         if (!solver_cfg) {
@@ -456,7 +462,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
       } else if (block_cfg || solver_cfg) {
         // Configs provided without k - just store them for later use
         if (!block_cfg) {
-          block_cfg = generate_default_cfl_config(1, ell); // Dummy k=1
+          block_cfg = generate_default_cfl_config(1); // Dummy k=1
         }
         if (!solver_cfg) {
           solver_cfg = generate_default_solver_config();
@@ -502,16 +508,9 @@ void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
       kVar.putVar(&k_value);
     }
     
-    // Serialize ell if available from BlockConfig
-    if (f_scenario_reduction_config.first && f_scenario_reduction_config.first->f_static_variables_Configuration) {
-      auto* ell_config = dynamic_cast<SimpleConfiguration<double>*>(
-          f_scenario_reduction_config.first->f_static_variables_Configuration);
-      if (ell_config) {
-        float ell = static_cast<float>(ell_config->f_value);
-        auto ellVar = cfgGroup.addVar("ell", netCDF::ncFloat);
-        ellVar.putVar(&ell);
-      }
-    }
+    // Serialize ell from internal variable
+    auto ellVar = cfgGroup.addVar("ell", netCDF::ncFloat);
+    ellVar.putVar(&ell);
     
     // Serialize BlockConfig
     auto blockGroup = cfgGroup.addGroup("BlockConfig");
@@ -588,23 +587,89 @@ void DiscreteScenarioSet::init_random_pool(ScenarioIndex pool_size)
 // Initialize a representative pool using scenario reduction
 void DiscreteScenarioSet::init_representative_pool( ScenarioIndex k )
 {
-  // Validate the k parameter
+  // Step 1: Validate the k parameter
   validate_k_parameter(k);
-  
-  // Ensure configuration exists (create with defaults if needed)
-  ensure_configuration_exists(k);
   
   // Clean up any existing pool
   empty_pool();
   
-  // Set up pool parameters
-  currentScenarioIndex = 0;
+  // Check if we have a BlockSolverConfig (BlockConfig alone is not useful without solver)
+  if (f_scenario_reduction_config.second) {
+    // Step 2: Create a CapacitatedFacilityLocationBlock for scenario selection
+    auto cflBlock = std::make_unique<CapacitatedFacilityLocationBlock>();
+    
+    // Set up the scenario selection problem parameters
+    ScenarioIndex n_scenarios = nbScenarios;
+    ScenarioSize scenario_size = scenarioSize;
+    
+    // Create CFL problem data
+    auto [capacities, fixed_costs, demands] = create_cfl_problem_data(n_scenarios);
+    
+    // Compute the transport cost matrix with ell-powered distances
+    auto transport_costs = compute_transport_cost_matrix(n_scenarios, scenario_size, this->ell);
+    
+    // Load the CFL problem into the block
+    cflBlock->load(
+        n_scenarios,       // Number of facilities
+        n_scenarios,       // Number of customers
+        std::move(capacities),
+        std::move(fixed_costs),
+        std::move(demands),
+        std::move(transport_costs),
+        false,             // Not a balanced problem
+        k                  // Maximum number of facilities to open
+    );
+    
+    // Step 3.1: Apply BlockConfig if it exists, else generate minimal default
+    if (f_scenario_reduction_config.first) {
+      // Trust that the user provided appropriate BlockConfig for CFL
+      f_scenario_reduction_config.first->apply(cflBlock.get());
+    } else {
+      // Generate minimal default config (mostly empty, just k in extra_Configuration)
+      auto* default_config = generate_default_cfl_config(k);
+      default_config->apply(cflBlock.get());
+      delete default_config;
+    }
+    
+    // Step 3.2: Apply BlockSolverConfig and solve
+    f_scenario_reduction_config.second->apply(cflBlock.get());
+    
+    // Get the registered solver and solve
+    if (cflBlock->get_registered_solvers().empty()) {
+      throw std::runtime_error("No solver registered after BlockSolverConfig::apply");
+    }
+    
+    auto* solver = cflBlock->get_registered_solvers().front();
+    if (!solver) {
+      throw std::runtime_error("Failed to get solver from block");
+    }
+    
+    // If it's a ScenarioReductionSolver, set the ell parameter
+    auto* scenario_solver = dynamic_cast<ScenarioReductionSolver*>(solver);
+    if (scenario_solver) {
+      scenario_solver->set_par(ScenarioReductionSolver::dblEll, static_cast<double>(this->ell));
+    }
+    
+    // Solve the problem
+    int status = solver->compute();
+    if (status != Solver::kOK) {
+      throw std::runtime_error("Solver failed with status: " + std::to_string(status));
+    }
+    
+    // Extract the solution from the solver
+    extract_selected_scenarios(solver, cflBlock.get(), n_scenarios);
+  } else {
+    // No solver config - use baseline method (select top k by weight)
+    // BlockConfig alone is not useful for baseline selection
+    apply_baseline_selection(k);
+  }
   
-  // Apply scenario reduction using the configuration
-  apply_scenario_reduction();
+  // Update pool weights and finalize
+  update_pool_weights();
   
   // Update pool size based on the selected scenarios
   poolSize = static_cast<ScenarioIndex>(scenarioIndexes.size());
+  currentScenarioIndex = 0;
   
   // Mark the pool as initialized if we have scenarios
   if (!scenarioIndexes.empty()) {
@@ -651,15 +716,8 @@ void DiscreteScenarioSet::apply_scenario_reduction()
   std::cout << "DEBUG [apply_scenario_reduction]: total scenarios available = " << nbScenarios << std::endl;
   #endif
   
-  // Extract ell parameter for distance calculations from BlockConfig
-  float ell = DEFAULT_ELL_VALUE;
-  if (f_scenario_reduction_config.first->f_static_variables_Configuration) {
-    auto* ell_config = dynamic_cast<SimpleConfiguration<double>*>(
-        f_scenario_reduction_config.first->f_static_variables_Configuration);
-    if (ell_config) {
-      ell = static_cast<float>(ell_config->f_value);
-    }
-  }
+  // Use the internal ell parameter for distance calculations
+  // (no longer extracted from BlockConfig)
   
   // Clear existing selection
   scenarioIndexes.clear();
@@ -677,7 +735,7 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     auto [capacities, fixed_costs, demands] = create_cfl_problem_data(n_scenarios);
     
     // Compute the transport cost matrix using helper function
-    auto transport_costs = compute_transport_cost_matrix(n_scenarios, scenario_size, ell);
+    auto transport_costs = compute_transport_cost_matrix(n_scenarios, scenario_size, this->ell);
     
     // Load the CFL problem into the block FIRST
     #ifndef NDEBUG
@@ -736,7 +794,7 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     }
     
     // Configure the solver using helper function
-    Solver* solver = create_and_configure_solver(cflBlock.get(), ell);
+    Solver* solver = create_and_configure_solver(cflBlock.get(), this->ell);
     #ifndef NDEBUG
     std::cout << "DEBUG [apply_scenario_reduction]: Using solver: " << solver->classname() << std::endl;
     #endif
@@ -919,7 +977,7 @@ void DiscreteScenarioSet::ensure_configuration_exists(ScenarioIndex k)
   // If configuration is not initialized, create it with default values
   if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
     // Create default configurations
-    auto* block_cfg = generate_default_cfl_config(k, DEFAULT_ELL_VALUE);
+    auto* block_cfg = generate_default_cfl_config(k);
     auto* solver_cfg = generate_default_solver_config("Dupacova");
     
     // Set the configuration
@@ -1121,6 +1179,39 @@ void DiscreteScenarioSet::extract_selected_scenarios(const Solver* solver,
   }
 }
 
+// Apply baseline selection method
+void DiscreteScenarioSet::apply_baseline_selection(ScenarioIndex k)
+{
+  // Create pairs of (index, weight) for sorting
+  std::vector<std::pair<ScenarioIndex, double>> indexed_weights;
+  indexed_weights.reserve(nbScenarios);
+  
+  for (ScenarioIndex i = 0; i < nbScenarios; ++i) {
+    double weight = (i < poolProbabilities.size()) ? poolProbabilities[i] : 1.0 / nbScenarios;
+    indexed_weights.emplace_back(i, weight);
+  }
+  
+  // Sort by weight in descending order (highest weights first)
+  std::sort(indexed_weights.begin(), indexed_weights.end(),
+            [](const auto& a, const auto& b) { return a.second > b.second; });
+  
+  // Select the top k scenarios
+  scenarioIndexes.clear();
+  scenarioIndexes.reserve(k);
+  
+  for (ScenarioIndex i = 0; i < k && i < nbScenarios; ++i) {
+    scenarioIndexes.push_back(indexed_weights[i].first);
+  }
+  
+  // Sort the selected indices for consistency
+  std::sort(scenarioIndexes.begin(), scenarioIndexes.end());
+  
+  #ifndef NDEBUG
+  std::cout << "DEBUG [apply_baseline_selection]: Selected " << scenarioIndexes.size() 
+            << " scenarios using baseline method (top weights)" << std::endl;
+  #endif
+}
+
 // Update pool weights after scenario selection
 void DiscreteScenarioSet::update_pool_weights()
 {
@@ -1142,16 +1233,14 @@ void DiscreteScenarioSet::apply_pending_scenario_reduction()
 
 
 // Generate default BlockConfig for CFL
-BlockConfig* DiscreteScenarioSet::generate_default_cfl_config(ScenarioIndex k, float ell) const
+BlockConfig* DiscreteScenarioSet::generate_default_cfl_config(ScenarioIndex k) const
 {
   auto* config = new BlockConfig(false);  // not differential
   
   // Set k in extra_Configuration
   config->f_extra_Configuration = new SimpleConfiguration<int>(k);
   
-  // Set ell in static_variables_Configuration  
-  config->f_static_variables_Configuration = new SimpleConfiguration<double>(static_cast<double>(ell));
-  
+  // Note: ell is no longer part of BlockConfig - it's an internal variable of DiscreteScenarioSet
   // Add default constraint generation (all constraints)
   // For now, leave this to the CapacitatedFacilityLocationBlock defaults
   

@@ -80,7 +80,7 @@
 #include <optional> // for std::optional
 
 // TODO: In production, ensure C++20 support is available or provide fallback
-// Some compilers may not have std::span even with -std=c++20 flag
+
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
 /*--------------------------------------------------------------------------*/

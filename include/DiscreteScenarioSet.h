@@ -9,10 +9,7 @@
  * The class provides methods for scenario selection and management:
  * - Scenario Pool Selection:
  *   - Using random selection (always available)
- *   - Using scenario reduction via Wasserstein distance minimization: 
- *     - Forward selection method (Dupačová)
- *     - Local search algorithms: FirstFit and BestFit
- *     - MILP-based optimization approach
+ *   - Using scenario reduction via Wasserstein distance minimization
  *
  * The scenario reduction functionality can be configured through a Configuration 
  * object loaded from a netCDF file or set programmatically. It integrates with 
@@ -159,14 +156,15 @@ public:
   * - k (int): Optional. If provided and > 0, init_representative_pool(k) 
   *   will be called after deserialization completes.
   * - ell (float): Optional. Power for Wasserstein distance (default 2.0).
+  *   Stored as internal variable, not part of BlockConfig.
   * - BlockConfig/: Optional. Configuration for CapacitatedFacilityLocationBlock.
-  *   If k is provided but BlockConfig is not, a default will be generated.
   * - BlockSolverConfig/: Optional. Configuration for the solver.
-  *   If k is provided but BlockSolverConfig is not, a default ScenarioReductionSolver 
-  *   configuration will be generated.
   * 
   * Note: If k is provided, scenario reduction will be automatically applied
-  * after the scenarios are loaded.
+  * after the scenarios are loaded using init_representative_pool(k).
+  * The behavior depends on whether BlockSolverConfig is provided:
+  * - With BlockSolverConfig: Uses configured solver for optimization
+  * - Without BlockSolverConfig: Uses baseline selection (top k by weight)
   */
  void deserialize( const netCDF::NcGroup & group ) override;
 
@@ -265,25 +263,27 @@ public:
  void init_random_pool(ScenarioIndex pool_size) override;
 
  /**
-  * @brief Select the most representative scenarios using optimization
+  * @brief Select the most representative scenarios
   * 
-  * Creates a pool of k scenarios that best approximate the full distribution
-  * by minimizing the Wasserstein distance. This produces a high-quality
-  * subset for building optimization models that capture the essential
-  * characteristics of the uncertainty.
+  * Creates a pool of k scenarios from the full distribution. The selection
+  * method depends on whether a BlockSolverConfig is provided:
   * 
-  * The method can use different algorithms (configurable via set_scenario_reduction_config):
-  * - "Dupacova": Fast forward selection with good quality
-  * - "BestFit": Better quality through local search
-  * - "FirstFit": Balanced speed and quality
-  * - "MILP": Optimal selection (slowest)
+  * 1. If BlockSolverConfig is provided:
+  *    - Creates a CapacitatedFacilityLocationBlock to model scenario selection
+  *    - Applies BlockConfig if provided (or generates minimal default)
+  *    - Applies the configured solver (e.g., "Dupacova", "BestFit", "MILP")
+  *    - Solves to minimize Wasserstein distance between original and reduced sets
   * 
-  * If no configuration is provided, uses Dupacova algorithm by default.
+  * 2. If no BlockSolverConfig is provided:
+  *    - Uses baseline method (selects top k scenarios by probability weight)
+  * 
+  * The baseline method sorts scenarios by their probability weights in descending
+  * order and selects the k scenarios with highest weights.
   * 
   * @param k Number of representative scenarios to select
   * @throws std::invalid_argument If k is invalid (0 or > available scenarios)
-  * @throws std::runtime_error If the optimization fails
-  * @see set_scenario_reduction_config() to customize the selection algorithm
+  * @throws std::runtime_error If the solver fails (when using configured solver)
+  * @see set_scenario_reduction_config() to provide BlockConfig and BlockSolverConfig
   */
  void init_representative_pool( ScenarioIndex k ) override;
 
@@ -299,7 +299,6 @@ public:
   * Returns the BlockConfig part of the scenario reduction configuration,
   * which contains parameters like:
   * - k: Number of scenarios to select
-  * - ell: Power parameter for Wasserstein distance (typically 2.0)
   * 
   * The BlockConfig is owned by the DiscreteScenarioSet object and should
   * not be deleted by the caller.
@@ -335,7 +334,6 @@ public:
   * 
   * 1. block_config (BlockConfig):
   *    - k: Number of scenarios to select (must be > 0 and <= nbScenarios)
-  *    - ell: Power parameter for Wasserstein distance (typically 2.0)
   * 
   * 2. solver_config (BlockSolverConfig):
   *    - algorithm: Scenario reduction method to use, one of:
@@ -345,12 +343,15 @@ public:
   *      - "MILP" (mixed integer linear programming)
   *    - Other solver-specific parameters
   * 
+  * Note: The ell parameter for Wasserstein distance is an internal
+  * variable of DiscreteScenarioSet.
+  * 
   * Implementation details:
   * - Stores the configurations internally
   * - Replaces any existing configuration
   * - The object takes ownership of both config pointers
   * 
-  * @param block_config BlockConfig containing reduction parameters (k, ell)
+  * @param block_config BlockConfig containing reduction parameters (k)
   * @param solver_config BlockSolverConfig containing algorithm and solver settings
   */
  void set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config);
@@ -417,6 +418,17 @@ public:
          throw std::invalid_argument("k_value must be positive");
      }
      k_value = k;
+ }
+ 
+ /// Get the ell parameter for Wasserstein distance calculation
+ [[nodiscard]] float get_ell() const { return ell; }
+ 
+ /// Set the ell parameter for Wasserstein distance calculation
+ void set_ell(float ell_value) {
+     if (ell_value <= 0) {
+         throw std::invalid_argument("ell must be positive");
+     }
+     ell = ell_value;
  }
  
  /// Access an individual scenario value
@@ -504,11 +516,17 @@ private:
  /// Pending k value to apply after deserialization
  ScenarioIndex pending_k_value = 0;
  
+ /// Power parameter for Wasserstein distance calculation in scenario reduction
+ /** The ell parameter determines the power of the norm used when computing
+  *  distances between scenarios. Default value is 2.0 (Euclidean distance).
+  *  This can be overridden during deserialization from the netCDF file. */
+ float ell = DEFAULT_ELL_VALUE;
+ 
  /**
   * @brief Configuration for scenario reduction
   * 
   * Stores a pair of configurations for scenario reduction:
-  * - First: BlockConfig with parameters like k (number of scenarios) and ell (distance power)
+  * - First: BlockConfig with parameters like k (number of scenarios)
   * - Second: BlockSolverConfig with the algorithm choice and solver settings
   * 
   * The configuration is loaded during deserialization if available
@@ -726,13 +744,12 @@ private:
 
  /// Generate default BlockConfig for CFL
  /** Creates a default BlockConfig suitable for CapacitatedFacilityLocationBlock
-  * with the specified k and ell parameters.
+  * with the specified k parameter.
   * 
   * @param k Number of scenarios to select
-  * @param ell Power parameter for Wasserstein distance (default 2.0)
   * @return A newly allocated BlockConfig (caller owns the pointer)
   */
- BlockConfig* generate_default_cfl_config(ScenarioIndex k, float ell = 2.0) const;
+ BlockConfig* generate_default_cfl_config(ScenarioIndex k) const;
 
  /// Generate default BlockSolverConfig for ScenarioReductionSolver
  /** Creates a default BlockSolverConfig for the ScenarioReductionSolver
@@ -742,6 +759,15 @@ private:
   * @return A newly allocated BlockSolverConfig (caller owns the pointer)
   */
  BlockSolverConfig* generate_default_solver_config(const std::string& algorithm = "Dupacova") const;
+ 
+ /// Apply baseline selection method
+ /** Selects the top k scenarios based on their probability weights.
+  * This is the fallback method when no BlockSolverConfig is provided.
+  * Scenarios with higher weights are selected first.
+  * 
+  * @param k Number of scenarios to select
+  */
+ void apply_baseline_selection(ScenarioIndex k);
 
   SMSpp_insert_in_factory_h;
 
