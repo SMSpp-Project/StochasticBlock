@@ -42,7 +42,6 @@
 #include "ScenarioGenerator.h"
 #include "CapacitatedFacilityLocationBlock.h"
 #include "ScenarioReductionSolver.h"
-#include "Configuration.h"
 #include "Block.h"           // For BlockConfig
 #include "BlockSolverConfig.h" // For BlockSolverConfig
 #include "Solver.h"          // For Solver base class
@@ -51,8 +50,6 @@
 
 // Additional C++ standard library includes not in SMSTypedefs.h
 #include <random>    // For random number generation (std::mt19937)
-#include <optional>  // For representing optional values
-#include <variant>   // For type-safe unions
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
