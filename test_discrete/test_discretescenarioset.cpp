@@ -34,23 +34,16 @@
 /*------------------------------ INCLUDES ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-#include <span>
 #include "DiscreteScenarioSet.h"
 #include "Configuration.h"
 #include "BlockSolverConfig.h"
-#include <netcdf>
 
-#include <iostream>
-#include <vector>
-#include <memory>
-#include <cstdio>
-#include <string>
-#include <functional>
-#include <map>
-#include <chrono>
-#include <iomanip>
-#include <cmath>
-#include <fstream>
+#include <iostream>  // std::cout, std::cerr
+#include <cstdio>    // std::remove
+#include <chrono>    // std::chrono for timing
+#include <iomanip>   // std::setprecision 
+#include <cmath>     // std::abs, std::sqrt
+#include <fstream>   // std::ifstream, std::ofstream
 
 /*--------------------------------------------------------------------------*/
 /*------------------------------- USING ------------------------------------*/

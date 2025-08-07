@@ -36,16 +36,12 @@
 /*--------------------------------------------------------------------------*/
 
 #include "ScenarioGenerator.h"
-#include "CapacitatedFacilityLocationBlock.h"
-#include "ScenarioReductionSolver.h"
 #include "Block.h"           // For BlockConfig
 #include "BlockSolverConfig.h" // For BlockSolverConfig
-#include "Solver.h"          // For Solver base class
+#include "CapacitatedFacilityLocationBlock.h"
 
-#include <Eigen/Dense>  // For vector operations
-
-// Additional C++ standard library includes not in SMSTypedefs.h
-#include <random>    // For random number generation (std::mt19937)
+#include <Eigen/Dense>  // For Eigen::VectorXd, Eigen::Map
+#include <random>       // For std::mt19937
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/

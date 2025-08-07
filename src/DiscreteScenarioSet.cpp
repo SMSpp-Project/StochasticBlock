@@ -22,21 +22,17 @@
 /*------------------------------ INCLUDES ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-#include <span>  // Ensure span is available before other includes
-#include <algorithm>  // For std::sort
-#include "DiscreteScenarioSet.h" 
+#include "DiscreteScenarioSet.h"
+
 #include "CapacitatedFacilityLocationBlock.h"
 #include "ScenarioReductionSolver.h"
-#include "Block.h" 
 #include "Solver.h"
-#include "BlockSolverConfig.h" // For BlockSolverConfig class
+
+#include <chrono>   // For timestamp generation
+#include <cstdio>   // For std::remove
+#include <numeric>  // For std::accumulate (not in SMSTypedefs)
 
 using namespace SMSpp_di_unipi_it;
-
-// Needed for unique temporary filename generation and file operations
-#include <chrono>
-#include <cstdio>  // for std::remove
-#include <numeric> // for std::accumulate
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
