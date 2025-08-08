@@ -437,7 +437,7 @@ TestResult test_configuration_management() {
 
 REGISTER_TEST("Configuration Management", test_configuration_management);
 
-// Test 4: Serialization and deserialization (comprehensive)
+// Test 4: Serialization and deserialization
 TestResult test_serialization_deserialization() {
     try {
         // Part 1: Basic serialization with config
@@ -501,13 +501,11 @@ TestResult test_serialization_deserialization() {
             dss->deserialize(dataFile);
             dataFile.close();
             
-            // After deserialization, pool is NOT automatically initialized
             if (dss->get_k_value() != 5) {
                 remove(filename.c_str());
                 return {false, "Should have loaded k=5 from file"};
             }
             
-            // Must explicitly call init_representative_pool
             dss->init_representative_pool(5);
             
             if (dss->get_selected_scenario_count() != 5) {
@@ -536,13 +534,11 @@ TestResult test_serialization_deserialization() {
             dss->deserialize(dataFile);
             dataFile.close();
             
-            // After deserialization, pool is NOT automatically initialized
             if (dss->get_k_value() != 7) {
                 remove(filename.c_str());
                 return {false, "Should have loaded k=7 from file"};
             }
             
-            // Must explicitly call init_representative_pool
             dss->init_representative_pool(7);
             
             if (dss->get_selected_scenario_count() != 7) {
@@ -607,14 +603,12 @@ TestResult test_serialization_deserialization() {
             dss2->deserialize(dataFile3);
             dataFile3.close();
             
-            // After deserialization, pool is NOT automatically initialized
             if (dss2->get_k_value() != 8) {
                 remove(filename1.c_str());
                 remove(filename2.c_str());
                 return {false, "Round-trip serialization failed - k value not preserved"};
             }
             
-            // Must explicitly call init_representative_pool
             dss2->init_representative_pool(8);
             
             if (dss2->get_selected_scenario_count() != 8) {
