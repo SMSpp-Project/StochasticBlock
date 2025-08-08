@@ -351,9 +351,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
         if (!kVar.isNull()) {
           kVar.getVar(&k);
           has_k_dimension = true;
-          if (k <= 0 || k > nbScenarios) {
-            throw std::runtime_error("Invalid k value: " + std::to_string(k));
-          }
+          // Note: k validation will happen later during init_representative_pool
         }
       } catch (...) {
         // k not found, will check BlockConfig for it
@@ -420,9 +418,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
             } else {
               // No k dimension, use SimpleConfiguration<int> value as k
               k = k_config->f_value;
-              if (k <= 0 || k > nbScenarios) {
-                throw std::runtime_error("Invalid k value from BlockConfig: " + std::to_string(k));
-              }
+              // Note: k validation will happen later during init_representative_pool
             }
           } else if (has_k_dimension) {
             // Extra config exists but is not SimpleConfiguration<int>, and we have k

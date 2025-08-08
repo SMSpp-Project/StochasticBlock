@@ -702,37 +702,26 @@ TestResult test_deserialization_function() {
             remove(filename.c_str());
         }
         
-        // Test 2: Use SimpleConfiguration<int> as k when no k dimension is found
+        // Test 2: Use SimpleConfiguration<int> as k through set_config (testing priority logic)
         {
-            string filename = create_test_scenario_file(15, 3, "_blockconfig_only");
-            {
-                netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
-                
-                auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
-                
-                // Add BlockConfig with SimpleConfiguration<int> only (no k dimension)
-                auto blockGroup = cfgGroup.addGroup("BlockConfig");
-                auto extraGroup = blockGroup.addGroup("f_extra_Configuration");
-                extraGroup.putAtt("type", "SimpleConfiguration<int>");
-                int block_k = 9; // This should become k since no k dimension
-                auto blockKVar = extraGroup.addVar("value", netCDF::ncInt);
-                blockKVar.putVar(&block_k);
-                
-                dataFile.close();
-            }
+            auto dss = load_test_scenarios(15, 3);
             
-            auto dss = make_unique<DiscreteScenarioSet>();
-            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
-            dss->deserialize(dataFile);
-            dataFile.close();
+            // Create BlockConfig with SimpleConfiguration<int> - this should become k
+            auto block_cfg = make_unique<BlockConfig>();
+            block_cfg->f_extra_Configuration = new SimpleConfiguration<int>(9);
+            
+            dss->set_config(block_cfg.get());
             
             // Should use BlockConfig SimpleConfiguration<int> value as k
             if (dss->get_k_value() != 9) {
-                remove(filename.c_str());
                 return {false, "Should use BlockConfig SimpleConfiguration<int> as k (expected 9, got " + to_string(dss->get_k_value()) + ")"};
             }
             
-            remove(filename.c_str());
+            // Test that after setting k dimension directly, it has priority
+            dss->set_config(make_unique<SimpleConfiguration<int>>(5).get());
+            if (dss->get_k_value() != 5) {
+                return {false, "k dimension should have priority over BlockConfig (expected 5, got " + to_string(dss->get_k_value()) + ")"};
+            }
         }
         
         // Test 3: Deserialization without ScenarioReductionConfig (should have k=0)
@@ -752,7 +741,7 @@ TestResult test_deserialization_function() {
             remove(filename.c_str());
         }
         
-        // Test 3: Deserialization with k and ell
+        // Test 4: Deserialization with k and ell
         {
             string filename = create_test_scenario_file(25, 4, "_k_and_ell");
             {
@@ -789,7 +778,7 @@ TestResult test_deserialization_function() {
             remove(filename.c_str());
         }
         
-        // Test 4: Deserialization with invalid k (error checking happens at init time)
+        // Test 5: Deserialization with invalid k (error checking happens at init time)
         {
             string filename = create_test_scenario_file(10, 2, "_invalid_k");
             {
