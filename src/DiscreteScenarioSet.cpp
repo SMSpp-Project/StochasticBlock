@@ -25,7 +25,6 @@
 #include "DiscreteScenarioSet.h"
 
 #include "CapacitatedFacilityLocationBlock.h"
-#include "ScenarioReductionSolver.h"
 #include "Solver.h"
 
 #include <chrono>   // For timestamp generation
@@ -188,9 +187,6 @@ void DiscreteScenarioSet::set_config(Configuration* config)
     return; // Nothing to do with null config
   }
   
-  // For scenario reduction, we expect the Configuration to directly contain
-  // k, BlockConfig, and BlockSolverConfig, not wrapped in ComputeConfig
-  
   // First check if this is a BlockConfig (contains scenario reduction settings)
   auto* block_config = dynamic_cast<BlockConfig*>(config);
   if (block_config) {
@@ -210,14 +206,6 @@ void DiscreteScenarioSet::set_config(Configuration* config)
         solver_cfg = generate_default_solver_config("Dupacova");
       }
       set_scenario_reduction_config(block_config->clone(), solver_cfg, k);
-      
-      // If scenarios are already loaded, apply reduction immediately
-      if (nbScenarios > 0) {
-        init_representative_pool(k);
-      } else {
-        // Store k for later application
-        pending_k_value = k;
-      }
     }
     return;
   }
@@ -255,14 +243,6 @@ void DiscreteScenarioSet::set_config(Configuration* config)
     auto* solver_cfg = generate_default_solver_config("Dupacova");
     
     set_scenario_reduction_config(block_cfg, solver_cfg, k);
-    
-    // If scenarios are already loaded, apply reduction immediately
-    if (nbScenarios > 0) {
-      init_representative_pool(k);
-    } else {
-      // Store k for later application
-      pending_k_value = k;
-    }
   }
 }
 
@@ -363,17 +343,20 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   try {
     netCDF::NcGroup cfgGroup = group.getGroup("ScenarioReductionConfig");
     if (!cfgGroup.isNull()) {
-      // Try to read k (optional - if present, will trigger init_representative_pool)
+      // Try to read k (optional)
       ScenarioIndex k = 0;
-      bool has_k = false;
+      bool has_k_dimension = false;
       try {
         auto kVar = cfgGroup.getVar("k");
         if (!kVar.isNull()) {
           kVar.getVar(&k);
-          has_k = true;
+          has_k_dimension = true;
+          if (k <= 0 || k > nbScenarios) {
+            throw std::runtime_error("Invalid k value: " + std::to_string(k));
+          }
         }
       } catch (...) {
-        // k not found, continue without it
+        // k not found, will check BlockConfig for it
       }
       
       // Try to read ell (optional, default 2.0)
@@ -425,55 +408,70 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
         solver_cfg = nullptr;
       }
       
-      // If k was provided, we need to set up for scenario reduction
-      if (has_k && k > 0) {
-        // Generate missing configs
-        if (!block_cfg) {
-          block_cfg = generate_default_cfl_config(k);
-          if (!block_cfg) {
-            throw std::runtime_error("Failed to generate default BlockConfig");
+      // Handle BlockConfig and k interaction
+      if (block_cfg) {
+        // Check if BlockConfig has extra_Configuration as SimpleConfiguration<int>
+        if (block_cfg->f_extra_Configuration) {
+          auto* k_config = dynamic_cast<SimpleConfiguration<int>*>(block_cfg->f_extra_Configuration);
+          if (k_config) {
+            if (has_k_dimension) {
+              // k dimension was provided, override the SimpleConfiguration value
+              k_config->f_value = k;
+            } else {
+              // No k dimension, use SimpleConfiguration<int> value as k
+              k = k_config->f_value;
+              if (k <= 0 || k > nbScenarios) {
+                throw std::runtime_error("Invalid k value from BlockConfig: " + std::to_string(k));
+              }
+            }
+          } else if (has_k_dimension) {
+            // Extra config exists but is not SimpleConfiguration<int>, and we have k
+            delete block_cfg->f_extra_Configuration;
+            block_cfg->f_extra_Configuration = new SimpleConfiguration<int>(k);
+          } else {
+            // No k dimension and extra_config is not SimpleConfiguration<int>
+            throw std::runtime_error("k not found: neither as dimension nor in BlockConfig's extra_Configuration");
           }
+        } else if (has_k_dimension) {
+          // No extra_Configuration but k was provided, add it
+          block_cfg->f_extra_Configuration = new SimpleConfiguration<int>(k);
+        } else {
+          // No k dimension and no extra_Configuration
+          throw std::runtime_error("k not found: neither as dimension nor in BlockConfig");
         }
-        if (!solver_cfg) {
-          solver_cfg = generate_default_solver_config();
-          if (!solver_cfg) {
-            throw std::runtime_error("Failed to generate default BlockSolverConfig");
-          }
-        }
-        
-        // Set the configuration
-        try {
-          set_scenario_reduction_config(block_cfg, solver_cfg);
-          k_value = k;
-          
-        } catch (const std::exception& e) {
-          // Clean up allocated configs on error
-          if (!block_cfg) delete block_cfg;
-          if (!solver_cfg) delete solver_cfg;
-          throw std::runtime_error(std::string("Failed to set scenario reduction config: ") + e.what());
-        }
-        
-        // Store k for later use (after all data is loaded)
-        pending_k_value = k;
-      } else if (block_cfg || solver_cfg) {
-        // Configs provided without k - just store them for later use
+      } else if (has_k_dimension) {
+        // No BlockConfig provided but k was given, create default one with k
+        block_cfg = generate_default_cfl_config(k);
         if (!block_cfg) {
-          block_cfg = generate_default_cfl_config(1); // Dummy k=1
+          throw std::runtime_error("Failed to generate default BlockConfig");
         }
+      } else {
+        // No BlockConfig and no k dimension
+        throw std::runtime_error("k not found: must be provided either as dimension or in BlockConfig");
+      }
+      
+      // If no solver config provided, create default
+      if (!solver_cfg) {
+        solver_cfg = generate_default_solver_config();
         if (!solver_cfg) {
-          solver_cfg = generate_default_solver_config();
+          throw std::runtime_error("Failed to generate default BlockSolverConfig");
         }
+      }
+      
+      // Store the configuration (but don't apply scenario reduction yet)
+      try {
         set_scenario_reduction_config(block_cfg, solver_cfg);
+        k_value = k;
+      } catch (const std::exception& e) {
+        // Clean up allocated configs on error
+        if (block_cfg) delete block_cfg;
+        if (solver_cfg) delete solver_cfg;
+        throw std::runtime_error(std::string("Failed to set scenario reduction config: ") + e.what());
       }
     }
   } catch (const std::exception& e) {
     // Log warning but continue - scenario reduction config is optional
     std::cerr << "Warning: Failed to load ScenarioReductionConfig: " << e.what() << std::endl;
-  }
-  
-  // After all data is loaded, apply pending scenario reduction if requested
-  if (pending_k_value > 0) {
-    apply_pending_scenario_reduction();
   }
 }
 
@@ -627,7 +625,20 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex k )
       delete default_config;
     }
     
-    // Step 3.2: Apply BlockSolverConfig and solve
+    // Step 3.2: Generate abstract variables and constraints
+    // With wc=7 as default, all necessary constraints are generated automatically
+    #ifndef NDEBUG
+    std::cout << "DEBUG [init_representative_pool]: Generating abstract variables" << std::endl;
+    #endif
+    cflBlock->generate_abstract_variables();
+    
+    #ifndef NDEBUG
+    std::cout << "DEBUG [init_representative_pool]: Generating abstract constraints (using default wc=7)" << std::endl;
+    std::cout << "DEBUG [init_representative_pool]: f_max_facilities = " << cflBlock->get_NMaxFacilities() << std::endl;
+    #endif
+    cflBlock->generate_abstract_constraints();  // Uses default wc=7
+    
+    // Apply BlockSolverConfig
     f_scenario_reduction_config.second->apply(cflBlock.get());
     
     // Get the registered solver and solve
@@ -640,11 +651,9 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex k )
       throw std::runtime_error("Failed to get solver from block");
     }
     
-    // If it's a ScenarioReductionSolver, set the ell parameter
-    auto* scenario_solver = dynamic_cast<ScenarioReductionSolver*>(solver);
-    if (scenario_solver) {
-      scenario_solver->set_par(ScenarioReductionSolver::dblEll, static_cast<double>(this->ell));
-    }
+    #ifndef NDEBUG
+    std::cout << "DEBUG [init_representative_pool]: Using solver: " << solver->classname() << std::endl;
+    #endif
     
     // Solve the problem
     int status = solver->compute();
@@ -774,20 +783,14 @@ void DiscreteScenarioSet::apply_scenario_reduction()
       }
     }
     
-    // Generate constraints only if NOT using ScenarioReductionSolver
-    // ScenarioReductionSolver is purely physical and doesn't need abstract constraints to be generated
-    // TODO: MILPSolver needs full problem generation including the max facilities constraints (which should be generated by default so it might be actually redundant). Make sure it is actually the case.
-    if (!is_scenario_reduction_solver) {
-      #ifndef NDEBUG
-      std::cout << "DEBUG [apply_scenario_reduction]: Generating abstract constraints with wc=7 for MILPSolver" << std::endl;
-      #endif
-      SimpleConfiguration<int> constraint_config(7);  // wc = 7 to generate all constraints
-      cflBlock->generate_abstract_constraints(&constraint_config);
-    } else {
-      #ifndef NDEBUG
-      std::cout << "DEBUG [apply_scenario_reduction]: Skipping abstract constraint generation - ScenarioReductionSolver is purely physical" << std::endl;
-      #endif
-    }
+    // Generate abstract constraints for all solvers
+    // With wc=7 as default, all necessary constraints are generated automatically
+    // ScenarioReductionSolver will ignore unused constraints, MILPSolvers need them all
+    #ifndef NDEBUG
+    std::cout << "DEBUG [apply_scenario_reduction]: Generating abstract constraints (using default wc=7)" << std::endl;
+    std::cout << "DEBUG [apply_scenario_reduction]: f_max_facilities = " << cflBlock->get_NMaxFacilities() << std::endl;
+    #endif
+    cflBlock->generate_abstract_constraints();  // Uses default wc=7
     
     // Configure the solver using helper function
     Solver* solver = create_and_configure_solver(cflBlock.get(), this->ell);
@@ -1092,12 +1095,6 @@ DiscreteScenarioSet::create_and_configure_solver(CapacitatedFacilityLocationBloc
     throw std::runtime_error("Failed to get solver from block");
   }
   
-  // If it's a ScenarioReductionSolver, set the ell parameter
-  auto* scenario_solver = dynamic_cast<ScenarioReductionSolver*>(base_solver);
-  if (scenario_solver) {
-    scenario_solver->set_par(ScenarioReductionSolver::dblEll, static_cast<double>(ell));
-  }
-  // For MILPSolver, ell parameter is not needed as distances are already in the transport costs
   
   // Return the solver pointer (block owns it)
   return base_solver;
@@ -1116,24 +1113,11 @@ void DiscreteScenarioSet::extract_selected_scenarios(const Solver* solver,
   // Clear existing selection
   scenarioIndexes.clear();
   
-  // Check if it's a ScenarioReductionSolver
-  auto* scenario_solver = dynamic_cast<const ScenarioReductionSolver*>(solver);
-  if (scenario_solver) {
+  // For all solvers, we need to read the y variables from the block
+  // (ScenarioReductionSolver also writes its solution to the block's y variables)
+  {
     #ifndef NDEBUG
-    std::cout << "DEBUG [extract_selected_scenarios]: Using ScenarioReductionSolver path" << std::endl;
-    #endif
-    // Get the solution - which scenarios were selected
-    const auto& reduced_atoms = scenario_solver->get_reduced_atoms();
-    
-    // Add the selected scenarios to scenarioIndexes
-    for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
-      if (reduced_atoms[i]) {
-        scenarioIndexes.push_back(i);
-      }
-    }
-  } else {
-    #ifndef NDEBUG
-    std::cout << "DEBUG [extract_selected_scenarios]: Using MILPSolver path" << std::endl;
+    std::cout << "DEBUG [extract_selected_scenarios]: Using universal path for solver: " << solver->classname() << std::endl;
     #endif
     
     // For MILPSolver or other solvers, we need to read the y variables from the block
@@ -1166,7 +1150,9 @@ void DiscreteScenarioSet::extract_selected_scenarios(const Solver* solver,
   
   #ifndef NDEBUG
   std::cout << "DEBUG [extract_selected_scenarios]: Selected " << scenarioIndexes.size() 
-            << " scenarios" << std::endl;
+            << " scenarios: ";
+  for (auto idx : scenarioIndexes) std::cout << idx << " ";
+  std::cout << std::endl;
   #endif
   
   // If no scenarios were selected, throw an error
@@ -1218,14 +1204,6 @@ void DiscreteScenarioSet::update_pool_weights()
   }
 }
 
-// Apply pending scenario reduction after deserialization
-void DiscreteScenarioSet::apply_pending_scenario_reduction()
-{
-  if (pending_k_value > 0 && pending_k_value <= nbScenarios) {
-    init_representative_pool(pending_k_value);
-    pending_k_value = 0;  // Clear the pending value
-  }
-}
 
 
 // Generate default BlockConfig for CFL
@@ -1236,7 +1214,6 @@ BlockConfig* DiscreteScenarioSet::generate_default_cfl_config(ScenarioIndex k) c
   // Set k in extra_Configuration
   config->f_extra_Configuration = new SimpleConfiguration<int>(k);
   
-  // Note: ell is no longer part of BlockConfig - it's an internal variable of DiscreteScenarioSet
   // Add default constraint generation (all constraints)
   // For now, leave this to the CapacitatedFacilityLocationBlock defaults
   

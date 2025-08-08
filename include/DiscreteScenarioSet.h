@@ -159,18 +159,21 @@ public:
   * 
   * If a "ScenarioReductionConfig" group is found during deserialization,
   * it will be processed as follows:
-  * - k (int): Optional. If provided and > 0, init_representative_pool(k) 
-  *   will be called after deserialization completes.
+  * - k (int): Optional. Specifies the number of scenarios to select.
+  *   If both k dimension and BlockConfig with SimpleConfiguration<int> exist,
+  *   k dimension takes precedence and overrides the SimpleConfiguration value.
   * - ell (float): Optional. Power for Wasserstein distance (default 2.0).
-  *   Stored as internal variable, not part of BlockConfig.
+  *   Stored as internal variable.
   * - BlockConfig/: Optional. Configuration for CapacitatedFacilityLocationBlock.
+  *   The k value is determined as follows:
+  *   * If k dimension exists: it overrides any SimpleConfiguration<int> in extra_Configuration
+  *   * If k dimension doesn't exist but extra_Configuration has SimpleConfiguration<int>: use that as k
+  *   * If neither exists: error (k must be provided somehow)
   * - BlockSolverConfig/: Optional. Configuration for the solver.
   * 
-  * Note: If k is provided, scenario reduction will be automatically applied
-  * after the scenarios are loaded using init_representative_pool(k).
-  * The behavior depends on whether BlockSolverConfig is provided:
-  * - With BlockSolverConfig: Uses configured solver for optimization
-  * - Without BlockSolverConfig: Uses baseline selection (top k by weight)
+  * Note: Scenario reduction is NOT automatically applied during deserialization.
+  * After deserialization, the user must explicitly call init_representative_pool(k)
+  * to apply the scenario reduction with the loaded or updated configuration.
   */
  void deserialize( const netCDF::NcGroup & group ) override;
 
@@ -520,7 +523,6 @@ private:
  ScenarioIndex k_value = 0;
  
  /// Pending k value to apply after deserialization
- ScenarioIndex pending_k_value = 0;
  
  /// Power parameter for Wasserstein distance calculation in scenario reduction
  /** The ell parameter determines the power of the norm used when computing
@@ -739,13 +741,6 @@ private:
   */
  void update_pool_weights();
 
- /// Apply pending scenario reduction after deserialization
- /** If a k value was provided during deserialization, this method
-  * will call init_representative_pool(k) to apply scenario reduction.
-  * This is called at the end of deserialize() to ensure all data
-  * is loaded before reduction is attempted.
-  */
- void apply_pending_scenario_reduction();
 
 
  /// Generate default BlockConfig for CFL

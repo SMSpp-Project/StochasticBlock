@@ -287,69 +287,34 @@ TestResult test_scenario_reduction_algorithms() {
         const int scenario_size = 5;
         const int k = 5;
         
-        // Test ScenarioReductionSolver algorithms
-        vector<string> algorithms = {"Dupacova", "BestFit", "FirstFit"};
+        // Test various solver implementations - all treated uniformly
+        // ScenarioReductionSolver with different algorithms
+        vector<pair<string, string>> solver_configs = {
+            {"ScenarioReductionSolver", "Dupacova"},
+            {"ScenarioReductionSolver", "BestFit"},
+            {"ScenarioReductionSolver", "FirstFit"},
+            {"CPXMILPSolver", ""},
+            {"HiGHSMILPSolver", ""}
+        };
         
-        for (const auto& algorithm : algorithms) {
-            auto dss = load_test_scenarios(num_scenarios, scenario_size);
-            
-            auto* block_config = create_block_config(k);
-            auto* solver_config = create_solver_config("ScenarioReductionSolver", algorithm);
-            
-            dss->set_scenario_reduction_config(block_config, solver_config);
-            dss->init_representative_pool(k);
-            
-            if (dss->get_selected_scenario_count() != k) {
-                return {false, algorithm + " failed: wrong number of scenarios selected"};
-            }
-        }
-        
-        // Test MILPSolver implementations
-        vector<string> milp_solvers = {"CPXMILPSolver", "HiGHSMILPSolver"};
-        
-        for (const auto& solver_name : milp_solvers) {
+        for (const auto& [solver_name, algorithm] : solver_configs) {
             try {
-                // Create distinct scenarios for MILP testing
-                string filename = "test_milp_scenarios.nc4";
-                netCDF::NcFile dataFile(filename, netCDF::NcFile::replace);
+                auto dss = load_test_scenarios(num_scenarios, scenario_size);
                 
-                auto scenarioDim = dataFile.addDim("NumberScenarios", 10);
-                auto sizeDim = dataFile.addDim("ScenarioSize", 5);
-                auto scenarioVar = dataFile.addVar("Scenarios", netCDF::ncDouble, {scenarioDim, sizeDim});
-                
-                vector<double> data(50);
-                for (int i = 0; i < 10; ++i) {
-                    for (int j = 0; j < 5; ++j) {
-                        data[i * 5 + j] = i * 10.0 + j;
-                    }
-                }
-                scenarioVar.putVar(data.data());
-                
-                auto probVar = dataFile.addVar("poolProbabilities", netCDF::ncDouble, scenarioDim);
-                vector<double> probs(10, 0.1);
-                probVar.putVar(probs.data());
-                dataFile.close();
-                
-                auto dss = make_unique<DiscreteScenarioSet>();
-                netCDF::NcFile readFile(filename, netCDF::NcFile::read);
-                dss->deserialize(readFile);
-                readFile.close();
-                
-                auto* block_config = create_block_config(3, 2.0);
-                auto* solver_config = create_solver_config(solver_name, "", 30.0, 0);
+                auto* block_config = create_block_config(k);
+                auto* solver_config = create_solver_config(solver_name, algorithm);
                 
                 dss->set_scenario_reduction_config(block_config, solver_config);
-                dss->init_representative_pool(3);
+                dss->init_representative_pool(k);
                 
-                if (dss->get_selected_scenario_count() != 3) {
-                    remove(filename.c_str());
-                    return {false, solver_name + " failed to select exactly 3 scenarios"};
+                if (dss->get_selected_scenario_count() != k) {
+                    string test_name = algorithm.empty() ? solver_name : solver_name + ":" + algorithm;
+                    return {false, test_name + " failed: wrong number of scenarios selected"};
                 }
                 
-                remove(filename.c_str());
-                
             } catch (const exception& e) {
-                cout << solver_name << " not available or test skipped: " << e.what() << endl;
+                string test_name = algorithm.empty() ? solver_name : solver_name + ":" + algorithm;
+                cout << test_name << " not available or test skipped: " << e.what() << endl;
             }
         }
         
@@ -418,6 +383,7 @@ TestResult test_configuration_management() {
             // Test SimpleConfiguration with k
             auto k_config = make_unique<SimpleConfiguration<int>>(5);
             dss->set_config(k_config.get());
+            dss->init_representative_pool(5);  // Must explicitly call after set_config
             
             if (dss->get_selected_scenario_count() != 5) {
                 return {false, "Expected 5 selected scenarios after set_config"};
@@ -426,6 +392,7 @@ TestResult test_configuration_management() {
             // Test override with new k
             auto k_config2 = make_unique<SimpleConfiguration<int>>(8);
             dss->set_config(k_config2.get());
+            dss->init_representative_pool(8);  // Must explicitly call after set_config
             
             if (dss->get_selected_scenario_count() != 8) {
                 return {false, "Expected 8 selected scenarios after override"};
@@ -440,6 +407,7 @@ TestResult test_configuration_management() {
             block_cfg->f_static_variables_Configuration = ell_config.release();
             
             dss2->set_config(block_cfg.get());
+            dss2->init_representative_pool(6);  // Must explicitly call after set_config
             
             if (dss2->get_selected_scenario_count() != 6) {
                 return {false, "Expected 6 selected scenarios with BlockConfig"};
@@ -450,6 +418,7 @@ TestResult test_configuration_management() {
             vector<double> params = {7.0, 3.0, 1e-6, 100.0};
             auto vec_config = make_unique<SimpleConfiguration<vector<double>>>(params);
             dss3->set_config(vec_config.get());
+            dss3->init_representative_pool(7);  // Must explicitly call after set_config
             
             if (dss3->get_selected_scenario_count() != 7) {
                 return {false, "Expected 7 selected scenarios with vector config"};
@@ -529,9 +498,18 @@ TestResult test_serialization_deserialization() {
             dss->deserialize(dataFile);
             dataFile.close();
             
-            if (dss->get_k_value() != 5 || dss->get_selected_scenario_count() != 5) {
+            // After deserialization, pool is NOT automatically initialized
+            if (dss->get_k_value() != 5) {
                 remove(filename.c_str());
-                return {false, "Should have initialized pool with k=5"};
+                return {false, "Should have loaded k=5 from file"};
+            }
+            
+            // Must explicitly call init_representative_pool
+            dss->init_representative_pool(5);
+            
+            if (dss->get_selected_scenario_count() != 5) {
+                remove(filename.c_str());
+                return {false, "Should have 5 scenarios after init_representative_pool"};
             }
             
             remove(filename.c_str());
@@ -555,9 +533,18 @@ TestResult test_serialization_deserialization() {
             dss->deserialize(dataFile);
             dataFile.close();
             
-            if (dss->get_k_value() != 7 || dss->get_selected_scenario_count() != 7) {
+            // After deserialization, pool is NOT automatically initialized
+            if (dss->get_k_value() != 7) {
                 remove(filename.c_str());
-                return {false, "Should have selected 7 scenarios"};
+                return {false, "Should have loaded k=7 from file"};
+            }
+            
+            // Must explicitly call init_representative_pool
+            dss->init_representative_pool(7);
+            
+            if (dss->get_selected_scenario_count() != 7) {
+                remove(filename.c_str());
+                return {false, "Should have 7 scenarios after init_representative_pool"};
             }
             
             remove(filename.c_str());
@@ -617,10 +604,20 @@ TestResult test_serialization_deserialization() {
             dss2->deserialize(dataFile3);
             dataFile3.close();
             
-            if (dss2->get_k_value() != 8 || dss2->get_selected_scenario_count() != 8) {
+            // After deserialization, pool is NOT automatically initialized
+            if (dss2->get_k_value() != 8) {
                 remove(filename1.c_str());
                 remove(filename2.c_str());
-                return {false, "Round-trip serialization failed to preserve k and pool"};
+                return {false, "Round-trip serialization failed - k value not preserved"};
+            }
+            
+            // Must explicitly call init_representative_pool
+            dss2->init_representative_pool(8);
+            
+            if (dss2->get_selected_scenario_count() != 8) {
+                remove(filename1.c_str());
+                remove(filename2.c_str());
+                return {false, "Round-trip serialization failed - scenario selection failed"};
             }
             
             remove(filename1.c_str());
@@ -635,6 +632,214 @@ TestResult test_serialization_deserialization() {
 }
 
 REGISTER_TEST("Serialization and Deserialization", test_serialization_deserialization);
+
+// Test 5: Deserialization function specific test
+TestResult test_deserialization_function() {
+    try {
+        // Test 1: k dimension has priority over BlockConfig SimpleConfiguration<int>
+        {
+            string filename = create_test_scenario_file(20, 5, "_k_priority");
+            {
+                netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
+                
+                auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
+                
+                // Add k dimension (should have priority)
+                int k = 7;
+                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
+                kVar.putVar(&k);
+                
+                // Add BlockConfig with different SimpleConfiguration<int> value
+                auto blockGroup = cfgGroup.addGroup("BlockConfig");
+                auto extraGroup = blockGroup.addGroup("f_extra_Configuration");
+                extraGroup.putAtt("type", "SimpleConfiguration<int>");
+                int block_k = 5; // Different value - should be overridden
+                auto blockKVar = extraGroup.addVar("value", netCDF::ncInt);
+                blockKVar.putVar(&block_k);
+                
+                dataFile.close();
+            }
+            
+            auto dss = make_unique<DiscreteScenarioSet>();
+            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
+            dss->deserialize(dataFile);
+            dataFile.close();
+            
+            // k dimension should have priority (7, not 5)
+            if (dss->get_k_value() != 7) {
+                remove(filename.c_str());
+                return {false, "k dimension should have priority (expected 7, got " + to_string(dss->get_k_value()) + ")"};
+            }
+            
+            remove(filename.c_str());
+        }
+        
+        // Test 1b: Simple k dimension deserialization without BlockConfig
+        {
+            string filename = create_test_scenario_file(20, 5, "_simple_k");
+            {
+                netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
+                
+                // Add ScenarioReductionConfig group with just k
+                auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
+                int k = 8;
+                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
+                kVar.putVar(&k);
+                
+                dataFile.close();
+            }
+            
+            auto dss = make_unique<DiscreteScenarioSet>();
+            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
+            dss->deserialize(dataFile);
+            dataFile.close();
+            
+            if (dss->get_k_value() != 8) {
+                remove(filename.c_str());
+                return {false, "Simple k deserialization failed (expected 8, got " + to_string(dss->get_k_value()) + ")"};
+            }
+            
+            remove(filename.c_str());
+        }
+        
+        // Test 2: Use SimpleConfiguration<int> as k when no k dimension is found
+        {
+            string filename = create_test_scenario_file(15, 3, "_blockconfig_only");
+            {
+                netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
+                
+                auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
+                
+                // Add BlockConfig with SimpleConfiguration<int> only (no k dimension)
+                auto blockGroup = cfgGroup.addGroup("BlockConfig");
+                auto extraGroup = blockGroup.addGroup("f_extra_Configuration");
+                extraGroup.putAtt("type", "SimpleConfiguration<int>");
+                int block_k = 9; // This should become k since no k dimension
+                auto blockKVar = extraGroup.addVar("value", netCDF::ncInt);
+                blockKVar.putVar(&block_k);
+                
+                dataFile.close();
+            }
+            
+            auto dss = make_unique<DiscreteScenarioSet>();
+            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
+            dss->deserialize(dataFile);
+            dataFile.close();
+            
+            // Should use BlockConfig SimpleConfiguration<int> value as k
+            if (dss->get_k_value() != 9) {
+                remove(filename.c_str());
+                return {false, "Should use BlockConfig SimpleConfiguration<int> as k (expected 9, got " + to_string(dss->get_k_value()) + ")"};
+            }
+            
+            remove(filename.c_str());
+        }
+        
+        // Test 3: Deserialization without ScenarioReductionConfig (should have k=0)
+        {
+            string filename = create_test_scenario_file(15, 3, "_no_config");
+            
+            auto dss = make_unique<DiscreteScenarioSet>();
+            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
+            dss->deserialize(dataFile);
+            dataFile.close();
+            
+            if (dss->get_k_value() != 0) {
+                remove(filename.c_str());
+                return {false, "Should have k=0 without config (got " + to_string(dss->get_k_value()) + ")"};
+            }
+            
+            remove(filename.c_str());
+        }
+        
+        // Test 3: Deserialization with k and ell
+        {
+            string filename = create_test_scenario_file(25, 4, "_k_and_ell");
+            {
+                netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
+                
+                auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
+                int k = 12;
+                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
+                kVar.putVar(&k);
+                float ell = 1.8f;
+                auto ellVar = cfgGroup.addVar("ell", netCDF::ncFloat);
+                ellVar.putVar(&ell);
+                
+                dataFile.close();
+            }
+            
+            auto dss = make_unique<DiscreteScenarioSet>();
+            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
+            dss->deserialize(dataFile);
+            dataFile.close();
+            
+            if (dss->get_k_value() != 12) {
+                remove(filename.c_str());
+                return {false, "k and ell deserialization failed (expected k=12, got " + to_string(dss->get_k_value()) + ")"};
+            }
+            
+            // Test that init_representative_pool works after deserialization
+            dss->init_representative_pool(12);
+            if (dss->get_selected_scenario_count() != 12) {
+                remove(filename.c_str());
+                return {false, "init_representative_pool failed after deserialization"};
+            }
+            
+            remove(filename.c_str());
+        }
+        
+        // Test 4: Deserialization with invalid k (error checking happens at init time)
+        {
+            string filename = create_test_scenario_file(10, 2, "_invalid_k");
+            {
+                netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
+                
+                auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
+                int k = 15; // Invalid: k > number of scenarios (10)
+                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
+                kVar.putVar(&k);
+                
+                dataFile.close();
+            }
+            
+            auto dss = make_unique<DiscreteScenarioSet>();
+            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
+            
+            try {
+                dss->deserialize(dataFile);
+                dataFile.close();
+                
+                // Should have loaded invalid k
+                if (dss->get_k_value() != 15) {
+                    remove(filename.c_str());
+                    return {false, "Should load invalid k value (got " + to_string(dss->get_k_value()) + ")"};
+                }
+                
+                // But init_representative_pool should fail
+                try {
+                    dss->init_representative_pool(15);
+                    remove(filename.c_str());
+                    return {false, "Should throw exception for invalid k in init_representative_pool"};
+                } catch (const invalid_argument& e) {
+                    // Expected behavior
+                }
+            } catch (const runtime_error& e) {
+                // If deserialization fails, that's also acceptable
+                dataFile.close();
+            }
+            
+            remove(filename.c_str());
+        }
+        
+        return {true, "Deserialization function tests passed"};
+        
+    } catch (const exception& e) {
+        return {false, string("Deserialization function test failed: ") + e.what()};
+    }
+}
+
+REGISTER_TEST("Deserialization Function", test_deserialization_function);
 
 /*--------------------------------------------------------------------------*/
 /*-------------------------------- MAIN ------------------------------------*/
