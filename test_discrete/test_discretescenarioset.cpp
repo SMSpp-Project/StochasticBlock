@@ -18,10 +18,13 @@
  * - set_config() method
  * - Configuration serialization/deserialization
  * 
- * Test 4 - Serialization and Deserialization:
- * - DiscreteScenarioSet persistence
- * - Configuration persistence across save/load
- * - Scenario reduction deserialization with various configurations
+ * Test 4 - Serialization and Deserialization (Comprehensive):
+ * - DiscreteScenarioSet persistence with configuration
+ * - Deserialization with various configurations (no config, k only, k+ell)
+ * - Serialization round-trip verification
+ * - k dimension priority over BlockConfig SimpleConfiguration<int>
+ * - SimpleConfiguration<int> as k through set_config
+ * - Invalid k value handling during deserialization
  * 
  * \author Benoît Tran \n
  *         Dipartimento di Informatica \n
@@ -434,10 +437,10 @@ TestResult test_configuration_management() {
 
 REGISTER_TEST("Configuration Management", test_configuration_management);
 
-// Test 4: Serialization and deserialization
+// Test 4: Serialization and deserialization (comprehensive)
 TestResult test_serialization_deserialization() {
     try {
-        // Test 1: Basic serialization with config
+        // Part 1: Basic serialization with config
         {
             auto dss1 = load_test_scenarios(10, 5);
             auto* block_config = create_block_config(3, 2.0);
@@ -466,7 +469,7 @@ TestResult test_serialization_deserialization() {
             remove(nc_filename.c_str());
         }
         
-        // Test 2: Deserialization with various configurations
+        // Part 2: Deserialization with various configurations
         {
             // Test no config
             string filename = create_test_scenario_file(20, 5, "_no_config");
@@ -573,7 +576,7 @@ TestResult test_serialization_deserialization() {
             remove(filename.c_str());
         }
         
-        // Test 3: Serialization round-trip
+        // Part 3: Serialization round-trip
         {
             string filename1 = create_test_scenario_file(20, 5, "_roundtrip1");
             string filename2 = "test_roundtrip2.nc4";
@@ -624,19 +627,7 @@ TestResult test_serialization_deserialization() {
             remove(filename2.c_str());
         }
         
-        return {true, "Serialization and deserialization tests passed"};
-        
-    } catch (const exception& e) {
-        return {false, string("Serialization test failed: ") + e.what()};
-    }
-}
-
-REGISTER_TEST("Serialization and Deserialization", test_serialization_deserialization);
-
-// Test 5: Deserialization function specific test
-TestResult test_deserialization_function() {
-    try {
-        // Test 1: k dimension has priority over BlockConfig SimpleConfiguration<int>
+        // Part 4: k dimension priority over BlockConfig SimpleConfiguration<int>
         {
             string filename = create_test_scenario_file(20, 5, "_k_priority");
             {
@@ -674,35 +665,7 @@ TestResult test_deserialization_function() {
             remove(filename.c_str());
         }
         
-        // Test 1b: Simple k dimension deserialization without BlockConfig
-        {
-            string filename = create_test_scenario_file(20, 5, "_simple_k");
-            {
-                netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
-                
-                // Add ScenarioReductionConfig group with just k
-                auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
-                int k = 8;
-                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
-                kVar.putVar(&k);
-                
-                dataFile.close();
-            }
-            
-            auto dss = make_unique<DiscreteScenarioSet>();
-            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
-            dss->deserialize(dataFile);
-            dataFile.close();
-            
-            if (dss->get_k_value() != 8) {
-                remove(filename.c_str());
-                return {false, "Simple k deserialization failed (expected 8, got " + to_string(dss->get_k_value()) + ")"};
-            }
-            
-            remove(filename.c_str());
-        }
-        
-        // Test 2: Use SimpleConfiguration<int> as k through set_config (testing priority logic)
+        // Part 5: SimpleConfiguration<int> as k through set_config (testing priority logic)
         {
             auto dss = load_test_scenarios(15, 3);
             
@@ -724,61 +687,7 @@ TestResult test_deserialization_function() {
             }
         }
         
-        // Test 3: Deserialization without ScenarioReductionConfig (should have k=0)
-        {
-            string filename = create_test_scenario_file(15, 3, "_no_config");
-            
-            auto dss = make_unique<DiscreteScenarioSet>();
-            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
-            dss->deserialize(dataFile);
-            dataFile.close();
-            
-            if (dss->get_k_value() != 0) {
-                remove(filename.c_str());
-                return {false, "Should have k=0 without config (got " + to_string(dss->get_k_value()) + ")"};
-            }
-            
-            remove(filename.c_str());
-        }
-        
-        // Test 4: Deserialization with k and ell
-        {
-            string filename = create_test_scenario_file(25, 4, "_k_and_ell");
-            {
-                netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
-                
-                auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
-                int k = 12;
-                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
-                kVar.putVar(&k);
-                float ell = 1.8f;
-                auto ellVar = cfgGroup.addVar("ell", netCDF::ncFloat);
-                ellVar.putVar(&ell);
-                
-                dataFile.close();
-            }
-            
-            auto dss = make_unique<DiscreteScenarioSet>();
-            netCDF::NcFile dataFile(filename, netCDF::NcFile::read);
-            dss->deserialize(dataFile);
-            dataFile.close();
-            
-            if (dss->get_k_value() != 12) {
-                remove(filename.c_str());
-                return {false, "k and ell deserialization failed (expected k=12, got " + to_string(dss->get_k_value()) + ")"};
-            }
-            
-            // Test that init_representative_pool works after deserialization
-            dss->init_representative_pool(12);
-            if (dss->get_selected_scenario_count() != 12) {
-                remove(filename.c_str());
-                return {false, "init_representative_pool failed after deserialization"};
-            }
-            
-            remove(filename.c_str());
-        }
-        
-        // Test 5: Deserialization with invalid k (error checking happens at init time)
+        // Part 6: Deserialization with invalid k (error checking happens at init time)
         {
             string filename = create_test_scenario_file(10, 2, "_invalid_k");
             {
@@ -821,14 +730,14 @@ TestResult test_deserialization_function() {
             remove(filename.c_str());
         }
         
-        return {true, "Deserialization function tests passed"};
+        return {true, "Serialization and deserialization tests passed"};
         
     } catch (const exception& e) {
-        return {false, string("Deserialization function test failed: ") + e.what()};
+        return {false, string("Serialization test failed: ") + e.what()};
     }
 }
 
-REGISTER_TEST("Deserialization Function", test_deserialization_function);
+REGISTER_TEST("Serialization and Deserialization", test_serialization_deserialization);
 
 /*--------------------------------------------------------------------------*/
 /*-------------------------------- MAIN ------------------------------------*/
