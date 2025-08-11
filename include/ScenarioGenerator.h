@@ -88,6 +88,9 @@
 /// namespace for the Structured Modeling System++ (SMS++)
 namespace SMSpp_di_unipi_it {
 
+// Forward declaration of Block class
+class Block;
+
 /*--------------------------------------------------------------------------*/
 /*------------------------------ CLASSES -----------------------------------*/
 /*--------------------------------------------------------------------------*/
@@ -208,13 +211,11 @@ class ScenarioGenerator
  using ScenarioSize = size_t;
 
 /*--------------------------------------------------------------------------*/
-/// Forward declaration of Block
+/// Note about Block usage
 /** Derived classes of ScenarioGenerator *might* need the data of a problem
  * contained into a Block. These derived class will include (derived) classes
- * of Block.
+ * of Block. The Block class is forward declared at the namespace level.
  */
-
- class Block;
 
 /** @} ---------------------------------------------------------------------*/
 /*------------ CONSTRUCTING AND DESTRUCTING ScenarioGenerator --------------*/
@@ -479,15 +480,20 @@ class ScenarioGenerator
   * 
   * But if a derived class needs to have an associated Block, then this 
   * virtual method needs to be overwritten and should check dynamically that 
-  * the given Block pointer is indeed the one expected. When used within 
-  * StochasticBlock, the passed Block pointer will be the StochasticBlock 
-  * itself (not its inner Block), allowing access to both the inner Block 
-  * (via dynamic_cast and appropriate getter methods) and the stochastic 
-  * structure/scenarios.
+  * the given Block pointer is indeed the one expected. 
   * 
-  * The overriding method should verify that scenarios at ScenarioGenerator's 
-  * (or its derived class) disposal are coherent with the expected 
-  * stochasticity of the Block's problem.
+  * IMPORTANT: When used within a StochasticBlock context, the passed Block 
+  * pointer will typically be the StochasticBlock itself (not its inner Block).
+  * This allows access to both:
+  * - The inner Block (via get_inner_block() after dynamic_cast to StochasticBlock)
+  * - The stochastic structure/scenarios managed by the StochasticBlock
+  * 
+  * The overriding method should:
+  * 1. Check if the Block is a StochasticBlock (via dynamic_cast)
+  * 2. Access the inner Block via get_inner_block()
+  * 3. Verify the inner Block is of the expected type
+  * 4. Verify that scenarios at ScenarioGenerator's disposal are coherent 
+  *    with the expected stochasticity of the Block's problem
   * 
   * For instance, a StochasticBlock wrapping a CapacitatedFacilityLocationBlock 
   * might have stochasticity in either demands or capacities. The function 

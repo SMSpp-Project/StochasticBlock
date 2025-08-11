@@ -695,8 +695,8 @@ private:
   * @param ell The power parameter for the distance calculation
   * @return The transport cost matrix
   */
- CapacitatedFacilityLocationBlock::CMatrix
- virtual compute_transport_cost_matrix(ScenarioIndex n_scenarios, 
+ virtual CapacitatedFacilityLocationBlock::CMatrix
+ compute_transport_cost_matrix(ScenarioIndex n_scenarios, 
                               ScenarioSize scenario_size,
                               float ell) const;
 
