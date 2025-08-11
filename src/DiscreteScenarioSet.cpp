@@ -114,38 +114,9 @@ void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_confi
       throw std::invalid_argument("BlockSolverConfig must specify at least one solver");
     }
     
-    // Check if the solver is supported
-    const std::string& solver_name = solver_names[0];
-    bool is_scenario_reduction_solver = (solver_name == "ScenarioReductionSolver");
-    bool is_milp_solver = (solver_name == "CPXMILPSolver" || 
-                          solver_name == "GRBMILPSolver" || 
-                          solver_name == "SCIPMILPSolver" || 
-                          solver_name == "HiGHSMILPSolver");
-    
-    if (!is_scenario_reduction_solver && !is_milp_solver) {
-      throw std::invalid_argument("Unsupported solver for scenario reduction: " + solver_name + 
-                                ". Supported solvers are: ScenarioReductionSolver, CPXMILPSolver, GRBMILPSolver, SCIPMILPSolver, HiGHSMILPSolver");
-    }
-    
-    // For ScenarioReductionSolver, validate algorithm parameter if present
-    if (is_scenario_reduction_solver) {
-      const auto& solver_configs = solver_config->get_SolverConfigs();
-      if (!solver_configs.empty() && solver_configs[0]) {
-        // Check if algorithm parameter is valid
-        auto* compute_config = solver_configs[0];
-        // Find strAlgorithm in str_pars vector
-        for (const auto& [param_name, param_value] : compute_config->str_pars) {
-          if (param_name == "strAlgorithm") {
-            const std::string& algorithm = param_value;
-            if (algorithm != "Dupacova" && algorithm != "BestFit" && algorithm != "FirstFit") {
-              throw std::invalid_argument("Invalid algorithm for ScenarioReductionSolver: " + algorithm + 
-                                        ". Valid options are: Dupacova, BestFit, FirstFit");
-            }
-            break;
-          }
-        }
-      }
-    }
+    // Note: The user is responsible for ensuring the chosen Solver
+    // is capable of solving the CapacitatedFacilityLocationBlock
+    // instance that will be created for scenario reduction.
   }
   
   // Clean up existing configurations if they are different from the new ones
@@ -769,19 +740,8 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     #endif
     cflBlock->generate_abstract_variables();
     
-    // Check what type of solver we'll use
-    bool is_scenario_reduction_solver = false;
-    if (f_scenario_reduction_config.second) {
-      const auto& solver_names = f_scenario_reduction_config.second->get_SolverNames();
-      if (!solver_names.empty()) {
-        const std::string& solver_name = solver_names[0];
-        is_scenario_reduction_solver = (solver_name == "ScenarioReductionSolver");
-      }
-    }
-    
-    // Generate abstract constraints for all solvers
+    // Generate abstract constraints
     // With wc=7 as default, all necessary constraints are generated automatically
-    // ScenarioReductionSolver will ignore unused constraints, MILPSolvers need them all
     #ifndef NDEBUG
     std::cout << "DEBUG [apply_scenario_reduction]: Generating abstract constraints (using default wc=7)" << std::endl;
     std::cout << "DEBUG [apply_scenario_reduction]: f_max_facilities = " << cflBlock->get_NMaxFacilities() << std::endl;
@@ -1064,20 +1024,6 @@ DiscreteScenarioSet::create_and_configure_solver(CapacitatedFacilityLocationBloc
 {
   // Apply the BlockSolverConfig to register and configure the solver
   if (f_scenario_reduction_config.second) {
-    // Check if this is a MILPSolver configuration
-    const auto& solver_names = f_scenario_reduction_config.second->get_SolverNames();
-    if (!solver_names.empty()) {
-      const std::string& solver_name = solver_names[0];
-      bool is_milp_solver = (solver_name == "CPXMILPSolver" || 
-                            solver_name == "GRBMILPSolver" || 
-                            solver_name == "SCIPMILPSolver" || 
-                            solver_name == "HiGHSMILPSolver");
-      
-      if (is_milp_solver) {
-        // Additional checks when using for MILPSolver?
-      }
-    }
-    
     f_scenario_reduction_config.second->apply(cflBlock);
   }
   
@@ -1090,7 +1036,6 @@ DiscreteScenarioSet::create_and_configure_solver(CapacitatedFacilityLocationBloc
   if (!base_solver) {
     throw std::runtime_error("Failed to get solver from block");
   }
-  
   
   // Return the solver pointer (block owns it)
   return base_solver;
@@ -1110,7 +1055,7 @@ void DiscreteScenarioSet::extract_selected_scenarios(const Solver* solver,
   scenarioIndexes.clear();
   
   // For all solvers, we need to read the y variables from the block
-  // (ScenarioReductionSolver also writes its solution to the block's y variables)
+  // (All solvers write their solution to the block's y variables)
   {
     #ifndef NDEBUG
     std::cout << "DEBUG [extract_selected_scenarios]: Using universal path for solver: " << solver->classname() << std::endl;
@@ -1217,12 +1162,13 @@ BlockConfig* DiscreteScenarioSet::generate_default_cfl_config(ScenarioIndex k) c
   return config;
 }
 
-// Generate default BlockSolverConfig for ScenarioReductionSolver
+// Generate default BlockSolverConfig
 BlockSolverConfig* DiscreteScenarioSet::generate_default_solver_config(const std::string& algorithm) const
 {
   auto* config = new BlockSolverConfig(true);  // differential
   
-  // Add ScenarioReductionSolver configuration
+  // Add a default solver configuration
+  // Note: ScenarioReductionSolver is used as default, but user can provide any suitable solver
   config->add_ComputeConfig("ScenarioReductionSolver", nullptr);
   
   return config;

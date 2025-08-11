@@ -9,8 +9,9 @@
  * DiscreteScenarioSet manages collections of scenarios loaded from netCDF files
  * and provides scenario selection methods including random sampling
  * and Wasserstein distance-based scenario reduction. When configured with
- * appropriate solvers, it can perform optimal or heuristic scenario reduction
- * based on Wasserstein distance minimization.
+ * a BlockSolverConfig, it formulates the scenario reduction problem as a
+ * CapacitatedFacilityLocationBlock instance. The user is responsible for
+ * ensuring the chosen Solver is capable of solving this CFL optimization problem.
  *
  * \author Antonio Frangioni \n
  *         Dipartimento di Informatica \n
@@ -100,7 +101,7 @@ namespace SMSpp_di_unipi_it
  *    get_next_scenario()
  *
  * @see ScenarioGenerator for the base interface
- * @see ScenarioReductionSolver for the reduction algorithms
+ * @see CapacitatedFacilityLocationBlock for the optimization model used
  */
 
 class DiscreteScenarioSet : public ScenarioGenerator
@@ -345,12 +346,11 @@ public:
   *    - k: Number of scenarios to select (must be > 0 and <= nbScenarios)
   * 
   * 2. solver_config (BlockSolverConfig):
-  *    - algorithm: Scenario reduction method to use, one of:
-  *      - "Dupacova" (default, forward selection method)
-  *      - "BestFit" (local search with best improvement)
-  *      - "FirstFit" (local search with first improvement)
-  *      - "MILP" (mixed integer linear programming)
-  *    - Other solver-specific parameters
+  *    - Contains the Solver name and configuration for solving the
+  *      CapacitatedFacilityLocationBlock instance created for scenario reduction.
+  *    - Any Solver capable of solving CFL problems can be used.
+  *    - The user is responsible for ensuring the chosen Solver is appropriate
+  *      for the problem size and structure.
   * 
   * Note: The ell parameter for Wasserstein distance is an internal
   * variable of DiscreteScenarioSet.
@@ -361,7 +361,7 @@ public:
   * - The object takes ownership of both config pointers
   * 
   * @param block_config BlockConfig containing reduction parameters (k)
-  * @param solver_config BlockSolverConfig containing algorithm and solver settings
+  * @param solver_config BlockSolverConfig containing the Solver to use for CFL optimization
   */
  void set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config);
  
@@ -372,7 +372,7 @@ public:
   * This ensures that k_value is properly set for scenario reduction.
   * 
   * @param block_config BlockConfig containing reduction parameters 
-  * @param solver_config BlockSolverConfig containing algorithm and solver settings
+  * @param solver_config BlockSolverConfig containing the Solver to use for CFL optimization
   * @param k Number of scenarios to select (must be > 0 and <= nbScenarios)
   */
  void set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex k);

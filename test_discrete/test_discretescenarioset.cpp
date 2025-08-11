@@ -9,28 +9,27 @@
  * - Parameter validation for init_representative_pool
  * - Random pool initialization
  * 
- * Test 2 - Scenario Reduction Algorithms:
+ * Test 2 - Configuration Management:
+ * - set_config() method with various configuration types
+ * - BlockConfig and SimpleConfiguration handling
+ * 
+ * Test 3 - Scenario Reduction Algorithms:
  * - ScenarioReductionSolver algorithms (Dupacova, BestFit, FirstFit)
  * - MILPSolver implementations (CPLEX, HiGHS)
  * 
- * Test 3 - Configuration Management:
- * - Valid/invalid solver configuration
- * - set_config() method
- * - Configuration serialization/deserialization
- * 
- * Test 4 - Serialization and Deserialization (Comprehensive):
- * - DiscreteScenarioSet persistence with configuration
+ * Test 4 - NetCDF Serialization and Deserialization (Comprehensive):
+ * - DiscreteScenarioSet persistence with scenario reduction configuration
+ * - Full serialization/deserialization round-trip with solver configs
  * - Deserialization with various configurations (no config, k only, k+ell)
- * - Serialization round-trip verification
- * - k dimension priority over BlockConfig SimpleConfiguration<int>
- * - SimpleConfiguration<int> as k through set_config
+ * - Complete scenario data persistence and restoration
+ * - BlockConfig and BlockSolverConfig serialization
  * - Invalid k value handling during deserialization
  * 
  * \author Benoît Tran \n
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  * 
- * Copyright &copy; by Benoît Tran
+ * \copyright &copy; by Benoît Tran
  */
 
 /*--------------------------------------------------------------------------*/
@@ -283,103 +282,10 @@ TestResult test_basic_functionality() {
 
 REGISTER_TEST("Basic Functionality", test_basic_functionality);
 
-// Test 2: Scenario reduction algorithms
-TestResult test_scenario_reduction_algorithms() {
-    try {
-        const int num_scenarios = 15;
-        const int scenario_size = 5;
-        const int k = 5;
-        
-        // Test various solver implementations - all treated uniformly
-        // ScenarioReductionSolver with different algorithms
-        vector<pair<string, string>> solver_configs = {
-            {"ScenarioReductionSolver", "Dupacova"},
-            {"ScenarioReductionSolver", "BestFit"},
-            {"ScenarioReductionSolver", "FirstFit"},
-            {"CPXMILPSolver", ""},
-            {"HiGHSMILPSolver", ""}
-        };
-        
-        for (const auto& [solver_name, algorithm] : solver_configs) {
-            try {
-                auto dss = load_test_scenarios(num_scenarios, scenario_size);
-                
-                auto* block_config = create_block_config(k);
-                auto* solver_config = create_solver_config(solver_name, algorithm);
-                
-                dss->set_scenario_reduction_config(block_config, solver_config);
-                dss->init_representative_pool(k);
-                
-                if (dss->get_selected_scenario_count() != k) {
-                    string test_name = algorithm.empty() ? solver_name : solver_name + ":" + algorithm;
-                    return {false, test_name + " failed: wrong number of scenarios selected"};
-                }
-                
-            } catch (const exception& e) {
-                string test_name = algorithm.empty() ? solver_name : solver_name + ":" + algorithm;
-                cout << test_name << " not available or test skipped: " << e.what() << endl;
-            }
-        }
-        
-        return {true, "All scenario reduction algorithms tested successfully"};
-        
-    } catch (const exception& e) {
-        return {false, string("Test failed: ") + e.what()};
-    }
-}
-
-REGISTER_TEST("Scenario Reduction Algorithms", test_scenario_reduction_algorithms);
-
-// Test 3: Configuration management
+// Test 2: Configuration management
 TestResult test_configuration_management() {
     try {
-        // Test 1: Valid solver configurations
-        vector<string> valid_solver_names = {"CPXMILPSolver", "GRBMILPSolver", "ScenarioReductionSolver"};
-        
-        for (const auto& solver_name : valid_solver_names) {
-            auto* block_config = create_block_config(3, 2.0);
-            BlockSolverConfig* solver_config = nullptr;
-            
-            if (solver_name == "ScenarioReductionSolver") {
-                solver_config = create_solver_config("ScenarioReductionSolver", "Dupacova");
-            } else {
-                solver_config = create_solver_config(solver_name, "", 60.0, 0);
-            }
-            
-            auto dss = load_test_scenarios(10, 5);
-            
-            try {
-                dss->set_scenario_reduction_config(block_config, solver_config);
-            } catch (const exception& e) {
-                delete block_config;
-                delete solver_config;
-                
-                if (solver_name == "ScenarioReductionSolver") {
-                    return {false, "ScenarioReductionSolver config failed: " + string(e.what())};
-                }
-            }
-        }
-        
-        // Test 2: Invalid solver configuration
-        {
-            auto dss = load_test_scenarios(10, 5);
-            
-            auto* block_config = create_block_config(5);
-            auto* solver_config = new BlockSolverConfig(true);
-            solver_config->add_ComputeConfig("InvalidSolver", nullptr);
-            
-            try {
-                dss->set_scenario_reduction_config(block_config, solver_config);
-                return {false, "Should have thrown exception for invalid solver"};
-            } catch (const invalid_argument& e) {
-                string error_msg = e.what();
-                if (error_msg.find("Unsupported solver for scenario reduction") == string::npos) {
-                    return {false, "Unexpected error message for invalid solver: " + error_msg};
-                }
-            }
-        }
-        
-        // Test 3: set_config() method
+        // Test: set_config() method
         {
             auto dss = load_test_scenarios(20, 3);
             
@@ -436,6 +342,53 @@ TestResult test_configuration_management() {
 }
 
 REGISTER_TEST("Configuration Management", test_configuration_management);
+
+// Test 3: Scenario reduction algorithms
+TestResult test_scenario_reduction_algorithms() {
+    try {
+        const int num_scenarios = 15;
+        const int scenario_size = 5;
+        const int k = 5;
+        
+        // Test various solver implementations - all treated uniformly
+        // ScenarioReductionSolver with different algorithms
+        vector<pair<string, string>> solver_configs = {
+            {"ScenarioReductionSolver", "Dupacova"},
+            {"ScenarioReductionSolver", "BestFit"},
+            {"ScenarioReductionSolver", "FirstFit"},
+            {"CPXMILPSolver", ""},
+            {"HiGHSMILPSolver", ""}
+        };
+        
+        for (const auto& [solver_name, algorithm] : solver_configs) {
+            try {
+                auto dss = load_test_scenarios(num_scenarios, scenario_size);
+                
+                auto* block_config = create_block_config(k);
+                auto* solver_config = create_solver_config(solver_name, algorithm);
+                
+                dss->set_scenario_reduction_config(block_config, solver_config);
+                dss->init_representative_pool(k);
+                
+                if (dss->get_selected_scenario_count() != k) {
+                    string test_name = algorithm.empty() ? solver_name : solver_name + ":" + algorithm;
+                    return {false, test_name + " failed: wrong number of scenarios selected"};
+                }
+                
+            } catch (const exception& e) {
+                string test_name = algorithm.empty() ? solver_name : solver_name + ":" + algorithm;
+                cout << test_name << " not available or test skipped: " << e.what() << endl;
+            }
+        }
+        
+        return {true, "All scenario reduction algorithms tested successfully"};
+        
+    } catch (const exception& e) {
+        return {false, string("Test failed: ") + e.what()};
+    }
+}
+
+REGISTER_TEST("Scenario Reduction Algorithms", test_scenario_reduction_algorithms);
 
 // Test 4: Serialization and deserialization
 TestResult test_serialization_deserialization() {
@@ -724,7 +677,8 @@ TestResult test_serialization_deserialization() {
             remove(filename.c_str());
         }
         
-        return {true, "Serialization and deserialization tests passed"};
+        
+        return {true, "NetCDF serialization and deserialization tests passed"};
         
     } catch (const exception& e) {
         return {false, string("Serialization test failed: ") + e.what()};
