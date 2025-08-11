@@ -129,7 +129,8 @@ void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_confi
   }
   
   // Set the new configurations
-  f_scenario_reduction_config.first = block_config;
+  // Clone the BlockConfig to ensure safe ownership (BlockSolverConfig doesn't need cloning)
+  f_scenario_reduction_config.first = block_config ? block_config->clone() : nullptr;
   f_scenario_reduction_config.second = solver_config;
   
   // Extract and set k_value from the BlockConfig if available
