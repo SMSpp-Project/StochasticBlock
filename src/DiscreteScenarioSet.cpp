@@ -629,8 +629,11 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex k )
       throw std::runtime_error("Solver failed with status: " + std::to_string(status));
     }
     
-    // Extract the solution from the solver
-    extract_selected_scenarios(solver, cflBlock.get(), n_scenarios);
+    // Ensure solver solution is written to block variables
+    solver->get_var_solution();
+    
+    // Extract the solution from the CFL block
+    get_selected_scenarios_from_block(cflBlock.get(), n_scenarios);
   } else {
     // No solver config - use baseline method (select top k by weight)
     // BlockConfig alone is not useful for baseline selection
@@ -763,8 +766,11 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     
     // Check if the solve was successful
     if (status == Solver::kOK) {
+      // Ensure solver solution is written to block variables
+      solver->get_var_solution();
+      
       // Extract selected scenarios using helper function
-      extract_selected_scenarios(solver, cflBlock.get(), n_scenarios);
+      get_selected_scenarios_from_block(cflBlock.get(), n_scenarios);
       
       // Update pool weights using helper function
       update_pool_weights();
@@ -1043,55 +1049,38 @@ DiscreteScenarioSet::create_and_configure_solver(CapacitatedFacilityLocationBloc
 }
 
 // Extract selected scenarios from solver results
-void DiscreteScenarioSet::extract_selected_scenarios(const Solver* solver,
-                                                    const CapacitatedFacilityLocationBlock* cflBlock,
-                                                    ScenarioIndex n_scenarios)
+void DiscreteScenarioSet::get_selected_scenarios_from_block(const CapacitatedFacilityLocationBlock* cflBlock,
+                                                          ScenarioIndex n_scenarios)
 {
   #ifndef NDEBUG
-  std::cout << "DEBUG [extract_selected_scenarios]: Starting extraction for solver: " 
-            << solver->classname() << std::endl;
+  std::cout << "DEBUG [get_selected_scenarios_from_block]: Starting extraction from CFL block" << std::endl;
   #endif
   
   // Clear existing selection
   scenarioIndexes.clear();
-  
-  // For all solvers, we need to read the y variables from the block
-  // (All solvers write their solution to the block's y variables)
-  {
+    
+  // Read variable values directly from the block variables
+  for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
+    // Get the y variable for facility i
+    const auto* y_var = cflBlock->get_y(i);
+    if (!y_var) {
+      throw std::runtime_error("Failed to get y variable for facility " + std::to_string(i));
+    }
+    
+    // Get value from the variable directly
+    double y_value = y_var->get_value();
     #ifndef NDEBUG
-    std::cout << "DEBUG [extract_selected_scenarios]: Using universal path for solver: " << solver->classname() << std::endl;
+    std::cout << "DEBUG [get_selected_scenarios_from_block]: y[" << i << "] = " << y_value << std::endl;
     #endif
     
-    // For MILPSolver or other solvers, we need to read the y variables from the block
-    // First ensure the solver has written the solution to the block
-    const_cast<Solver*>(solver)->get_var_solution();
-    #ifndef NDEBUG
-    std::cout << "DEBUG [extract_selected_scenarios]: Solution written to block" << std::endl;
-    #endif
-    
-    // Read variable values directly from the block variables
-    for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
-      // Get the y variable for facility i
-      const auto* y_var = cflBlock->get_y(i);
-      if (!y_var) {
-        throw std::runtime_error("Failed to get y variable for facility " + std::to_string(i));
-      }
-      
-      // Get value from the variable directly
-      double y_value = y_var->get_value();
-      #ifndef NDEBUG
-      std::cout << "DEBUG [extract_selected_scenarios]: y[" << i << "] = " << y_value << std::endl;
-      #endif
-      
-      // Check if facility i is open (y[i] > 0.5)
-      if (y_value > 0.5) {
-        scenarioIndexes.push_back(i);
-      }
+    // Check if facility i is open (y[i] > 0.5)
+    if (y_value > 0.5) {
+      scenarioIndexes.push_back(i);
     }
   }
   
   #ifndef NDEBUG
-  std::cout << "DEBUG [extract_selected_scenarios]: Selected " << scenarioIndexes.size() 
+  std::cout << "DEBUG [get_selected_scenarios_from_block]: Selected " << scenarioIndexes.size() 
             << " scenarios: ";
   for (auto idx : scenarioIndexes) std::cout << idx << " ";
   std::cout << std::endl;

@@ -11,7 +11,8 @@
  * and Wasserstein distance-based scenario reduction. When configured with
  * a BlockSolverConfig, it formulates the scenario reduction problem as a
  * CapacitatedFacilityLocationBlock instance. The user is responsible for
- * ensuring the chosen Solver is capable of solving this CFL optimization problem.
+ * ensuring the chosen Solver is capable of solving this CFL optimization 
+ * problem.
  *
  * \author Antonio Frangioni \n
  *         Dipartimento di Informatica \n
@@ -398,26 +399,50 @@ public:
  void set_config( Configuration* config ) override;
 
 /** @} ---------------------------------------------------------------------*/
-/*---------------- METHODS FOR ScenarioReduction FIELDS --------------------*/
+/*------------------- GETTERS AND SETTERS METHODS --------------------------*/
 /*--------------------------------------------------------------------------*/
-/** @name Getters for some private fields
+/** @name Getters and Setters for DiscreteScenarioSet properties
  *  @{ */
 
+ // Basic Properties Getters
  /// get a reference to nbScenarios
  const ScenarioIndex & get_nbScenarios() const;
 
  /// get a reference to scenarioSize
  const ScenarioSize & get_scenarioSize() const;
  
+ /// Check if the scenario pool has been initialized
+ [[nodiscard]] bool is_pool_initialized() const;
+
+ /// Get the number of selected scenarios
+ [[nodiscard]] size_t get_selected_scenario_count() const {
+     return scenarioIndexes.size();
+ }
+ 
+ // Scenario Access Methods
  /// Get current scenario with its probability as a pair
  [[nodiscard]] ScenarioWithProbability get_current_scenario_with_prob();
  
  /// Try to get a scenario by index, returns nullopt if index is invalid
  [[nodiscard]] std::optional<Scenario> try_get_scenario(ScenarioIndex index) const;
  
- /// Check if the scenario pool has been initialized
- [[nodiscard]] bool is_pool_initialized() const;
+ /// Access an individual scenario value
+ [[nodiscard]] double get_scenario_value(ScenarioIndex scenario_idx, ScenarioSize component_idx) const {
+     if (scenario_idx >= nbScenarios || component_idx >= scenarioSize) {
+         throw std::out_of_range("Index out of range in get_scenario_value");
+     }
+     return scenarioSet[scenario_idx][component_idx];
+ }
  
+ /// Get a specific selected scenario index
+ [[nodiscard]] ScenarioIndex get_selected_scenario_index(size_t index) const {
+     if (index >= scenarioIndexes.size()) {
+         throw std::out_of_range("Index out of range in get_selected_scenario_index");
+     }
+     return scenarioIndexes[index];
+ }
+
+ // Scenario Reduction Parameters - Getters and Setters
  /// Get the k parameter for scenario reduction
  [[nodiscard]] ScenarioIndex get_k_value() const { return k_value; }
  
@@ -439,27 +464,6 @@ public:
      }
      ell = ell_value;
  }
- 
- /// Access an individual scenario value
- [[nodiscard]] double get_scenario_value(ScenarioIndex scenario_idx, ScenarioSize component_idx) const {
-     if (scenario_idx >= nbScenarios || component_idx >= scenarioSize) {
-         throw std::out_of_range("Index out of range in get_scenario_value");
-     }
-     return scenarioSet[scenario_idx][component_idx];
- }
- 
- /// Get the number of selected scenarios
- [[nodiscard]] size_t get_selected_scenario_count() const {
-     return scenarioIndexes.size();
- }
- 
- /// Get a specific selected scenario index
- [[nodiscard]] ScenarioIndex get_selected_scenario_index(size_t index) const {
-     if (index >= scenarioIndexes.size()) {
-         throw std::out_of_range("Index out of range in get_selected_scenario_index");
-     }
-     return scenarioIndexes[index];
- }
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PROTECTED PART OF THE CLASS -------------------------*/
@@ -475,10 +479,7 @@ protected:
  DiscreteScenarioPool scenarioSet;
  
  /// Indexes of the discrete pool
- std::vector< ScenarioIndex > scenarioIndexes;
-
- // Use base class deserialize and serialize from the public section
- 
+ std::vector< ScenarioIndex > scenarioIndexes; 
 
 
 /** @} ---------------------------------------------------------------------*/
@@ -521,9 +522,7 @@ private:
  
  /// Number of scenarios to select for scenario reduction
  ScenarioIndex k_value = 0;
- 
- /// Pending k value to apply after deserialization
- 
+  
  /// Power parameter for Wasserstein distance calculation in scenario reduction
  /** The ell parameter determines the power of the norm used when computing
   *  distances between scenarios. Default value is 2.0 (Euclidean distance).
@@ -723,17 +722,17 @@ private:
  create_and_configure_solver(CapacitatedFacilityLocationBlock* cflBlock,
                             float ell) const;
 
- /// Extract selected scenarios from solver results
- /** Processes the solver results to populate scenarioIndexes with the
-  * selected scenario indices.
+ /// Extract selected scenarios from CFL block results
+ /** Reads the y variables from the CFL block to populate scenarioIndexes with the
+  * selected scenario indices. The solver solution must have been written to the
+  * block variables before calling this function.
   * 
-  * @param solver The solved ScenarioReductionSolver
+  * @param cflBlock The CapacitatedFacilityLocationBlock containing the solution
   * @param n_scenarios The total number of scenarios
   * @throws std::runtime_error If no scenarios were selected
   */
- void extract_selected_scenarios(const Solver* solver,
-                                const CapacitatedFacilityLocationBlock* cflBlock,
-                                ScenarioIndex n_scenarios);
+ void get_selected_scenarios_from_block(const CapacitatedFacilityLocationBlock* cflBlock,
+                                       ScenarioIndex n_scenarios);
 
  /// Update pool weights after scenario selection
  /** Recalculates sumPoolWeights based on the selected scenarios in
