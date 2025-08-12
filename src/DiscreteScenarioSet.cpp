@@ -80,10 +80,7 @@ void DiscreteScenarioSet::empty_pool()
 
 void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
 {
-  if( size > nbScenarios ) // indirectly protects if input size is negative
-    throw( std::out_of_range( "The desired sample size is greater than "
-                              "the number of available number of different "
-                              "scenarios." ) );
+  validate_poolSize(size);
   poolSize = size;
 }
 
@@ -120,20 +117,20 @@ void DiscreteScenarioSet::set_config(BlockConfig* block_config, BlockSolverConfi
   f_scenario_reduction_config.first = block_config ? block_config->clone() : nullptr;
   f_scenario_reduction_config.second = solver_config;
   
-  // Extract and set k_value from the BlockConfig if available
+  // Extract and set poolSize from the BlockConfig if available
   if (block_config && block_config->f_extra_Configuration) {
-    auto* k_config = dynamic_cast<SimpleConfiguration<int>*>(block_config->f_extra_Configuration);
-    if (k_config && k_config->f_value > 0) {
-      k_value = k_config->f_value;
+    auto* poolSize_config = dynamic_cast<SimpleConfiguration<int>*>(block_config->f_extra_Configuration);
+    if (poolSize_config && poolSize_config->f_value > 0) {
+      poolSize = poolSize_config->f_value;
     }
   }
 }
 
-// Set scenario reduction configuration with k parameter
-void DiscreteScenarioSet::set_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex k)
+// Set scenario reduction configuration with poolSize parameter
+void DiscreteScenarioSet::set_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex poolSize)
 {
-  // First set k_value with validation
-  set_k_value(k);
+  // First set poolSize with validation
+  set_poolSize(poolSize);
   
   // Then set the configurations
   set_config(block_config, solver_config);
@@ -146,31 +143,31 @@ void DiscreteScenarioSet::set_config(Configuration* config)
     return; // Nothing to do with null config
   }
   
-  // Pattern 1: SimpleConfiguration<int> - baseline method (top k by weight)
-  auto* simple_k = dynamic_cast<SimpleConfiguration<int>*>(config);
-  if (simple_k) {
-    ScenarioIndex k = simple_k->f_value;
-    if (k > 0) {
-      // Baseline method: just set k_value, no CFL config needed
-      k_value = k;
+  // Pattern 1: SimpleConfiguration<int> - baseline method (top poolSize by weight)
+  auto* simple_poolSize = dynamic_cast<SimpleConfiguration<int>*>(config);
+  if (simple_poolSize) {
+    ScenarioIndex pool_size = simple_poolSize->f_value;
+    if (pool_size > 0) {
+      // Baseline method: just set poolSize, no CFL config needed
+      poolSize = pool_size;
     }
     return;
   }
   
   // Pattern 2: SimpleConfiguration<pair<int, Configuration*>> where Configuration* is BlockSolverConfig*
-  auto* k_solver_pair = dynamic_cast<SimpleConfiguration<std::pair<int, Configuration*>>*>(config);
-  if (k_solver_pair) {
-    ScenarioIndex k = k_solver_pair->f_value.first;
-    Configuration* inner_config = k_solver_pair->f_value.second;
+  auto* poolSize_solver_pair = dynamic_cast<SimpleConfiguration<std::pair<int, Configuration*>>*>(config);
+  if (poolSize_solver_pair) {
+    ScenarioIndex pool_size = poolSize_solver_pair->f_value.first;
+    Configuration* inner_config = poolSize_solver_pair->f_value.second;
     
-    if (k > 0 && inner_config) {
+    if (pool_size > 0 && inner_config) {
       // Check if inner_config is actually a BlockSolverConfig*
       auto* solver_config = dynamic_cast<BlockSolverConfig*>(inner_config);
       if (solver_config) {
-        // Generate simple BlockConfig with k
-        auto* block_cfg = generate_default_cfl_config(k);
+        // Generate simple BlockConfig with poolSize
+        auto* block_cfg = generate_default_cfl_config(pool_size);
         // Use advanced scenario reduction with provided solver
-        set_config(block_cfg, solver_config, k);
+        set_config(block_cfg, solver_config, pool_size);
         // Clean up the temporary BlockConfig (set_config clones it)
         delete block_cfg;
       }
@@ -190,10 +187,10 @@ void DiscreteScenarioSet::set_config(Configuration* config)
       auto* solver_config = dynamic_cast<BlockSolverConfig*>(second_config);
       
       if (block_config && solver_config) {
-        // Extract k from the provided BlockConfig and use full advanced configuration
-        ScenarioIndex k = get_k_parameter(block_config);
+        // Extract poolSize from the provided BlockConfig and use full advanced configuration
+        ScenarioIndex pool_size = get_poolSize_parameter(block_config);
         // Pass the original BlockConfig (set_config will clone it)
-        set_config(block_config, solver_config, k);
+        set_config(block_config, solver_config, pool_size);
       }
     }
     return;
@@ -204,44 +201,44 @@ void DiscreteScenarioSet::set_config(Configuration* config)
   throw std::invalid_argument(
     "Unsupported configuration type for DiscreteScenarioSet::set_config(). "
     "Supported patterns are:\n"
-    "1. SimpleConfiguration<int> - baseline method (top k scenarios by weight)\n"
+    "1. SimpleConfiguration<int> - baseline method (top poolSize scenarios by weight)\n"
     "2. SimpleConfiguration<pair<int, Configuration*>> - advanced with generated BlockConfig\n"
     "3. SimpleConfiguration<pair<Configuration*, Configuration*>> - full advanced configuration\n"
     "Note: The ell parameter should be set via set_ell() method or netCDF deserialization."
   );
 }
 
-// Extract k parameter with validation
-DiscreteScenarioSet::ScenarioIndex DiscreteScenarioSet::get_k_parameter(const BlockConfig* config) const
+// Extract poolSize parameter with validation
+DiscreteScenarioSet::ScenarioIndex DiscreteScenarioSet::get_poolSize_parameter(const BlockConfig* config) const
 {
   if (!config) {
-    throw std::runtime_error("Invalid configuration for getting k parameter");
+    throw std::runtime_error("Invalid configuration for getting poolSize parameter");
   }
   
-  // Extract k from the extra configuration
-  ScenarioIndex k = 0;
+  // Extract poolSize from the extra configuration
+  ScenarioIndex pool_size = 0;
   if (config->f_extra_Configuration) {
     auto* simple_config = dynamic_cast<SimpleConfiguration<int>*>(config->f_extra_Configuration);
     if (simple_config) {
-      k = simple_config->f_value;
+      pool_size = simple_config->f_value;
     } else {
       throw std::runtime_error("Extra configuration is not a SimpleConfiguration<int>");
     }
   } else {
-    throw std::runtime_error("No extra configuration found containing k parameter");
+    throw std::runtime_error("No extra configuration found containing poolSize parameter");
   }
   
-  // Validate the k parameter
-  if (k == 0) {
-    throw std::runtime_error("k parameter must be set in configuration (value is 0)");
+  // Validate the poolSize parameter
+  if (pool_size == 0) {
+    throw std::runtime_error("poolSize parameter must be set in configuration (value is 0)");
   }
   
-  if (k > nbScenarios) {
-    throw std::runtime_error("Invalid k parameter: " + std::to_string(k) + 
+  if (pool_size > nbScenarios) {
+    throw std::runtime_error("Invalid poolSize parameter: " + std::to_string(pool_size) + 
                              " exceeds number of scenarios (" + std::to_string(nbScenarios) + ")");
   }
   
-  return k;
+  return pool_size;
 }
 
 /*--------------------------------------------------------------------------*/
@@ -252,7 +249,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
 {
   // ScenarioGenerator::deserialize is pure virtual, so we start directly here
   
-  // Reset state to properly handle multiple deserializations
+  // Reset state
   currentScenarioIndex = 0;
   poolSize = 0;
   sumPoolWeights = 0.0;
@@ -293,9 +290,13 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   // Deserialize probabilities (optional, default to uniform)
   bool probsLoaded = ::deserialize(group, "poolProbabilities", nbScenarios, poolProbabilities);
   
-  if (!probsLoaded || poolProbabilities.size() != nbScenarios) {
-    // Create uniform weights
+  if (!probsLoaded) {
+    // No probabilities in file, create uniform weights
     poolProbabilities.assign(nbScenarios, 1.0 / nbScenarios);
+  } else if (poolProbabilities.size() != nbScenarios) {
+    // Probabilities were loaded but have wrong size - this is an error
+    throw std::invalid_argument("poolProbabilities size (" + std::to_string(poolProbabilities.size()) + 
+                                ") does not match NumberScenarios (" + std::to_string(nbScenarios) + ")");
   }
   
   // Validate probabilities sum to approximately 1.0
@@ -308,18 +309,18 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   try {
     netCDF::NcGroup cfgGroup = group.getGroup("ScenarioReductionConfig");
     if (!cfgGroup.isNull()) {
-      // Try to read k (optional)
-      ScenarioIndex k = 0;
-      bool has_k_dimension = false;
+      // Try to read poolSize (optional)
+      ScenarioIndex pool_size = 0;
+      bool has_poolSize_variable = false;
       try {
-        auto kVar = cfgGroup.getVar("k");
-        if (!kVar.isNull()) {
-          kVar.getVar(&k);
-          has_k_dimension = true;
-          // Note: k validation will happen later during init_representative_pool
+        auto poolSizeVar = cfgGroup.getVar("poolSize");
+        if (!poolSizeVar.isNull()) {
+          poolSizeVar.getVar(&pool_size);
+          has_poolSize_variable = true;
+          // Note: poolSize validation will happen later during init_representative_pool
         }
       } catch (...) {
-        // k not found, will check BlockConfig for it
+        // poolSize not found, will check BlockConfig for it
       }
       
       // Try to read ell (optional, default 2.0)
@@ -371,44 +372,44 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
         solver_cfg = nullptr;
       }
       
-      // Handle BlockConfig and k interaction
+      // Handle BlockConfig and poolSize interaction
       if (block_cfg) {
         // Check if BlockConfig has extra_Configuration as SimpleConfiguration<int>
         if (block_cfg->f_extra_Configuration) {
-          auto* k_config = dynamic_cast<SimpleConfiguration<int>*>(block_cfg->f_extra_Configuration);
-          if (k_config) {
-            if (has_k_dimension) {
-              // k dimension was provided, override the SimpleConfiguration value
-              k_config->f_value = k;
+          auto* poolSize_config = dynamic_cast<SimpleConfiguration<int>*>(block_cfg->f_extra_Configuration);
+          if (poolSize_config) {
+            if (has_poolSize_variable) {
+              // poolSize variable was provided, override the SimpleConfiguration value
+              poolSize_config->f_value = pool_size;
             } else {
-              // No k dimension, use SimpleConfiguration<int> value as k
-              k = k_config->f_value;
-              // Note: k validation will happen later during init_representative_pool
+              // No poolSize variable, use SimpleConfiguration<int> value as poolSize
+              pool_size = poolSize_config->f_value;
+              // Note: poolSize validation will happen later during init_representative_pool
             }
-          } else if (has_k_dimension) {
-            // Extra config exists but is not SimpleConfiguration<int>, and we have k
+          } else if (has_poolSize_variable) {
+            // Extra config exists but is not SimpleConfiguration<int>, and we have poolSize
             delete block_cfg->f_extra_Configuration;
-            block_cfg->f_extra_Configuration = new SimpleConfiguration<int>(k);
+            block_cfg->f_extra_Configuration = new SimpleConfiguration<int>(pool_size);
           } else {
-            // No k dimension and extra_config is not SimpleConfiguration<int>
-            throw std::runtime_error("k not found: neither as dimension nor in BlockConfig's extra_Configuration");
+            // No poolSize variable and extra_config is not SimpleConfiguration<int>
+            throw std::runtime_error("poolSize not found: neither as variable nor in BlockConfig's extra_Configuration");
           }
-        } else if (has_k_dimension) {
-          // No extra_Configuration but k was provided, add it
-          block_cfg->f_extra_Configuration = new SimpleConfiguration<int>(k);
+        } else if (has_poolSize_variable) {
+          // No extra_Configuration but poolSize was provided, add it
+          block_cfg->f_extra_Configuration = new SimpleConfiguration<int>(pool_size);
         } else {
-          // No k dimension and no extra_Configuration
-          throw std::runtime_error("k not found: neither as dimension nor in BlockConfig");
+          // No poolSize variable and no extra_Configuration
+          throw std::runtime_error("poolSize not found: neither as variable nor in BlockConfig");
         }
-      } else if (has_k_dimension) {
-        // No BlockConfig provided but k was given, create default one with k
-        block_cfg = generate_default_cfl_config(k);
+      } else if (has_poolSize_variable) {
+        // No BlockConfig provided but poolSize was given, create default one with poolSize
+        block_cfg = generate_default_cfl_config(pool_size);
         if (!block_cfg) {
           throw std::runtime_error("Failed to generate default BlockConfig");
         }
       } else {
-        // No BlockConfig and no k dimension
-        throw std::runtime_error("k not found: must be provided either as dimension or in BlockConfig");
+        // No BlockConfig and no poolSize variable
+        throw std::runtime_error("poolSize not found: must be provided either as variable or in BlockConfig");
       }
       
       // If no solver config provided, create default
@@ -419,10 +420,10 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
         }
       }
       
-      // Store the configuration (but don't apply scenario reduction yet)
+      // Store the configuration
       try {
         set_config(block_cfg, solver_cfg);
-        k_value = k;
+        poolSize = pool_size;
       } catch (const std::exception& e) {
         // Clean up allocated configs on error
         if (block_cfg) delete block_cfg;
@@ -457,10 +458,10 @@ void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
   if (f_scenario_reduction_config.first && f_scenario_reduction_config.second) {
     netCDF::NcGroup cfgGroup = group.addGroup("ScenarioReductionConfig");
     
-    // Serialize k if available
-    if (k_value > 0) {
-      auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
-      kVar.putVar(&k_value);
+    // Serialize poolSize if available
+    if (poolSize > 0) {
+      auto poolSizeVar = cfgGroup.addVar("poolSize", netCDF::ncInt);
+      poolSizeVar.putVar(&poolSize);
     }
     
     // Serialize ell from internal variable
@@ -540,10 +541,10 @@ void DiscreteScenarioSet::init_random_pool(ScenarioIndex pool_size)
 }
 
 // Initialize a representative pool using scenario reduction
-void DiscreteScenarioSet::init_representative_pool( ScenarioIndex k )
+void DiscreteScenarioSet::init_representative_pool( ScenarioIndex poolSize )
 {
-  // Step 1: Validate the k parameter
-  validate_k_parameter(k);
+  // Step 1: Validate the poolSize parameter
+  validate_poolSize(poolSize);
   
   // Clean up any existing pool
   empty_pool();
@@ -572,7 +573,7 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex k )
         std::move(demands),
         std::move(transport_costs),
         false,             // Not a balanced problem
-        k                  // Maximum number of facilities to open
+        poolSize           // Maximum number of facilities to open
     );
     
     // Step 3.1: Apply BlockConfig if it exists, else generate minimal default
@@ -580,8 +581,8 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex k )
       // Trust that the user provided appropriate BlockConfig for CFL
       f_scenario_reduction_config.first->apply(cflBlock.get());
     } else {
-      // Generate minimal default config (mostly empty, just k in extra_Configuration)
-      auto* default_config = generate_default_cfl_config(k);
+      // Generate minimal default config (mostly empty, just poolSize in extra_Configuration)
+      auto* default_config = generate_default_cfl_config(poolSize);
       default_config->apply(cflBlock.get());
       delete default_config;
     }
@@ -628,9 +629,9 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex k )
     // Extract the solution from the CFL block
     get_selected_scenarios_from_block(cflBlock.get(), n_scenarios);
   } else {
-    // No solver config - use baseline method (select top k by weight)
+    // No solver config - use baseline method (select top poolSize by weight)
     // BlockConfig alone is not useful for baseline selection
-    apply_baseline_selection(k);
+    apply_baseline_selection(poolSize);
   }
   
   // Update pool weights and finalize
@@ -658,11 +659,11 @@ bool DiscreteScenarioSet::should_use_scenario_reduction(ScenarioIndex size) cons
   }
   
   try {
-    // Try to get the k parameter and validate it
-    DiscreteScenarioSet::ScenarioIndex k = get_k_parameter(f_scenario_reduction_config.first);
+    // Try to get the poolSize parameter and validate it
+    DiscreteScenarioSet::ScenarioIndex pool_size = get_poolSize_parameter(f_scenario_reduction_config.first);
     
-    // If k is valid, scenario reduction can be used
-    return (k > 0 && k <= nbScenarios);
+    // If poolSize is valid, scenario reduction can be used
+    return (pool_size > 0 && pool_size <= nbScenarios);
   } catch (const std::exception& e) {
     // If parameter extraction fails, don't use scenario reduction
     return false;
@@ -676,12 +677,12 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     throw std::runtime_error("Missing scenario reduction configuration");
   }
   
-  // Extract the k parameter (number of scenarios to select)
-  DiscreteScenarioSet::ScenarioIndex k = get_k_parameter(f_scenario_reduction_config.first);
+  // Extract the poolSize parameter (number of scenarios to select)
+  DiscreteScenarioSet::ScenarioIndex pool_size = get_poolSize_parameter(f_scenario_reduction_config.first);
   
-  // DEBUG: Log k parameter
+  // DEBUG: Log poolSize parameter
   #ifndef NDEBUG
-  std::cout << "DEBUG [apply_scenario_reduction]: k (max scenarios to select) = " << k << std::endl;
+  std::cout << "DEBUG [apply_scenario_reduction]: poolSize (max scenarios to select) = " << pool_size << std::endl;
   std::cout << "DEBUG [apply_scenario_reduction]: total scenarios available = " << nbScenarios << std::endl;
   #endif
   
@@ -712,7 +713,7 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     std::cout << "  - n_facilities = " << n_scenarios << std::endl;
     std::cout << "  - n_customers = " << n_scenarios << std::endl;
     std::cout << "  - balanced = false" << std::endl;
-    std::cout << "  - max_open_facilities = " << k << std::endl;
+    std::cout << "  - max_open_facilities = " << pool_size << std::endl;
     #endif
     
     cflBlock->load(
@@ -723,7 +724,7 @@ void DiscreteScenarioSet::apply_scenario_reduction()
         std::move(demands),
         std::move(transport_costs),
         false,             // Not a balanced problem
-        k                  // Maximum number of facilities
+        pool_size          // Maximum number of facilities
     );
     
     // Apply the BlockConfig AFTER loading data
@@ -917,22 +918,22 @@ DiscreteScenarioSet::~DiscreteScenarioSet() {
 /*--------------------------------------------------------------------------*/
 
 
-// Validate the k parameter for scenario reduction
-void DiscreteScenarioSet::validate_k_parameter(ScenarioIndex k) const
+// Validate the poolSize parameter for scenario reduction
+void DiscreteScenarioSet::validate_poolSize(ScenarioIndex poolSize) const
 {
-  if (k == 0 || k > nbScenarios) {
-    throw std::invalid_argument("Invalid k parameter: must be between 1 and " + 
+  if (poolSize == 0 || poolSize > nbScenarios) {
+    throw std::invalid_argument("Invalid poolSize parameter: must be between 1 and " + 
                                 std::to_string(nbScenarios));
   }
 }
 
 // Ensure scenario reduction configuration exists
-void DiscreteScenarioSet::ensure_configuration_exists(ScenarioIndex k)
+void DiscreteScenarioSet::ensure_configuration_exists(ScenarioIndex poolSize)
 {
   // If configuration is not initialized, create it with default values
   if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
     // Create default configurations
-    auto* block_cfg = generate_default_cfl_config(k);
+    auto* block_cfg = generate_default_cfl_config(poolSize);
     auto* solver_cfg = generate_default_solver_config("Dupacova");
     
     // Set the configuration
@@ -943,17 +944,17 @@ void DiscreteScenarioSet::ensure_configuration_exists(ScenarioIndex k)
       throw std::runtime_error("Failed to create scenario reduction configuration");
     }
   } else {
-    // Configuration exists, but verify it has the correct k parameter
+    // Configuration exists, but verify it has the correct poolSize parameter
     if (f_scenario_reduction_config.first && f_scenario_reduction_config.first->f_extra_Configuration) {
-      auto* k_config = dynamic_cast<SimpleConfiguration<int>*>(f_scenario_reduction_config.first->f_extra_Configuration);
-      if (!k_config) {
+      auto* poolSize_config = dynamic_cast<SimpleConfiguration<int>*>(f_scenario_reduction_config.first->f_extra_Configuration);
+      if (!poolSize_config) {
         // Extra configuration exists but is not SimpleConfiguration<int>, fix it
         delete f_scenario_reduction_config.first->f_extra_Configuration;
-        f_scenario_reduction_config.first->f_extra_Configuration = new SimpleConfiguration<int>(k);
+        f_scenario_reduction_config.first->f_extra_Configuration = new SimpleConfiguration<int>(poolSize);
       }
     } else if (f_scenario_reduction_config.first) {
       // No extra configuration, add it
-      f_scenario_reduction_config.first->f_extra_Configuration = new SimpleConfiguration<int>(k);
+      f_scenario_reduction_config.first->f_extra_Configuration = new SimpleConfiguration<int>(poolSize);
     }
   }
 }
@@ -1086,7 +1087,7 @@ void DiscreteScenarioSet::get_selected_scenarios_from_block(const CapacitatedFac
 }
 
 // Apply baseline selection method
-void DiscreteScenarioSet::apply_baseline_selection(ScenarioIndex k)
+void DiscreteScenarioSet::apply_baseline_selection(ScenarioIndex poolSize)
 {
   // Create pairs of (index, weight) for sorting
   std::vector<std::pair<ScenarioIndex, double>> indexed_weights;
@@ -1101,11 +1102,11 @@ void DiscreteScenarioSet::apply_baseline_selection(ScenarioIndex k)
   std::sort(indexed_weights.begin(), indexed_weights.end(),
             [](const auto& a, const auto& b) { return a.second > b.second; });
   
-  // Select the top k scenarios
+  // Select the top poolSize scenarios
   scenarioIndexes.clear();
-  scenarioIndexes.reserve(k);
+  scenarioIndexes.reserve(poolSize);
   
-  for (ScenarioIndex i = 0; i < k && i < nbScenarios; ++i) {
+  for (ScenarioIndex i = 0; i < poolSize && i < nbScenarios; ++i) {
     scenarioIndexes.push_back(indexed_weights[i].first);
   }
   
@@ -1131,12 +1132,12 @@ void DiscreteScenarioSet::update_pool_weights()
 
 
 // Generate default BlockConfig for CFL
-BlockConfig* DiscreteScenarioSet::generate_default_cfl_config(ScenarioIndex k) const
+BlockConfig* DiscreteScenarioSet::generate_default_cfl_config(ScenarioIndex poolSize) const
 {
   auto* config = new BlockConfig(false);  // not differential
   
-  // Set k in extra_Configuration
-  config->f_extra_Configuration = new SimpleConfiguration<int>(k);
+  // Set poolSize in extra_Configuration
+  config->f_extra_Configuration = new SimpleConfiguration<int>(poolSize);
   
   return config;
 }

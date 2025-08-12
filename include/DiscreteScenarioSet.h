@@ -74,7 +74,7 @@ namespace SMSpp_di_unipi_it
  *
  * DiscreteScenarioSet provides two primary methods for selecting scenario subsets:
  *
- * - **Random Selection** (init_random_pool()): Randomly samples k scenarios from
+ * - **Random Selection** (init_random_pool()): Randomly samples poolSize scenarios from
  *   the full set, always available without additional configuration
  *
  * - **Scenario Reduction** (init_representative_pool()): Selects a representative
@@ -142,39 +142,59 @@ public:
  DiscreteScenarioSet();
 
  /// deserialize a discrete distribution from a netCDF group
- /** Implementation of the "third-level" pure virtual function deserialize of
-  * ScenarioGenerator.h. Assumes that there is a two-dimensional variable
-  *  \p Scenario contained inside a netCDF NcGroup. One dimension NumberScenarios
-  * corresponds to the number of input scenarios characterizing the input discrete
-  * probability distribution. The second dimension ScenarioSize is the dimension
-  * of the Euclidean space (R^d) representing a single scenario. We
-  * deserialize the scenarios into a boost::multi_array< double, 2 > as the two
-  * dimensions become known once the file has been read.
+ /** Extends ScenarioGenerator::deserialize( netCDF::NcGroup ) to the
+  * specific format of a DiscreteScenarioSet. Besides what is managed by the
+  * serialize() method of the base ScenarioGenerator class, the group should
+  * contain the following:
   *
-  * The scenarios are associated with another variable ScenarioProbabilities.
-  * If ScenarioProbabilities is present in the group, then it is saved in a
-  * std::vector< double > called scenarioProbabilities. If ScenarioProbabilities
-  * is *not* present in the group, then uniform weights are assumed, that is,
-  * scenarioProbabilities is a vector of size nbScenarios where each component
-  * is equal to 1.0 / nbScenarios. 
-  * 
-  * If a "ScenarioReductionConfig" group is found during deserialization,
-  * it will be processed as follows:
-  * - k (int): Optional. Specifies the number of scenarios to select.
-  *   If both k dimension and BlockConfig with SimpleConfiguration<int> exist,
-  *   k dimension takes precedence and overrides the SimpleConfiguration value.
-  * - ell (float): Optional. Power for Wasserstein distance (default 2.0).
-  *   Stored as internal variable.
-  * - BlockConfig: Optional. Configuration for CapacitatedFacilityLocationBlock.
-  *   The k value is determined as follows:
-  *   * If k dimension exists: it overrides any SimpleConfiguration<int> in extra_Configuration
-  *   * If k dimension doesn't exist but extra_Configuration has SimpleConfiguration<int>: use that as k
-  *   * If neither exists: error (k must be provided somehow)
-  * - BlockSolverConfig/: Optional. Configuration for the solver.
-  * 
-  * Note: Scenario reduction is NOT automatically applied during deserialization.
-  * After deserialization, the user must explicitly call init_representative_pool(k)
-  * to apply the scenario reduction with the loaded or updated configuration.
+  * - the dimension "NumberScenarios" containing the number of scenarios in
+  *   the discrete probability distribution (must be positive)
+  *
+  * - the dimension "ScenarioSize" containing the dimension of the Euclidean
+  *   space (R^d) representing a single scenario (must be positive)
+  *
+  * - the variable "Scenarios", of type double and indexed over both the
+  *   dimensions "NumberScenarios" and "ScenarioSize"; the entry ( i , j )
+  *   is assumed to contain the j-th component of the i-th scenario
+  *
+  * The dimensions "NumberScenarios" and "ScenarioSize" and the variable
+  * "Scenarios" are mandatory. However, the optional
+  *
+  * - variable "poolProbabilities", of type double and indexed over the
+  *   dimension "NumberScenarios"; the i-th entry of the variable is assumed
+  *   to contain the probability of the i-th scenario
+  *
+  * may also be present to represent the probabilities of the scenarios (if
+  * not present, uniform probabilities 1.0/NumberScenarios are assumed). If 
+  * provided, the variable must have exactly NumberScenarios elements and
+  * probabilities must sum to approximately 1.0 (within 1e-6 tolerance). Also,
+  * the optional
+  *
+  * - group "ScenarioReductionConfig" can be present; if so, it may contain:
+  *
+  *   = variable "poolSize", of type int, containing the number of scenarios to select
+  *     for scenario reduction (takes precedence over any SimpleConfiguration<int>
+  *     in BlockConfig's extra_Configuration if both exist)
+  *
+  *   = variable "ell", of type float, containing the power parameter for
+  *     Wasserstein distance calculation (default 2.0)
+  *
+  *   = group "BlockConfig" containing the configuration for the
+  *     CapacitatedFacilityLocationBlock used in scenario reduction. If this
+  *     contains a SimpleConfiguration<int> in its extra_Configuration and no
+  *     "poolSize" variable exists, the integer value is used as poolSize. If BlockConfig
+  *     is not provided but poolSize is, a default BlockConfig is generated.
+  *
+  *   = group "BlockSolverConfig" containing the configuration for the solver
+  *     used with the CapacitatedFacilityLocationBlock. If not provided, a
+  *     default solver configuration is generated.
+  *
+  * If "ScenarioReductionConfig" is present, poolSize must be provided either as a
+  * variable or within BlockConfig's extra_Configuration, otherwise an error
+  * is thrown.
+  *
+  * Note: This method clears any existing data and configuration before
+  * deserializing. 
   */
  void deserialize( const netCDF::NcGroup & group ) override;
 
@@ -182,19 +202,23 @@ public:
   * @brief Serialize the object to a netCDF group
   * 
   * Extends the base class serialization to include scenario reduction configuration.
-  * Creates a "ScenarioReductionConfig" group if the configuration exists.
+  * Writes the DiscreteScenarioSet data in the format expected by deserialize().
   * 
   * This method:
-  * 1. First calls the base class serialize to save basic scenario data
-  * 2. Checks if scenario reduction configuration exists
-  * 3. If it exists, creates a "ScenarioReductionConfig" group
-  * 4. Creates "BlockConfig" and "SolverConfig" subgroups
-  * 5. Writes parameters like k, ell, and algorithm to these groups
+  * 1. Calls the base class serialize (from ScenarioGenerator)
+  * 2. Writes mandatory data:
+  *    - dimension "NumberScenarios" with the number of scenarios
+  *    - dimension "ScenarioSize" with the scenario dimension
+  *    - variable "Scenarios" (double array) with all scenario data
+  *    - variable "poolProbabilities" (double array) with scenario probabilities
+  * 3. If scenario reduction configuration exists, creates "ScenarioReductionConfig" group
+  * 4. Within "ScenarioReductionConfig", writes:
+  *    - variable "poolSize" (int) with the number of scenarios to select
+  *    - variable "ell" (float) with the Wasserstein distance power parameter
+  * 5. Creates subgroups "BlockConfig" and "BlockSolverConfig" within
+  *    "ScenarioReductionConfig" for the respective configurations
   * 
-  * Implementation notes:
-  * - Only serializes the configuration if it exists
-  * - Follows SMS++ netCDF serialization patterns
-  * - Preserves all configuration parameters
+  * Note that scenario reduction configuration is only serialized if it exists
   * 
   * @param group The netCDF group to serialize the object to
   */
@@ -208,6 +232,7 @@ public:
 /** @name Functions inherited from ScenarioGenerator.h
  *  @{ */
 
+ /// Setting the seed of the pseudo-random number generator
  void set_seed( unsigned long seed ) override;
 
  /// Function for retrieving the current scenario.
@@ -275,7 +300,7 @@ public:
  /**
   * @brief Select the most representative scenarios
   * 
-  * Creates a pool of k scenarios from the full distribution. The selection
+  * Creates a pool of scenarios from the full distribution. The selection
   * method depends on whether a BlockSolverConfig is provided:
   * 
   * 1. If BlockSolverConfig is provided:
@@ -285,17 +310,17 @@ public:
   *    - Solves to minimize Wasserstein distance between original and reduced sets
   * 
   * 2. If no BlockSolverConfig is provided:
-  *    - Uses baseline method (selects top k scenarios by probability weight)
+  *    - Uses baseline method (selects top scenarios by probability weight)
   * 
   * The baseline method sorts scenarios by their probability weights in descending
-  * order and selects the k scenarios with highest weights.
+  * order and selects the scenarios with highest weights.
   * 
-  * @param k Number of representative scenarios to select
-  * @throws std::invalid_argument If k is invalid (0 or > available scenarios)
+  * @param poolSize Number of representative scenarios to select
+  * @throws std::invalid_argument If poolSize is invalid (0 or > available scenarios)
   * @throws std::runtime_error If the solver fails (when using configured solver)
   * @see set_config() to provide BlockConfig and BlockSolverConfig
   */
- void init_representative_pool( ScenarioIndex k ) override;
+ void init_representative_pool( ScenarioIndex poolSize ) override;
 
 /** @} ---------------------------------------------------------------------*/
 /*----------------- SCENARIO REDUCTION CONFIG METHODS ----------------------*/
@@ -308,7 +333,7 @@ public:
   * 
   * Returns the BlockConfig part of the scenario reduction configuration,
   * which contains parameters like:
-  * - k: Number of scenarios to select
+  * - poolSize: Number of scenarios to select
   * 
   * The BlockConfig is owned by the DiscreteScenarioSet object and should
   * not be deleted by the caller.
@@ -335,7 +360,7 @@ public:
  BlockSolverConfig* get_scenario_reduction_solver_config() const;
 
  /**
-  * @brief Set the scenario reduction configuration (convenience overload)
+  * @brief Set the scenario reduction configuration
   * 
   * Configures how scenario reduction will be performed when init_representative_pool()
   * is called. Takes ownership of the provided configuration objects.
@@ -343,7 +368,7 @@ public:
   * The provided configurations should contain:
   * 
   * 1. block_config (BlockConfig):
-  *    - k: Number of scenarios to select (must be > 0 and <= nbScenarios)
+  *    - poolSize: Number of scenarios to select (must be > 0 and <= nbScenarios)
   * 
   * 2. solver_config (BlockSolverConfig):
   *    - Contains the Solver name and configuration for solving the
@@ -361,48 +386,48 @@ public:
   * - Replaces any existing configuration
   * - The object takes ownership of both config pointers
   * 
-  * @param block_config BlockConfig containing reduction parameters (k)
+  * @param block_config BlockConfig containing reduction parameters (poolSize)
   * @param solver_config BlockSolverConfig containing the Solver to use for CFL optimization
   */
  void set_config(BlockConfig* block_config, BlockSolverConfig* solver_config);
  
  /**
-  * @brief Set the scenario reduction configuration with k parameter (convenience overload)
+  * @brief Set the scenario reduction configuration with poolSize parameter (convenience overload)
   * 
-  * Convenience method that sets both the configuration objects and the k parameter.
-  * This ensures that k_value is properly set for scenario reduction.
+  * Convenience method that sets both the configuration objects and the poolSize parameter.
+  * This ensures that poolSize is properly set for scenario reduction.
   * 
   * @param block_config BlockConfig containing reduction parameters 
   * @param solver_config BlockSolverConfig containing the Solver to use for CFL optimization
-  * @param k Number of scenarios to select (must be > 0 and <= nbScenarios)
+  * @param poolSize Number of scenarios to select (must be > 0 and <= nbScenarios)
   */
- void set_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex k);
+ void set_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex poolSize);
 
  /**
   * @brief Set configuration for the DiscreteScenarioSet
   * 
   * This method supports multiple configuration patterns for different use cases:
   * 
-  * **Pattern 1: Simple k-only (Baseline Method)**
+  * **Pattern 1: Simple poolSize-only (Baseline Method)**
   * ```cpp
   * dss->set_config(new SimpleConfiguration<int>(5));
   * ```
-  * - Uses baseline method (selects top k scenarios by probability weight)
+  * - Uses baseline method (selects top scenarios by probability weight)
   * - No solver optimization, simple and fast
   * 
-  * **Pattern 2: k + Solver (Advanced with Default BlockConfig)**  
+  * **Pattern 2: poolSize + Solver (Advanced with Default BlockConfig)**  
   * ```cpp
   * auto* solver = create_solver_config("ScenarioReductionSolver", "Dupacova");
   * dss->set_config(new SimpleConfiguration<pair<int, Configuration*>>(
   *     make_pair(5, solver)));
   * ```
-  * - Generates default BlockConfig with k parameter
+  * - Generates default BlockConfig with poolSize parameter
   * - Uses advanced scenario reduction with provided solver
   * - The Configuration* is dynamically cast to BlockSolverConfig*
   * 
   * **Pattern 3: Full Configuration (Advanced with Custom Settings)**
   * ```cpp
-  * auto* block = create_block_config(5, 2.0);  // k=5, ell=2.0
+  * auto* block = create_block_config(5, 2.0);  // poolSize=5, ell=2.0
   * auto* solver = create_solver_config("CPXMILPSolver");
   * dss->set_config(new SimpleConfiguration<pair<Configuration*, Configuration*>>(
   *     make_pair(block, solver)));
@@ -464,16 +489,11 @@ public:
  }
 
  // Scenario Reduction Parameters - Getters and Setters
- /// Get the k parameter for scenario reduction
- [[nodiscard]] ScenarioIndex get_k_value() const { return k_value; }
+ /// Get the poolSize parameter for scenario reduction
+ [[nodiscard]] ScenarioIndex get_poolSize() const { return poolSize; }
  
- /// Set the k parameter for scenario reduction
- void set_k_value(ScenarioIndex k) {
-     if (k == 0) {
-         throw std::invalid_argument("k_value must be positive");
-     }
-     k_value = k;
- }
+ /// Set the poolSize parameter for scenario reduction
+ void set_poolSize(ScenarioIndex poolSize);
  
  /// Get the ell parameter for Wasserstein distance calculation
  [[nodiscard]] float get_ell() const { return ell; }
@@ -541,9 +561,6 @@ private:
  static constexpr float DEFAULT_ELL_VALUE = 2.0f;
  static constexpr double DEFAULT_RHO_VALUE = 0.0;
  
- /// Number of scenarios to select for scenario reduction
- ScenarioIndex k_value = 0;
-  
  /// Power parameter for Wasserstein distance calculation in scenario reduction
  /** The ell parameter determines the power of the norm used when computing
   *  distances between scenarios. Default value is 2.0 (Euclidean distance).
@@ -554,7 +571,7 @@ private:
   * @brief Configuration for scenario reduction
   * 
   * Stores a pair of configurations for scenario reduction:
-  * - First: BlockConfig with parameters like k (number of scenarios)
+  * - First: BlockConfig with parameters like poolSize (number of scenarios)
   * - Second: BlockSolverConfig with the algorithm choice and solver settings
   * 
   * The configuration is loaded during deserialization if available
@@ -594,24 +611,6 @@ private:
  * Miscellaneous functions
  * @{ */
 
-
- /// update the variable poolSize
- /** Whenever a size for the pool has been given, update the
-  * variable poolSize accordingly. Also ensures that the desired
-  * poolSize is possible, that is, it should be less or equal than the
-  * number of input scenarios.
-  *
-  * We normalize the weights of each scenario in the pool so that their
-  * weights sum up to one. That is, we have
-  *  new_weight = input_weight / sum( input_weights_of_pool_scenarios ),
-  * where input_weight refers to the weight of a given scenario contained in
-  * the vector scenarioProbabilities.
-  *
-  * So for the use of get_current_scenario_probability(), we
-  * save in memory sumPoolWeight, equal to the sum of the input weights of
-  * the scenarios chosen to be part of the pool. */
- void set_poolSize( ScenarioIndex size );
-
  /// Empty the scenario pool
  /** Function to clear the internal pool of selected scenario indices.
   * Resets scenarioIndexes, sumPoolWeights, currentScenarioIndex,
@@ -620,25 +619,25 @@ private:
  void empty_pool();
  
  /**
-  * @brief Extract k parameter with validation
+  * @brief Extract poolSize parameter with validation
   * 
-  * Helper method to safely extract the k parameter (number of scenarios to select)
+  * Helper method to safely extract the poolSize parameter (number of scenarios to select)
   * from a BlockConfig, with validation and default value handling.
   * 
   * This method:
-  * 1. Extracts the "k" parameter from the BlockConfig
+  * 1. Extracts the "poolSize" parameter from the BlockConfig
   * 2. Validates that it's positive and doesn't exceed nbScenarios
-  * 3. Returns the validated k parameter
+  * 3. Returns the validated poolSize parameter
   * 
   * Implementation notes:
-  * - Throws an exception if k is invalid (not positive or too large)
-  * - This is especially important as k controls how many scenarios are selected
+  * - Throws an exception if poolSize is invalid (not positive or too large)
+  * - This is especially important as poolSize controls how many scenarios are selected
   * 
-  * @param config The BlockConfig containing the k parameter
-  * @return The validated value of k
-  * @throws std::runtime_error If the k parameter is invalid (not positive or too large)
+  * @param config The BlockConfig containing the poolSize parameter
+  * @return The validated value of poolSize
+  * @throws std::runtime_error If the poolSize parameter is invalid (not positive or too large)
   */
- ScenarioIndex get_k_parameter(const BlockConfig* config) const;
+ ScenarioIndex get_poolSize_parameter(const BlockConfig* config) const;
  
  /// Determines if scenario reduction should be used based on configuration
  /** This function checks if scenario reduction is configured properly and
@@ -646,7 +645,7 @@ private:
   * 
   * 1. The requested scenario pool size must be greater than 1 (trivial case)
   * 2. A valid scenario reduction configuration must exist
-  * 3. The configuration must have valid k and ell parameters
+  * 3. The configuration must have valid poolSize and ell parameters
   *
   * This method is called by init_representative_pool() before attempting to use
   * scenario reduction algorithms.
@@ -661,7 +660,7 @@ private:
   * using the configured reduction method. It:
   * 
   * 1. Creates a CapacitatedFacilityLocationBlock to formulate the selection problem
-  * 2. Extracts configuration parameters (ell, k, algorithm) from the configuration
+  * 2. Extracts configuration parameters (ell, poolSize, algorithm) from the configuration
   * 3. Configures and runs the ScenarioReductionSolver with the selected algorithm
   * 4. Updates scenarioIndexes with the selected scenario indices
   * 5. Recalculates sumPoolWeights based on the selected scenarios
@@ -675,24 +674,24 @@ private:
   */
  void apply_scenario_reduction();
 
- /// Validate the k parameter for scenario reduction
- /** Ensures that the k parameter is valid:
+ /// Validate the poolSize parameter for scenario reduction
+ /** Ensures that the poolSize parameter is valid:
   * - Must be greater than 0
   * - Must be less than or equal to the total number of scenarios
   * 
-  * @param k The number of scenarios to select
-  * @throws std::invalid_argument If k is invalid
+  * @param poolSize The number of scenarios to select
+  * @throws std::invalid_argument If poolSize is invalid
   */
- void validate_k_parameter(ScenarioIndex k) const;
+ void validate_poolSize(ScenarioIndex poolSize) const;
 
  /// Ensure scenario reduction configuration exists
  /** Checks if configuration exists, and creates it with default values if not.
   * This is used by init_representative_pool when no configuration was loaded
   * from deserialization.
   * 
-  * @param k The number of scenarios to select
+  * @param poolSize The number of scenarios to select
   */
- void ensure_configuration_exists(ScenarioIndex k);
+ void ensure_configuration_exists(ScenarioIndex poolSize);
 
  /// Create CFL problem data structures
  /** Sets up the capacity, fixed cost, and demand vectors for the
@@ -765,12 +764,12 @@ private:
 
  /// Generate default BlockConfig for CFL
  /** Creates a default BlockConfig suitable for CapacitatedFacilityLocationBlock
-  * with the specified k parameter.
+  * with the specified poolSize parameter.
   * 
-  * @param k Number of scenarios to select
+  * @param poolSize Number of scenarios to select
   * @return A newly allocated BlockConfig (caller owns the pointer)
   */
- BlockConfig* generate_default_cfl_config(ScenarioIndex k) const;
+ BlockConfig* generate_default_cfl_config(ScenarioIndex poolSize) const;
 
  /// Generate default BlockSolverConfig for ScenarioReductionSolver
  /** Creates a default BlockSolverConfig for the ScenarioReductionSolver
@@ -782,13 +781,13 @@ private:
  BlockSolverConfig* generate_default_solver_config(const std::string& algorithm = "Dupacova") const;
  
  /// Apply baseline selection method
- /** Selects the top k scenarios based on their probability weights.
+ /** Selects the top poolSize scenarios based on their probability weights.
   * This is the fallback method when no BlockSolverConfig is provided.
   * Scenarios with higher weights are selected first.
   * 
-  * @param k Number of scenarios to select
+  * @param poolSize Number of scenarios to select
   */
- void apply_baseline_selection(ScenarioIndex k);
+ void apply_baseline_selection(ScenarioIndex poolSize);
 
   SMSpp_insert_in_factory_h;
 

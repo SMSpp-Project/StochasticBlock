@@ -21,10 +21,10 @@
  * Test 4 - NetCDF Serialization and Deserialization:
  * - DiscreteScenarioSet persistence with scenario reduction configuration
  * - Full serialization/deserialization round-trip with solver configs
- * - Deserialization with various configurations (no config, k only, k+ell)
+ * - Deserialization with various configurations (no config, poolSize only, poolSize+ell)
  * - Complete scenario data persistence and restoration
  * - BlockConfig and BlockSolverConfig serialization
- * - Invalid k value handling during deserialization
+ * - Invalid poolSize value handling during deserialization
  * 
  * \author Benoît Tran \n
  *         Dipartimento di Informatica \n
@@ -165,7 +165,7 @@ unique_ptr<DiscreteScenarioSet> load_test_scenarios(int num_scenarios = 20,
 BlockConfig* create_block_config(int k, double ell = 2.0) {
     auto* block_config = new BlockConfig();
     
-    // Set k parameter in extra configuration
+    // Set poolSize parameter in extra configuration
     block_config->f_extra_Configuration = new SimpleConfiguration<int>(k);
     
     // Set ell parameter in static variables configuration
@@ -244,17 +244,17 @@ TestResult test_basic_functionality() {
             return {false, "Expected scenario size 10, got " + to_string(dss->get_scenarioSize())};
         }
         
-        // Part 2: Test invalid k parameters for init_representative_pool
+        // Part 2: Test invalid poolSize parameters for init_representative_pool
         try {
             dss->init_representative_pool(0);
-            return {false, "Should have thrown invalid_argument for k=0"};
+            return {false, "Should have thrown invalid_argument for poolSize=0"};
         } catch (const invalid_argument& e) {
             // Expected
         }
         
         try {
             dss->init_representative_pool(25);
-            return {false, "Should have thrown invalid_argument for k>nbScenarios"};
+            return {false, "Should have thrown invalid_argument for poolSize>nbScenarios"};
         } catch (const invalid_argument& e) {
             // Expected
         }
@@ -288,13 +288,13 @@ TestResult test_configuration_patterns() {
         {
             auto dss = load_test_scenarios(20, 5);
             
-            // Pattern 1: Simple k-only configuration
+            // Pattern 1: Simple poolSize-only configuration
             auto* pattern1_config = new SimpleConfiguration<int>(8);
             dss->set_config(pattern1_config);
             
-            // Verify k_value was set
-            if (dss->get_k_value() != 8) {
-                return {false, "Pattern 1: k_value not set correctly (expected 8, got " + to_string(dss->get_k_value()) + ")"};
+            // Verify poolSize was set
+            if (dss->get_poolSize() != 8) {
+                return {false, "Pattern 1: poolSize not set correctly (expected 8, got " + to_string(dss->get_poolSize()) + ")"};
             }
             
             // Test that baseline method works
@@ -315,9 +315,9 @@ TestResult test_configuration_patterns() {
             
             dss->set_config(pattern2_config);
             
-            // Verify k_value was set
-            if (dss->get_k_value() != 6) {
-                return {false, "Pattern 2: k_value not set correctly (expected 6, got " + to_string(dss->get_k_value()) + ")"};
+            // Verify poolSize was set
+            if (dss->get_poolSize() != 6) {
+                return {false, "Pattern 2: poolSize not set correctly (expected 6, got " + to_string(dss->get_poolSize()) + ")"};
             }
             
             // Test that advanced scenario reduction works
@@ -341,10 +341,10 @@ TestResult test_configuration_patterns() {
             
             dss->set_config(pattern3_config);
             
-            // Verify k_value was set from BlockConfig
-            if (dss->get_k_value() != 7) {
+            // Verify poolSize was set from BlockConfig
+            if (dss->get_poolSize() != 7) {
                 delete block_config;  // BlockConfig is cloned, so we can delete the original
-                return {false, "Pattern 3: k_value not set correctly (expected 7, got " + to_string(dss->get_k_value()) + ")"};
+                return {false, "Pattern 3: poolSize not set correctly (expected 7, got " + to_string(dss->get_poolSize()) + ")"};
             }
             
             // Test that full advanced scenario reduction works
@@ -373,7 +373,7 @@ TestResult test_scenario_reduction_algorithms() {
     try {
         const int num_scenarios = 15;
         const int scenario_size = 5;
-        const int k = 5;
+        const int poolSize = 5;
         
         // Test various solver implementations - all treated uniformly
         // ScenarioReductionSolver with different algorithms
@@ -389,13 +389,13 @@ TestResult test_scenario_reduction_algorithms() {
             try {
                 auto dss = load_test_scenarios(num_scenarios, scenario_size);
                 
-                auto* block_config = create_block_config(k);
+                auto* block_config = create_block_config(poolSize);
                 auto* solver_config = create_solver_config(solver_name, algorithm);
                 
                 dss->set_config(block_config, solver_config);
-                dss->init_representative_pool(k);
+                dss->init_representative_pool(poolSize);
                 
-                if (dss->get_selected_scenario_count() != k) {
+                if (dss->get_selected_scenario_count() != poolSize) {
                     string test_name = algorithm.empty() ? solver_name : solver_name + ":" + algorithm;
                     return {false, test_name + " failed: wrong number of scenarios selected"};
                 }
@@ -439,9 +439,9 @@ TestResult test_serialization_deserialization() {
                 file.close();
             }
             
-            if (dss2->get_k_value() != 3) {
+            if (dss2->get_poolSize() != 3) {
                 remove(nc_filename.c_str());
-                return {false, "k_value not properly restored"};
+                return {false, "poolSize not properly restored"};
             }
             
             remove(nc_filename.c_str());
@@ -456,21 +456,21 @@ TestResult test_serialization_deserialization() {
             dss->deserialize(dataFile);
             dataFile.close();
             
-            if (dss->get_k_value() != 0) {
+            if (dss->get_poolSize() != 0) {
                 remove(filename.c_str());
-                return {false, "k_value should be 0 when no config is present"};
+                return {false, "poolSize should be 0 when no config is present"};
             }
             
             remove(filename.c_str());
             
-            // Test only k provided
+            // Test only poolSize provided
             filename = create_test_scenario_file(20, 5, "_only_k");
             {
                 netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
                 auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
-                int k = 5;
-                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
-                kVar.putVar(&k);
+                int poolSize = 5;
+                auto poolSizeVar = cfgGroup.addVar("poolSize", netCDF::ncInt);
+                poolSizeVar.putVar(&poolSize);
                 dataFile.close();
             }
             
@@ -479,9 +479,9 @@ TestResult test_serialization_deserialization() {
             dss->deserialize(dataFile);
             dataFile.close();
             
-            if (dss->get_k_value() != 5) {
+            if (dss->get_poolSize() != 5) {
                 remove(filename.c_str());
-                return {false, "Should have loaded k=5 from file"};
+                return {false, "Should have loaded poolSize=5 from file"};
             }
             
             dss->init_representative_pool(5);
@@ -493,14 +493,14 @@ TestResult test_serialization_deserialization() {
             
             remove(filename.c_str());
             
-            // Test k + ell provided
+            // Test poolSize + ell provided
             filename = create_test_scenario_file(20, 5, "_k_and_ell");
             {
                 netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
                 auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
-                int k = 7;
-                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
-                kVar.putVar(&k);
+                int poolSize = 7;
+                auto poolSizeVar = cfgGroup.addVar("poolSize", netCDF::ncInt);
+                poolSizeVar.putVar(&poolSize);
                 float ell = 1.5f;
                 auto ellVar = cfgGroup.addVar("ell", netCDF::ncFloat);
                 ellVar.putVar(&ell);
@@ -512,9 +512,9 @@ TestResult test_serialization_deserialization() {
             dss->deserialize(dataFile);
             dataFile.close();
             
-            if (dss->get_k_value() != 7) {
+            if (dss->get_poolSize() != 7) {
                 remove(filename.c_str());
-                return {false, "Should have loaded k=7 from file"};
+                return {false, "Should have loaded poolSize=7 from file"};
             }
             
             dss->init_representative_pool(7);
@@ -526,14 +526,14 @@ TestResult test_serialization_deserialization() {
             
             remove(filename.c_str());
             
-            // Test invalid k values
+            // Test invalid poolSize values
             filename = create_test_scenario_file(20, 5, "_k_zero");
             {
                 netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
                 auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
-                int k = 0;
-                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
-                kVar.putVar(&k);
+                int poolSize = 0;
+                auto poolSizeVar = cfgGroup.addVar("poolSize", netCDF::ncInt);
+                poolSizeVar.putVar(&poolSize);
                 dataFile.close();
             }
             
@@ -544,7 +544,7 @@ TestResult test_serialization_deserialization() {
             
             if (dss->get_selected_scenario_count() != 0) {
                 remove(filename.c_str());
-                return {false, "No reduction should occur with k=0"};
+                return {false, "No reduction should occur with poolSize=0"};
             }
             
             remove(filename.c_str());
@@ -558,9 +558,9 @@ TestResult test_serialization_deserialization() {
             {
                 netCDF::NcFile dataFile(filename1, netCDF::NcFile::write);
                 auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
-                int k = 8;
-                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
-                kVar.putVar(&k);
+                int poolSize = 8;
+                auto poolSizeVar = cfgGroup.addVar("poolSize", netCDF::ncInt);
+                poolSizeVar.putVar(&poolSize);
                 float ell = 2.5f;
                 auto ellVar = cfgGroup.addVar("ell", netCDF::ncFloat);
                 ellVar.putVar(&ell);
@@ -581,10 +581,10 @@ TestResult test_serialization_deserialization() {
             dss2->deserialize(dataFile3);
             dataFile3.close();
             
-            if (dss2->get_k_value() != 8) {
+            if (dss2->get_poolSize() != 8) {
                 remove(filename1.c_str());
                 remove(filename2.c_str());
-                return {false, "Round-trip serialization failed - k value not preserved"};
+                return {false, "Round-trip serialization failed - poolSize value not preserved"};
             }
             
             dss2->init_representative_pool(8);
@@ -599,7 +599,7 @@ TestResult test_serialization_deserialization() {
             remove(filename2.c_str());
         }
         
-        // Part 4: k dimension priority over BlockConfig SimpleConfiguration<int>
+        // Part 4: poolSize variable priority over BlockConfig SimpleConfiguration<int>
         {
             string filename = create_test_scenario_file(20, 5, "_k_priority");
             {
@@ -607,18 +607,18 @@ TestResult test_serialization_deserialization() {
                 
                 auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
                 
-                // Add k dimension (should have priority)
-                int k = 7;
-                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
-                kVar.putVar(&k);
+                // Add poolSize variable (should have priority)
+                int poolSize = 7;
+                auto poolSizeVar = cfgGroup.addVar("poolSize", netCDF::ncInt);
+                poolSizeVar.putVar(&poolSize);
                 
                 // Add BlockConfig with different SimpleConfiguration<int> value
                 auto blockGroup = cfgGroup.addGroup("BlockConfig");
                 auto extraGroup = blockGroup.addGroup("f_extra_Configuration");
                 extraGroup.putAtt("type", "SimpleConfiguration<int>");
-                int block_k = 5; // Different value - should be overridden
-                auto blockKVar = extraGroup.addVar("value", netCDF::ncInt);
-                blockKVar.putVar(&block_k);
+                int block_poolSize = 5; // Different value - should be overridden
+                auto blockPoolSizeVar = extraGroup.addVar("value", netCDF::ncInt);
+                blockPoolSizeVar.putVar(&block_poolSize);
                 
                 dataFile.close();
             }
@@ -628,26 +628,26 @@ TestResult test_serialization_deserialization() {
             dss->deserialize(dataFile);
             dataFile.close();
             
-            // k dimension should have priority (7, not 5)
-            if (dss->get_k_value() != 7) {
+            // poolSize variable should have priority (7, not 5)
+            if (dss->get_poolSize() != 7) {
                 remove(filename.c_str());
-                return {false, "k dimension should have priority (expected 7, got " + to_string(dss->get_k_value()) + ")"};
+                return {false, "poolSize variable should have priority (expected 7, got " + to_string(dss->get_poolSize()) + ")"};
             }
             
             remove(filename.c_str());
         }
         
         
-        // Part 5: Deserialization with invalid k (error checking happens at init time)
+        // Part 5: Deserialization with invalid poolSize (error checking happens at init time)
         {
-            string filename = create_test_scenario_file(10, 2, "_invalid_k");
+            string filename = create_test_scenario_file(10, 2, "_invalid_poolSize");
             {
                 netCDF::NcFile dataFile(filename, netCDF::NcFile::write);
                 
                 auto cfgGroup = dataFile.addGroup("ScenarioReductionConfig");
-                int k = 15; // Invalid: k > number of scenarios (10)
-                auto kVar = cfgGroup.addVar("k", netCDF::ncInt);
-                kVar.putVar(&k);
+                int poolSize = 15; // Invalid: poolSize > number of scenarios (10)
+                auto poolSizeVar = cfgGroup.addVar("poolSize", netCDF::ncInt);
+                poolSizeVar.putVar(&poolSize);
                 
                 dataFile.close();
             }
@@ -659,17 +659,17 @@ TestResult test_serialization_deserialization() {
                 dss->deserialize(dataFile);
                 dataFile.close();
                 
-                // Should have loaded invalid k
-                if (dss->get_k_value() != 15) {
+                // Should have loaded invalid poolSize
+                if (dss->get_poolSize() != 15) {
                     remove(filename.c_str());
-                    return {false, "Should load invalid k value (got " + to_string(dss->get_k_value()) + ")"};
+                    return {false, "Should load invalid poolSize value (got " + to_string(dss->get_poolSize()) + ")"};
                 }
                 
                 // But init_representative_pool should fail
                 try {
                     dss->init_representative_pool(15);
                     remove(filename.c_str());
-                    return {false, "Should throw exception for invalid k in init_representative_pool"};
+                    return {false, "Should throw exception for invalid poolSize in init_representative_pool"};
                 } catch (const invalid_argument& e) {
                     // Expected behavior
                 }
