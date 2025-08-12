@@ -44,6 +44,7 @@
 
 #include <Eigen/Dense>  // For Eigen::VectorXd, Eigen::Map
 #include <random>       // For std::mt19937
+#include <memory>       // For std::unique_ptr
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
@@ -246,7 +247,7 @@ public:
   * @return A span representing the current scenario
   * @throws std::out_of_range If currentScenarioIndex is out of range
   */
- Scenario get_current_scenario( void ) override;
+ Scenario get_current_scenario( void ) const override;
 
  /// Function to query the probability weight of the current scenario
  /** When sampling a pool, what are the weights of the drawn scenarios?
@@ -263,7 +264,7 @@ public:
   * @return The normalized probability of the current scenario
   * @throws std::out_of_range If currentScenarioIndex is out of range
   */
- double get_current_scenario_probability( void ) override;
+ double get_current_scenario_probability( void ) const override;
 
  /// Move currentScenarioIndex to the next scenario
  /** The function increments currentScenarioIndex by 1 if there is still
@@ -277,7 +278,7 @@ public:
  /** Every scenario (vector in some Euclidean space R^d) is assumed to have
   * the same dimension. The dimension has been saved in scenarioSize when
   * deserializing the input discrete distribution. */
- ScenarioSize get_scenario_size( void ) override;
+ ScenarioSize get_scenario_size( void ) const override;
 
 /** @} ---------------------------------------------------------------------*/
 /*-------------------- SCENARIO POOL MANAGEMENT METHODS --------------------*/
@@ -331,63 +332,26 @@ public:
  /**
   * @brief Get the block configuration for scenario reduction
   * 
-  * Returns the BlockConfig part of the scenario reduction configuration,
-  * which contains parameters like:
-  * - poolSize: Number of scenarios to select
-  * 
-  * The BlockConfig is owned by the DiscreteScenarioSet object and should
-  * not be deleted by the caller.
-  * 
-  * @return Pointer to the BlockConfig, or nullptr if no configuration exists
+  * @return Const pointer to the BlockConfig, or nullptr if no configuration exists
   */
- BlockConfig* get_scenario_reduction_block_config() const;
+ const BlockConfig* get_block_config() const { return f_block_config; }
 
  /**
   * @brief Get the solver configuration for scenario reduction
   * 
-  * Returns the BlockSolverConfig part of the scenario reduction configuration,
-  * which contains parameters like:
-  * - algorithm: Scenario reduction method to use (e.g., "Dupacova", "BestFit")
-  * - rho: Initial solution parameter (0.0 for random, 1.0 for Dupačová initialization)
-  * - shuffle: Whether to shuffle scenarios (for FirstFit algorithm)
-  * - Additional solver-specific settings
-  * 
-  * The BlockSolverConfig is owned by the DiscreteScenarioSet object and should
-  * not be deleted by the caller.
-  * 
-  * @return Pointer to the BlockSolverConfig, or nullptr if no configuration exists
+  * @return Const pointer to the BlockSolverConfig, or nullptr if no configuration exists
+  *         Note: Returns nullptr if ownership was already transferred via apply()
   */
- BlockSolverConfig* get_scenario_reduction_solver_config() const;
+ const BlockSolverConfig* get_solver_config() const { return f_solver_config.get(); }
 
  /**
   * @brief Set the scenario reduction configuration
   * 
   * Configures how scenario reduction will be performed when init_representative_pool()
-  * is called. Takes ownership of the provided configuration objects.
+  * is called.
   * 
-  * The provided configurations should contain:
-  * 
-  * 1. block_config (BlockConfig):
-  *    - poolSize: Number of scenarios to select (must be > 0 and <= nbScenarios)
-  * 
-  * 2. solver_config (BlockSolverConfig):
-  *    - Contains the Solver name and configuration for solving the
-  *      CapacitatedFacilityLocationBlock instance created for scenario reduction.
-  *    - Any Solver capable of solving CFL problems can be used.
-  *    - **Important**: The user is responsible for ensuring the chosen Solver
-  *      is capable of solving the CapacitatedFacilityLocationBlock instance
-  *      that will be created for scenario reduction.
-  * 
-  * Note: The ell parameter for Wasserstein distance is an internal
-  * variable of DiscreteScenarioSet.
-  * 
-  * Implementation details:
-  * - Stores the configurations internally
-  * - Replaces any existing configuration
-  * - The object takes ownership of both config pointers
-  * 
-  * @param block_config BlockConfig containing reduction parameters (poolSize)
-  * @param solver_config BlockSolverConfig containing the Solver to use for CFL optimization
+  * @param block_config BlockConfig containing reduction parameters like poolSize
+  * @param solver_config BlockSolverConfig containing solver settings
   */
  void set_config(BlockConfig* block_config, BlockSolverConfig* solver_config);
  
@@ -406,39 +370,10 @@ public:
  /**
   * @brief Set configuration for the DiscreteScenarioSet
   * 
-  * This method supports multiple configuration patterns for different use cases:
-  * 
-  * **Pattern 1: Simple poolSize-only (Baseline Method)**
-  * ```cpp
-  * dss->set_config(new SimpleConfiguration<int>(5));
-  * ```
-  * - Uses baseline method (selects top scenarios by probability weight)
-  * - No solver optimization, simple and fast
-  * 
-  * **Pattern 2: poolSize + Solver (Advanced with Default BlockConfig)**  
-  * ```cpp
-  * auto* solver = create_solver_config("ScenarioReductionSolver", "Dupacova");
-  * dss->set_config(new SimpleConfiguration<pair<int, Configuration*>>(
-  *     make_pair(5, solver)));
-  * ```
-  * - Generates default BlockConfig with poolSize parameter
-  * - Uses advanced scenario reduction with provided solver
-  * - The Configuration* is dynamically cast to BlockSolverConfig*
-  * 
-  * **Pattern 3: Full Configuration (Advanced with Custom Settings)**
-  * ```cpp
-  * auto* block = create_block_config(5, 2.0);  // poolSize=5, ell=2.0
-  * auto* solver = create_solver_config("CPXMILPSolver");
-  * dss->set_config(new SimpleConfiguration<pair<Configuration*, Configuration*>>(
-  *     make_pair(block, solver)));
-  * ```
-  * - Uses provided BlockConfig for full control over CFL formulation
-  * - Uses advanced scenario reduction with provided solver
-  * - First Configuration* is cast to BlockConfig*, second to BlockSolverConfig*
-  * 
-  * **Memory Management:**
-  * - BlockConfig objects are cloned when stored (ownership is transferred)
-  * - BlockSolverConfig objects are referenced (caller retains ownership)
+  * Supports multiple configuration patterns:
+  * - SimpleConfiguration<int>: poolSize only (baseline method)
+  * - SimpleConfiguration<pair<int, Configuration*>>: poolSize + solver config
+  * - SimpleConfiguration<pair<Configuration*, Configuration*>>: full block + solver config
   * 
   * @param config The Configuration object containing scenario reduction parameters
   */
@@ -467,7 +402,7 @@ public:
  
  // Scenario Access Methods
  /// Get current scenario with its probability as a pair
- [[nodiscard]] ScenarioWithProbability get_current_scenario_with_prob();
+ [[nodiscard]] ScenarioWithProbability get_current_scenario_with_prob() const;
  
  /// Try to get a scenario by index, returns nullopt if index is invalid
  [[nodiscard]] std::optional<Scenario> try_get_scenario(ScenarioIndex index) const;
@@ -567,18 +502,11 @@ private:
   *  This can be overridden during deserialization from the netCDF file. */
  float ell = DEFAULT_ELL_VALUE;
  
- /**
-  * @brief Configuration for scenario reduction
-  * 
-  * Stores a pair of configurations for scenario reduction:
-  * - First: BlockConfig with parameters like poolSize (number of scenarios)
-  * - Second: BlockSolverConfig with the algorithm choice and solver settings
-  * 
-  * The configuration is loaded during deserialization if available
-  * in the netCDF file, or can be set programmatically using
-  * set_config().
-  */
- std::pair<BlockConfig*, BlockSolverConfig*> f_scenario_reduction_config = {nullptr, nullptr};
+ /// Block configuration for scenario reduction
+ BlockConfig* f_block_config = nullptr;
+ 
+ /// Solver configuration for scenario reduction
+ mutable std::unique_ptr<BlockSolverConfig> f_solver_config;
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PROBABILITY FIELDS ---------------------------------*/
@@ -728,8 +656,8 @@ private:
   * @return The ell-power of the norm distance
   */
  virtual double compute_scenario_distance(const Eigen::VectorXd& scenario1,
-                                 const Eigen::VectorXd& scenario2,
-                                 float ell) const;
+                                          const Eigen::VectorXd& scenario2,
+                                          float ell) const;
 
  /// Create and configure the scenario reduction solver
  /** Sets up the ScenarioReductionSolver with the appropriate configuration.

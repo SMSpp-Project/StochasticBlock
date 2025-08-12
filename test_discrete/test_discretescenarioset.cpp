@@ -162,11 +162,11 @@ unique_ptr<DiscreteScenarioSet> load_test_scenarios(int num_scenarios = 20,
 }
 
 // Helper to create BlockConfig for scenario reduction
-BlockConfig* create_block_config(int k, double ell = 2.0) {
+BlockConfig* create_block_config(int poolSize, double ell = 2.0) {
     auto* block_config = new BlockConfig();
     
     // Set poolSize parameter in extra configuration
-    block_config->f_extra_Configuration = new SimpleConfiguration<int>(k);
+    block_config->f_extra_Configuration = new SimpleConfiguration<int>(poolSize);
     
     // Set ell parameter in static variables configuration
     block_config->f_static_variables_Configuration = new SimpleConfiguration<double>(ell);

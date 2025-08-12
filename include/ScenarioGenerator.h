@@ -445,7 +445,7 @@ class ScenarioGenerator
   * be the size of the std::span< const double > (Scenario) returned by
   * get_current_scenario(). */
   
- [[nodiscard]] virtual ScenarioSize get_scenario_size( void ) = 0;
+ [[nodiscard]] virtual ScenarioSize get_scenario_size( void ) const = 0;
 
 /*--------------------------------------------------------------------------*/
  /// getting the classname of this ScenarioGenerator
@@ -611,12 +611,12 @@ class ScenarioGenerator
   * structure may no longer be available and the span should no longer be
   * used. */
 
- [[nodiscard]] virtual Scenario get_current_scenario( void ) = 0;
+ [[nodiscard]] virtual Scenario get_current_scenario( void ) const = 0;
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
  /// return the probability associated to the current scenario
  
- [[nodiscard]] virtual double get_current_scenario_probability( void )  = 0;
+ [[nodiscard]] virtual double get_current_scenario_probability( void ) const = 0;
 
 /*--------------------------------------------------------------------------*/
  /// move the current scenario to the next scenario in the pool

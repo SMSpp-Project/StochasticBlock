@@ -88,34 +88,20 @@ void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
 /*------ SCENARIO REDUCTION CONFIGURATION METHODS --------------------------*/
 /*--------------------------------------------------------------------------*/
 
-// Get BlockConfig for scenario reduction
-BlockConfig* DiscreteScenarioSet::get_scenario_reduction_block_config() const
-{
-  return f_scenario_reduction_config.first;
-}
-
-// Get solver configuration for scenario reduction
-BlockSolverConfig* DiscreteScenarioSet::get_scenario_reduction_solver_config() const
-{
-  return f_scenario_reduction_config.second;
-}
-
-// Set scenario reduction configuration (convenience overload)
+// Set scenario reduction configuration using mixed ownership model
 void DiscreteScenarioSet::set_config(BlockConfig* block_config, BlockSolverConfig* solver_config)
 {
-  // Clean up existing configurations if they are different from the new ones
-  if (f_scenario_reduction_config.first && f_scenario_reduction_config.first != block_config) {
-    delete f_scenario_reduction_config.first;
+  // Clean up existing configurations
+  if (f_block_config) {
+    delete f_block_config;
   }
+  // f_solver_config will be cleaned up automatically by unique_ptr
   
-  if (f_scenario_reduction_config.second && f_scenario_reduction_config.second != solver_config) {
-    delete f_scenario_reduction_config.second;
-  }
-  
-  // Set the new configurations
-  // Clone the BlockConfig to ensure safe ownership (BlockSolverConfig doesn't need cloning)
-  f_scenario_reduction_config.first = block_config ? block_config->clone() : nullptr;
-  f_scenario_reduction_config.second = solver_config;
+  // Set the new configurations following SMS++ ownership patterns:
+  // - Clone the BlockConfig (SMS++ pattern: blocks clone their configs)
+  // - Take ownership of BlockSolverConfig via unique_ptr
+  f_block_config = block_config ? block_config->clone() : nullptr;
+  f_solver_config.reset(solver_config);
   
   // Extract and set poolSize from the BlockConfig if available
   if (block_config && block_config->f_extra_Configuration) {
@@ -261,15 +247,12 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   scenarioIndexes.clear();
   
   // Clean up any existing configuration
-  if (f_scenario_reduction_config.first) {
-    delete f_scenario_reduction_config.first;
-    f_scenario_reduction_config.first = nullptr;
+  if (f_block_config) {
+    delete f_block_config;
+    f_block_config = nullptr;
   }
   
-  if (f_scenario_reduction_config.second) {
-    delete f_scenario_reduction_config.second;
-    f_scenario_reduction_config.second = nullptr;
-  }
+  // f_solver_config will be reset automatically
   
   // Deserialize mandatory dimensions
   ::deserialize_dim( group , "NumberScenarios" , nbScenarios , false );
@@ -455,7 +438,7 @@ void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
   probsVar.putVar(poolProbabilities.data());
   
   // Serialize scenario reduction configuration if it exists
-  if (f_scenario_reduction_config.first && f_scenario_reduction_config.second) {
+  if (f_block_config && f_solver_config) {
     netCDF::NcGroup cfgGroup = group.addGroup("ScenarioReductionConfig");
     
     // Serialize poolSize if available
@@ -470,11 +453,11 @@ void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
     
     // Serialize BlockConfig
     auto blockGroup = cfgGroup.addGroup("BlockConfig");
-    f_scenario_reduction_config.first->serialize(blockGroup);
+    f_block_config->serialize(blockGroup);
     
     // Serialize BlockSolverConfig  
     auto solverGroup = cfgGroup.addGroup("BlockSolverConfig");
-    f_scenario_reduction_config.second->serialize(solverGroup);
+    f_solver_config->serialize(solverGroup);
   }
 }
 
@@ -550,7 +533,7 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex poolSize )
   empty_pool();
   
   // Check if we have a BlockSolverConfig (BlockConfig alone is not useful without solver)
-  if (f_scenario_reduction_config.second) {
+  if (f_solver_config) {
     // Step 2: Create a CapacitatedFacilityLocationBlock for scenario selection
     auto cflBlock = std::make_unique<CapacitatedFacilityLocationBlock>();
     
@@ -577,9 +560,9 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex poolSize )
     );
     
     // Step 3.1: Apply BlockConfig if it exists, else generate minimal default
-    if (f_scenario_reduction_config.first) {
+    if (f_block_config) {
       // Trust that the user provided appropriate BlockConfig for CFL
-      f_scenario_reduction_config.first->apply(cflBlock.get());
+      f_block_config->apply(cflBlock.get());
     } else {
       // Generate minimal default config (mostly empty, just poolSize in extra_Configuration)
       auto* default_config = generate_default_cfl_config(poolSize);
@@ -600,8 +583,9 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex poolSize )
     #endif
     cflBlock->generate_abstract_constraints();  // Uses default wc=7
     
-    // Apply BlockSolverConfig
-    f_scenario_reduction_config.second->apply(cflBlock.get());
+    // Apply BlockSolverConfig and transfer ownership to solver
+    f_solver_config->apply(cflBlock.get());
+    f_solver_config.release();  // Transfer ownership - we no longer own it
     
     // Get the registered solver and solve
     if (cflBlock->get_registered_solvers().empty()) {
@@ -654,13 +638,13 @@ bool DiscreteScenarioSet::should_use_scenario_reduction(ScenarioIndex size) cons
   if (size <= 1) return false;
   
   // Check if we have valid configurations
-  if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
+  if (!f_block_config || !f_solver_config) {
     return false;
   }
   
   try {
     // Try to get the poolSize parameter and validate it
-    DiscreteScenarioSet::ScenarioIndex pool_size = get_poolSize_parameter(f_scenario_reduction_config.first);
+    DiscreteScenarioSet::ScenarioIndex pool_size = get_poolSize_parameter(f_block_config);
     
     // If poolSize is valid, scenario reduction can be used
     return (pool_size > 0 && pool_size <= nbScenarios);
@@ -673,12 +657,12 @@ bool DiscreteScenarioSet::should_use_scenario_reduction(ScenarioIndex size) cons
 // Apply scenario reduction
 void DiscreteScenarioSet::apply_scenario_reduction()
 {
-  if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
+  if (!f_block_config || !f_solver_config) {
     throw std::runtime_error("Missing scenario reduction configuration");
   }
   
   // Extract the poolSize parameter (number of scenarios to select)
-  DiscreteScenarioSet::ScenarioIndex pool_size = get_poolSize_parameter(f_scenario_reduction_config.first);
+  DiscreteScenarioSet::ScenarioIndex pool_size = get_poolSize_parameter(f_block_config);
   
   // DEBUG: Log poolSize parameter
   #ifndef NDEBUG
@@ -728,8 +712,8 @@ void DiscreteScenarioSet::apply_scenario_reduction()
     );
     
     // Apply the BlockConfig AFTER loading data
-    if (f_scenario_reduction_config.first) {
-      f_scenario_reduction_config.first->apply(cflBlock.get());
+    if (f_block_config) {
+      f_block_config->apply(cflBlock.get());
     }
     
     // Generate abstract variables (needed for all solvers to write solution back)
@@ -779,7 +763,7 @@ void DiscreteScenarioSet::apply_scenario_reduction()
 }
 
 
-[[nodiscard]] ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void )
+[[nodiscard]] ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void ) const
 {
   if( currentScenarioIndex >= poolSize )
   {
@@ -804,7 +788,7 @@ void DiscreteScenarioSet::apply_scenario_reduction()
   return Scenario(&scenarioSet[index][0], get_scenario_size());
 }
 
-[[nodiscard]] double DiscreteScenarioSet::get_current_scenario_probability( void )
+[[nodiscard]] double DiscreteScenarioSet::get_current_scenario_probability( void ) const
 {
   if( currentScenarioIndex >= poolSize )
   {
@@ -829,7 +813,7 @@ void DiscreteScenarioSet::apply_scenario_reduction()
 
 // Implementation of the new structured binding method
 [[nodiscard]] DiscreteScenarioSet::ScenarioWithProbability 
-DiscreteScenarioSet::get_current_scenario_with_prob()
+DiscreteScenarioSet::get_current_scenario_with_prob() const
 {
   // Get both the scenario and probability in one call
   return {get_current_scenario(), get_current_scenario_probability()};
@@ -881,7 +865,7 @@ DiscreteScenarioSet::try_get_scenario(ScenarioIndex index) const
 }
 
 /// Implementation for retrieving the size of a scenario
-[[nodiscard]] ScenarioGenerator::ScenarioSize DiscreteScenarioSet::get_scenario_size( void )
+[[nodiscard]] ScenarioGenerator::ScenarioSize DiscreteScenarioSet::get_scenario_size( void ) const
 {
   return scenarioSize;
 }
@@ -889,7 +873,7 @@ DiscreteScenarioSet::try_get_scenario(ScenarioIndex index) const
 /// Concrete implementation of ScenarioGenerator
 DiscreteScenarioSet::DiscreteScenarioSet() { set_seed(DEFAULT_SEED); }
 
-/// Destructor - using RAII principles
+/// Destructor
 DiscreteScenarioSet::~DiscreteScenarioSet() {
   // Reset scenario set
   scenarioSet.resize(boost::extents[0][0]);
@@ -901,16 +885,16 @@ DiscreteScenarioSet::~DiscreteScenarioSet() {
   poolProbabilities.clear();
   poolProbabilities.shrink_to_fit();
   
-  // Release the configuration objects
-  if (f_scenario_reduction_config.first) {
-    delete f_scenario_reduction_config.first;
-    f_scenario_reduction_config.first = nullptr;
+  // Release the configuration objects following SMS++ ownership patterns
+  
+  // BlockConfig: We always own our clone, safe to delete
+  if (f_block_config) {
+    delete f_block_config;
+    f_block_config = nullptr;
   }
   
-  if (f_scenario_reduction_config.second) {
-    delete f_scenario_reduction_config.second;
-    f_scenario_reduction_config.second = nullptr;
-  }
+  // BlockSolverConfig: unique_ptr handles cleanup automatically
+  // If ownership was transferred via release(), this will be nullptr and safe
 }
 
 /*--------------------------------------------------------------------------*/
@@ -931,7 +915,7 @@ void DiscreteScenarioSet::validate_poolSize(ScenarioIndex poolSize) const
 void DiscreteScenarioSet::ensure_configuration_exists(ScenarioIndex poolSize)
 {
   // If configuration is not initialized, create it with default values
-  if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
+  if (!f_block_config || !f_solver_config) {
     // Create default configurations
     auto* block_cfg = generate_default_cfl_config(poolSize);
     auto* solver_cfg = generate_default_solver_config("Dupacova");
@@ -940,21 +924,21 @@ void DiscreteScenarioSet::ensure_configuration_exists(ScenarioIndex poolSize)
     set_config(block_cfg, solver_cfg);
     
     // Verify configuration was created
-    if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
+    if (!f_block_config || !f_solver_config) {
       throw std::runtime_error("Failed to create scenario reduction configuration");
     }
   } else {
     // Configuration exists, but verify it has the correct poolSize parameter
-    if (f_scenario_reduction_config.first && f_scenario_reduction_config.first->f_extra_Configuration) {
-      auto* poolSize_config = dynamic_cast<SimpleConfiguration<int>*>(f_scenario_reduction_config.first->f_extra_Configuration);
+    if (f_block_config && f_block_config->f_extra_Configuration) {
+      auto* poolSize_config = dynamic_cast<SimpleConfiguration<int>*>(f_block_config->f_extra_Configuration);
       if (!poolSize_config) {
         // Extra configuration exists but is not SimpleConfiguration<int>, fix it
-        delete f_scenario_reduction_config.first->f_extra_Configuration;
-        f_scenario_reduction_config.first->f_extra_Configuration = new SimpleConfiguration<int>(poolSize);
+        delete f_block_config->f_extra_Configuration;
+        f_block_config->f_extra_Configuration = new SimpleConfiguration<int>(poolSize);
       }
-    } else if (f_scenario_reduction_config.first) {
+    } else if (f_block_config) {
       // No extra configuration, add it
-      f_scenario_reduction_config.first->f_extra_Configuration = new SimpleConfiguration<int>(poolSize);
+      f_block_config->f_extra_Configuration = new SimpleConfiguration<int>(poolSize);
     }
   }
 }
@@ -1024,8 +1008,9 @@ DiscreteScenarioSet::create_and_configure_solver(CapacitatedFacilityLocationBloc
                                                  float ell) const
 {
   // Apply the BlockSolverConfig to register and configure the solver
-  if (f_scenario_reduction_config.second) {
-    f_scenario_reduction_config.second->apply(cflBlock);
+  if (f_solver_config) {
+    f_solver_config->apply(cflBlock);
+    f_solver_config.release();  // Transfer ownership to solver
   }
   
   // Get the registered solver
