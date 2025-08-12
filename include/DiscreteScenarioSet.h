@@ -79,13 +79,13 @@ namespace SMSpp_di_unipi_it
  *
  * - **Scenario Reduction** (init_representative_pool()): Selects a representative
  *   subset that minimizes the Wasserstein distance between the original and reduced
- *   distributions. This requires configuration via set_scenario_reduction_config(),
- *   set_config(), or automatically loaded during netCDF deserialization
+ *   distributions. This requires configuration via set_config() or automatically
+ *   loaded during netCDF deserialization
  *
  * ### Configuration and Persistence
  *
  * The class supports configuration through:
- * - Direct parameter setting via set_scenario_reduction_config()
+ * - Direct parameter setting via set_config() overloads
  * - Configuration objects via set_config()
  * - Persistence through netCDF serialization/deserialization
  *
@@ -95,8 +95,7 @@ namespace SMSpp_di_unipi_it
  * ### Usage Pattern
  *
  * 1. Load scenarios via deserialize() or direct construction
- * 2. Configure scenario reduction (optional) via set_config() or
- *    set_scenario_reduction_config()
+ * 2. Configure scenario reduction (optional) via set_config() overloads
  * 3. Initialize pool via init_random_pool() or init_representative_pool()
  * 4. Access scenarios via get_current_scenario() and iterate via
  *    get_next_scenario()
@@ -166,7 +165,7 @@ public:
   *   k dimension takes precedence and overrides the SimpleConfiguration value.
   * - ell (float): Optional. Power for Wasserstein distance (default 2.0).
   *   Stored as internal variable.
-  * - BlockConfig/: Optional. Configuration for CapacitatedFacilityLocationBlock.
+  * - BlockConfig: Optional. Configuration for CapacitatedFacilityLocationBlock.
   *   The k value is determined as follows:
   *   * If k dimension exists: it overrides any SimpleConfiguration<int> in extra_Configuration
   *   * If k dimension doesn't exist but extra_Configuration has SimpleConfiguration<int>: use that as k
@@ -294,7 +293,7 @@ public:
   * @param k Number of representative scenarios to select
   * @throws std::invalid_argument If k is invalid (0 or > available scenarios)
   * @throws std::runtime_error If the solver fails (when using configured solver)
-  * @see set_scenario_reduction_config() to provide BlockConfig and BlockSolverConfig
+  * @see set_config() to provide BlockConfig and BlockSolverConfig
   */
  void init_representative_pool( ScenarioIndex k ) override;
 
@@ -336,7 +335,7 @@ public:
  BlockSolverConfig* get_scenario_reduction_solver_config() const;
 
  /**
-  * @brief Set the scenario reduction configuration
+  * @brief Set the scenario reduction configuration (convenience overload)
   * 
   * Configures how scenario reduction will be performed when init_representative_pool()
   * is called. Takes ownership of the provided configuration objects.
@@ -350,8 +349,9 @@ public:
   *    - Contains the Solver name and configuration for solving the
   *      CapacitatedFacilityLocationBlock instance created for scenario reduction.
   *    - Any Solver capable of solving CFL problems can be used.
-  *    - The user is responsible for ensuring the chosen Solver is appropriate
-  *      for the problem size and structure.
+  *    - **Important**: The user is responsible for ensuring the chosen Solver
+  *      is capable of solving the CapacitatedFacilityLocationBlock instance
+  *      that will be created for scenario reduction.
   * 
   * Note: The ell parameter for Wasserstein distance is an internal
   * variable of DiscreteScenarioSet.
@@ -364,10 +364,10 @@ public:
   * @param block_config BlockConfig containing reduction parameters (k)
   * @param solver_config BlockSolverConfig containing the Solver to use for CFL optimization
   */
- void set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config);
+ void set_config(BlockConfig* block_config, BlockSolverConfig* solver_config);
  
  /**
-  * @brief Set the scenario reduction configuration with k parameter
+  * @brief Set the scenario reduction configuration with k parameter (convenience overload)
   * 
   * Convenience method that sets both the configuration objects and the k parameter.
   * This ensures that k_value is properly set for scenario reduction.
@@ -376,23 +376,44 @@ public:
   * @param solver_config BlockSolverConfig containing the Solver to use for CFL optimization
   * @param k Number of scenarios to select (must be > 0 and <= nbScenarios)
   */
- void set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex k);
+ void set_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex k);
 
  /**
   * @brief Set configuration for the DiscreteScenarioSet
   * 
-  * This method overrides the base class set_config() to handle scenario
-  * reduction configuration. The Configuration object should contain:
-  * - k (optional): Number of scenarios to select. If provided and > 0,
-  *   init_representative_pool(k) will be called.
-  * - BlockConfig (optional): Configuration for the scenario reduction problem
-  * - BlockSolverConfig (optional): Configuration for the solver
+  * This method supports multiple configuration patterns for different use cases:
   * 
-  * If k is provided but BlockConfig or BlockSolverConfig are missing,
-  * defaults will be generated.
+  * **Pattern 1: Simple k-only (Baseline Method)**
+  * ```cpp
+  * dss->set_config(new SimpleConfiguration<int>(5));
+  * ```
+  * - Uses baseline method (selects top k scenarios by probability weight)
+  * - No solver optimization, simple and fast
   * 
-  * The method takes ownership of any configuration objects extracted from
-  * the Configuration.
+  * **Pattern 2: k + Solver (Advanced with Default BlockConfig)**  
+  * ```cpp
+  * auto* solver = create_solver_config("ScenarioReductionSolver", "Dupacova");
+  * dss->set_config(new SimpleConfiguration<pair<int, Configuration*>>(
+  *     make_pair(5, solver)));
+  * ```
+  * - Generates default BlockConfig with k parameter
+  * - Uses advanced scenario reduction with provided solver
+  * - The Configuration* is dynamically cast to BlockSolverConfig*
+  * 
+  * **Pattern 3: Full Configuration (Advanced with Custom Settings)**
+  * ```cpp
+  * auto* block = create_block_config(5, 2.0);  // k=5, ell=2.0
+  * auto* solver = create_solver_config("CPXMILPSolver");
+  * dss->set_config(new SimpleConfiguration<pair<Configuration*, Configuration*>>(
+  *     make_pair(block, solver)));
+  * ```
+  * - Uses provided BlockConfig for full control over CFL formulation
+  * - Uses advanced scenario reduction with provided solver
+  * - First Configuration* is cast to BlockConfig*, second to BlockSolverConfig*
+  * 
+  * **Memory Management:**
+  * - BlockConfig objects are cloned when stored (ownership is transferred)
+  * - BlockSolverConfig objects are referenced (caller retains ownership)
   * 
   * @param config The Configuration object containing scenario reduction parameters
   */
@@ -538,7 +559,7 @@ private:
   * 
   * The configuration is loaded during deserialization if available
   * in the netCDF file, or can be set programmatically using
-  * set_scenario_reduction_config().
+  * set_config().
   */
  std::pair<BlockConfig*, BlockSolverConfig*> f_scenario_reduction_config = {nullptr, nullptr};
 

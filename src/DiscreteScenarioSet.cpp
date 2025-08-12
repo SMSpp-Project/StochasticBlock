@@ -103,22 +103,9 @@ BlockSolverConfig* DiscreteScenarioSet::get_scenario_reduction_solver_config() c
   return f_scenario_reduction_config.second;
 }
 
-// Set scenario reduction configuration
-void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config)
+// Set scenario reduction configuration (convenience overload)
+void DiscreteScenarioSet::set_config(BlockConfig* block_config, BlockSolverConfig* solver_config)
 {
-  // Validate the configurations
-  if (block_config && solver_config) {
-    // Validate BlockSolverConfig contains a valid solver name
-    const auto& solver_names = solver_config->get_SolverNames();
-    if (solver_names.empty()) {
-      throw std::invalid_argument("BlockSolverConfig must specify at least one solver");
-    }
-    
-    // Note: The user is responsible for ensuring the chosen Solver
-    // is capable of solving the CapacitatedFacilityLocationBlock
-    // instance that will be created for scenario reduction.
-  }
-  
   // Clean up existing configurations if they are different from the new ones
   if (f_scenario_reduction_config.first && f_scenario_reduction_config.first != block_config) {
     delete f_scenario_reduction_config.first;
@@ -143,13 +130,13 @@ void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_confi
 }
 
 // Set scenario reduction configuration with k parameter
-void DiscreteScenarioSet::set_scenario_reduction_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex k)
+void DiscreteScenarioSet::set_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex k)
 {
   // First set k_value with validation
   set_k_value(k);
   
   // Then set the configurations
-  set_scenario_reduction_config(block_config, solver_config);
+  set_config(block_config, solver_config);
 }
 
 // Set configuration from a Configuration object
@@ -159,63 +146,69 @@ void DiscreteScenarioSet::set_config(Configuration* config)
     return; // Nothing to do with null config
   }
   
-  // First check if this is a BlockConfig (contains scenario reduction settings)
-  auto* block_config = dynamic_cast<BlockConfig*>(config);
-  if (block_config) {
-    // Extract k from the extra configuration
-    ScenarioIndex k = 0;
-    if (block_config->f_extra_Configuration) {
-      auto* k_config = dynamic_cast<SimpleConfiguration<int>*>(block_config->f_extra_Configuration);
-      if (k_config) {
-        k = k_config->f_value;
-      }
-    }
-    
+  // Pattern 1: SimpleConfiguration<int> - baseline method (top k by weight)
+  auto* simple_k = dynamic_cast<SimpleConfiguration<int>*>(config);
+  if (simple_k) {
+    ScenarioIndex k = simple_k->f_value;
     if (k > 0) {
-      // Create solver config if not present (use default)
-      auto* solver_cfg = f_scenario_reduction_config.second;
-      if (!solver_cfg) {
-        solver_cfg = generate_default_solver_config("Dupacova");
-      }
-      set_scenario_reduction_config(block_config->clone(), solver_cfg, k);
+      // Baseline method: just set k_value, no CFL config needed
+      k_value = k;
     }
     return;
   }
   
-  // Otherwise, check if it's a generic Configuration with sub-configs
-  // This would be the case when loaded from netCDF with ScenarioReductionConfig group
-  
-  // Try to extract k parameter directly
-  ScenarioIndex k = 0;
-  double ell_value = DEFAULT_ELL_VALUE;
-  
-  // Check for SimpleConfiguration<int> (just k)
-  auto* k_config = dynamic_cast<SimpleConfiguration<int>*>(config);
-  if (k_config) {
-    k = k_config->f_value;
-  } else {
-    // Check for SimpleConfiguration<vector<double>> format: [k, ell, ...]
-    auto* vec_config = dynamic_cast<SimpleConfiguration<std::vector<double>>*>(config);
-    if (vec_config && !vec_config->f_value.empty()) {
-      k = static_cast<ScenarioIndex>(vec_config->f_value[0]);
-      if (vec_config->f_value.size() > 1) {
-        ell_value = vec_config->f_value[1];
+  // Pattern 2: SimpleConfiguration<pair<int, Configuration*>> where Configuration* is BlockSolverConfig*
+  auto* k_solver_pair = dynamic_cast<SimpleConfiguration<std::pair<int, Configuration*>>*>(config);
+  if (k_solver_pair) {
+    ScenarioIndex k = k_solver_pair->f_value.first;
+    Configuration* inner_config = k_solver_pair->f_value.second;
+    
+    if (k > 0 && inner_config) {
+      // Check if inner_config is actually a BlockSolverConfig*
+      auto* solver_config = dynamic_cast<BlockSolverConfig*>(inner_config);
+      if (solver_config) {
+        // Generate simple BlockConfig with k
+        auto* block_cfg = generate_default_cfl_config(k);
+        // Use advanced scenario reduction with provided solver
+        set_config(block_cfg, solver_config, k);
+        // Clean up the temporary BlockConfig (set_config clones it)
+        delete block_cfg;
       }
     }
+    return;
   }
   
-  // Store ell value if provided
-  if (ell_value > 0) {
-    this->ell = static_cast<float>(ell_value);
-  }
-  
-  // If we found k, create default configs and apply
-  if (k > 0) {
-    auto* block_cfg = generate_default_cfl_config(k);
-    auto* solver_cfg = generate_default_solver_config("Dupacova");
+  // Pattern 3: SimpleConfiguration<pair<Configuration*, Configuration*>> where first is BlockConfig*, second is BlockSolverConfig*
+  auto* config_pair = dynamic_cast<SimpleConfiguration<std::pair<Configuration*, Configuration*>>*>(config);
+  if (config_pair) {
+    Configuration* first_config = config_pair->f_value.first;
+    Configuration* second_config = config_pair->f_value.second;
     
-    set_scenario_reduction_config(block_cfg, solver_cfg, k);
+    if (first_config && second_config) {
+      // Check if first is BlockConfig* and second is BlockSolverConfig*
+      auto* block_config = dynamic_cast<BlockConfig*>(first_config);
+      auto* solver_config = dynamic_cast<BlockSolverConfig*>(second_config);
+      
+      if (block_config && solver_config) {
+        // Extract k from the provided BlockConfig and use full advanced configuration
+        ScenarioIndex k = get_k_parameter(block_config);
+        // Pass the original BlockConfig (set_config will clone it)
+        set_config(block_config, solver_config, k);
+      }
+    }
+    return;
   }
+  
+  
+  // If we reach here, the configuration type is not supported
+  throw std::invalid_argument(
+    "Unsupported configuration type for DiscreteScenarioSet::set_config(). "
+    "Supported patterns are:\n"
+    "1. SimpleConfiguration<int> - baseline method (top k scenarios by weight)\n"
+    "2. SimpleConfiguration<pair<int, Configuration*>> - advanced with generated BlockConfig\n"
+    "3. SimpleConfiguration<pair<Configuration*, Configuration*>> - full advanced configuration\n"
+    "Note: The ell parameter should be set via set_ell() method or netCDF deserialization."
+  );
 }
 
 // Extract k parameter with validation
@@ -428,7 +421,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
       
       // Store the configuration (but don't apply scenario reduction yet)
       try {
-        set_scenario_reduction_config(block_cfg, solver_cfg);
+        set_config(block_cfg, solver_cfg);
         k_value = k;
       } catch (const std::exception& e) {
         // Clean up allocated configs on error
@@ -943,7 +936,7 @@ void DiscreteScenarioSet::ensure_configuration_exists(ScenarioIndex k)
     auto* solver_cfg = generate_default_solver_config("Dupacova");
     
     // Set the configuration
-    set_scenario_reduction_config(block_cfg, solver_cfg);
+    set_config(block_cfg, solver_cfg);
     
     // Verify configuration was created
     if (!f_scenario_reduction_config.first || !f_scenario_reduction_config.second) {
@@ -1144,10 +1137,6 @@ BlockConfig* DiscreteScenarioSet::generate_default_cfl_config(ScenarioIndex k) c
   
   // Set k in extra_Configuration
   config->f_extra_Configuration = new SimpleConfiguration<int>(k);
-  
-  // Add default constraint generation (all constraints)
-  // For now, leave this to the CapacitatedFacilityLocationBlock defaults
-  
   
   return config;
 }

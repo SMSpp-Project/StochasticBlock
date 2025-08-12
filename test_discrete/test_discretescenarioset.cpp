@@ -2,22 +2,23 @@
 /*--------------------- File test_discretescenarioset.cpp ------------------*/
 /*--------------------------------------------------------------------------*/
 /** @file
- * Test suite for DiscreteScenarioSet class
+ * Test suite for DiscreteScenarioSet class. 
  * 
  * Test 1 - Basic Functionality:
  * - Scenario loading and deserialization
  * - Parameter validation for init_representative_pool
  * - Random pool initialization
  * 
- * Test 2 - Configuration Management:
- * - set_config() method with various configuration types
- * - BlockConfig and SimpleConfiguration handling
+ * Test 2 - Enhanced Configuration Patterns:
+ * - Pattern 1: SimpleConfiguration<int> (baseline method)
+ * - Pattern 2: SimpleConfiguration<pair<int, BlockSolverConfig*>> (advanced + generated BlockConfig)
+ * - Pattern 3: SimpleConfiguration<pair<BlockConfig*, BlockSolverConfig*>> (full advanced)
  * 
  * Test 3 - Scenario Reduction Algorithms:
  * - ScenarioReductionSolver algorithms (Dupacova, BestFit, FirstFit)
  * - MILPSolver implementations (CPLEX, HiGHS)
  * 
- * Test 4 - NetCDF Serialization and Deserialization (Comprehensive):
+ * Test 4 - NetCDF Serialization and Deserialization:
  * - DiscreteScenarioSet persistence with scenario reduction configuration
  * - Full serialization/deserialization round-trip with solver configs
  * - Deserialization with various configurations (no config, k only, k+ell)
@@ -37,7 +38,6 @@
 /*--------------------------------------------------------------------------*/
 
 #include "DiscreteScenarioSet.h"
-#include "Configuration.h"
 #include "BlockSolverConfig.h"
 
 #include <iostream>  // std::cout, std::cerr
@@ -45,7 +45,6 @@
 #include <chrono>    // std::chrono for timing
 #include <iomanip>   // std::setprecision 
 #include <cmath>     // std::abs, std::sqrt
-#include <fstream>   // std::ifstream, std::ofstream
 
 /*--------------------------------------------------------------------------*/
 /*------------------------------- USING ------------------------------------*/
@@ -282,68 +281,94 @@ TestResult test_basic_functionality() {
 
 REGISTER_TEST("Basic Functionality", test_basic_functionality);
 
-// Test 2: Configuration management
-TestResult test_configuration_management() {
+// Test 3: Configuration Patterns
+TestResult test_configuration_patterns() {
     try {
-        // Test: set_config() method
+        // Test Pattern 1: SimpleConfiguration<int> - baseline method
         {
-            auto dss = load_test_scenarios(20, 3);
+            auto dss = load_test_scenarios(20, 5);
             
-            // Test SimpleConfiguration with k
-            auto k_config = make_unique<SimpleConfiguration<int>>(5);
-            dss->set_config(k_config.get());
-            dss->init_representative_pool(5);  // Must explicitly call after set_config
+            // Pattern 1: Simple k-only configuration
+            auto* pattern1_config = new SimpleConfiguration<int>(8);
+            dss->set_config(pattern1_config);
             
-            if (dss->get_selected_scenario_count() != 5) {
-                return {false, "Expected 5 selected scenarios after set_config"};
+            // Verify k_value was set
+            if (dss->get_k_value() != 8) {
+                return {false, "Pattern 1: k_value not set correctly (expected 8, got " + to_string(dss->get_k_value()) + ")"};
             }
             
-            // Test override with new k
-            auto k_config2 = make_unique<SimpleConfiguration<int>>(8);
-            dss->set_config(k_config2.get());
-            dss->init_representative_pool(8);  // Must explicitly call after set_config
-            
+            // Test that baseline method works
+            dss->init_representative_pool(8);
             if (dss->get_selected_scenario_count() != 8) {
-                return {false, "Expected 8 selected scenarios after override"};
-            }
-            
-            // Test BlockConfig
-            auto dss2 = load_test_scenarios(20, 3);
-            auto block_cfg = make_unique<BlockConfig>();
-            auto k_extra = make_unique<SimpleConfiguration<int>>(6);
-            block_cfg->f_extra_Configuration = k_extra.release();
-            auto ell_config = make_unique<SimpleConfiguration<double>>(2.5);
-            block_cfg->f_static_variables_Configuration = ell_config.release();
-            
-            dss2->set_config(block_cfg.get());
-            dss2->init_representative_pool(6);  // Must explicitly call after set_config
-            
-            if (dss2->get_selected_scenario_count() != 6) {
-                return {false, "Expected 6 selected scenarios with BlockConfig"};
-            }
-            
-            // Test vector-based configuration
-            auto dss3 = load_test_scenarios(15, 2);
-            vector<double> params = {7.0, 3.0, 1e-6, 100.0};
-            auto vec_config = make_unique<SimpleConfiguration<vector<double>>>(params);
-            dss3->set_config(vec_config.get());
-            dss3->init_representative_pool(7);  // Must explicitly call after set_config
-            
-            if (dss3->get_selected_scenario_count() != 7) {
-                return {false, "Expected 7 selected scenarios with vector config"};
+                return {false, "Pattern 1: baseline method failed (expected 8 scenarios, got " + to_string(dss->get_selected_scenario_count()) + ")"};
             }
         }
         
-        return {true, "Configuration management tests passed"};
+        // Test Pattern 2: SimpleConfiguration<pair<int, Configuration*>> where Configuration* is BlockSolverConfig*
+        {
+            auto dss = load_test_scenarios(20, 5);
+            
+            // Create a BlockSolverConfig for ScenarioReductionSolver
+            auto* solver_config = create_solver_config("ScenarioReductionSolver", "Dupacova");
+            auto* pattern2_config = new SimpleConfiguration<pair<int, Configuration*>>(
+                make_pair(6, solver_config));
+            
+            dss->set_config(pattern2_config);
+            
+            // Verify k_value was set
+            if (dss->get_k_value() != 6) {
+                return {false, "Pattern 2: k_value not set correctly (expected 6, got " + to_string(dss->get_k_value()) + ")"};
+            }
+            
+            // Test that advanced scenario reduction works
+            dss->init_representative_pool(6);
+            if (dss->get_selected_scenario_count() != 6) {
+                return {false, "Pattern 2: advanced method failed (expected 6 scenarios, got " + to_string(dss->get_selected_scenario_count()) + ")"};
+            }
+            
+            // Note: Do not delete solver_config - DiscreteScenarioSet keeps a reference to it
+        }
+        
+        // Test Pattern 3: SimpleConfiguration<pair<Configuration*, Configuration*>> where first is BlockConfig*, second is BlockSolverConfig*
+        {
+            auto dss = load_test_scenarios(20, 5);
+            
+            // Create both BlockConfig and BlockSolverConfig
+            auto* block_config = create_block_config(7, 2.0);
+            auto* solver_config = create_solver_config("ScenarioReductionSolver", "BestFit");
+            auto* pattern3_config = new SimpleConfiguration<pair<Configuration*, Configuration*>>(
+                make_pair(block_config, solver_config));
+            
+            dss->set_config(pattern3_config);
+            
+            // Verify k_value was set from BlockConfig
+            if (dss->get_k_value() != 7) {
+                delete block_config;  // BlockConfig is cloned, so we can delete the original
+                return {false, "Pattern 3: k_value not set correctly (expected 7, got " + to_string(dss->get_k_value()) + ")"};
+            }
+            
+            // Test that full advanced scenario reduction works
+            dss->init_representative_pool(7);
+            if (dss->get_selected_scenario_count() != 7) {
+                delete block_config;  // BlockConfig is cloned, so we can delete the original
+                return {false, "Pattern 3: full advanced method failed (expected 7 scenarios, got " + to_string(dss->get_selected_scenario_count()) + ")"};
+            }
+            
+            delete block_config;  // BlockConfig is cloned, so we can delete the original
+            // Note: Do not delete solver_config - DiscreteScenarioSet keeps a reference to it
+        }
+        
+        return {true, "All three enhanced configuration patterns tested successfully"};
         
     } catch (const exception& e) {
-        return {false, string("Configuration test failed: ") + e.what()};
+        return {false, string("Enhanced patterns test failed: ") + e.what()};
     }
 }
 
-REGISTER_TEST("Configuration Management", test_configuration_management);
+REGISTER_TEST("Configuration Patterns", test_configuration_patterns);
 
-// Test 3: Scenario reduction algorithms
+
+// Test 4: Scenario reduction algorithms
 TestResult test_scenario_reduction_algorithms() {
     try {
         const int num_scenarios = 15;
@@ -367,7 +392,7 @@ TestResult test_scenario_reduction_algorithms() {
                 auto* block_config = create_block_config(k);
                 auto* solver_config = create_solver_config(solver_name, algorithm);
                 
-                dss->set_scenario_reduction_config(block_config, solver_config);
+                dss->set_config(block_config, solver_config);
                 dss->init_representative_pool(k);
                 
                 if (dss->get_selected_scenario_count() != k) {
@@ -390,7 +415,7 @@ TestResult test_scenario_reduction_algorithms() {
 
 REGISTER_TEST("Scenario Reduction Algorithms", test_scenario_reduction_algorithms);
 
-// Test 4: Serialization and deserialization
+// Test 5: Serialization and deserialization
 TestResult test_serialization_deserialization() {
     try {
         // Part 1: Basic serialization with config
@@ -398,7 +423,7 @@ TestResult test_serialization_deserialization() {
             auto dss1 = load_test_scenarios(10, 5);
             auto* block_config = create_block_config(3, 2.0);
             auto* solver_config = create_solver_config("ScenarioReductionSolver", "Dupacova");
-            dss1->set_scenario_reduction_config(block_config, solver_config);
+            dss1->set_config(block_config, solver_config);
             
             string nc_filename = "test_dss_with_config.nc4";
             {
@@ -612,29 +637,8 @@ TestResult test_serialization_deserialization() {
             remove(filename.c_str());
         }
         
-        // Part 5: SimpleConfiguration<int> as k through set_config (testing priority logic)
-        {
-            auto dss = load_test_scenarios(15, 3);
-            
-            // Create BlockConfig with SimpleConfiguration<int> - this should become k
-            auto block_cfg = make_unique<BlockConfig>();
-            block_cfg->f_extra_Configuration = new SimpleConfiguration<int>(9);
-            
-            dss->set_config(block_cfg.get());
-            
-            // Should use BlockConfig SimpleConfiguration<int> value as k
-            if (dss->get_k_value() != 9) {
-                return {false, "Should use BlockConfig SimpleConfiguration<int> as k (expected 9, got " + to_string(dss->get_k_value()) + ")"};
-            }
-            
-            // Test that after setting k dimension directly, it has priority
-            dss->set_config(make_unique<SimpleConfiguration<int>>(5).get());
-            if (dss->get_k_value() != 5) {
-                return {false, "k dimension should have priority over BlockConfig (expected 5, got " + to_string(dss->get_k_value()) + ")"};
-            }
-        }
         
-        // Part 6: Deserialization with invalid k (error checking happens at init time)
+        // Part 5: Deserialization with invalid k (error checking happens at init time)
         {
             string filename = create_test_scenario_file(10, 2, "_invalid_k");
             {
