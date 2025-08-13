@@ -49,7 +49,8 @@ SMSpp_insert_in_factory_cpp_0( DiscreteScenarioSet );
 /* Static Helper Functions
  * These are internal helper functions not part of the public interface.
  * They provide utility functionality used by the class implementation.
- * */
+ * 
+ */
 
 // Validate the poolSize parameter
 static void validate_poolSize_value(DiscreteScenarioSet::ScenarioIndex size, 
@@ -189,35 +190,9 @@ static void extract_scenarios_from_cfl_block(const CapacitatedFacilityLocationBl
 /*----------------------- GETTERS AND SETTERS ------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-const ScenarioGenerator::ScenarioIndex &
-DiscreteScenarioSet::get_nbScenarios() const
-{
-  return( nbScenarios );
-}
-
 /*--------------------------------------------------------------------------*/
 
-const ScenarioGenerator::ScenarioSize &
-DiscreteScenarioSet::get_scenarioSize() const
-{
-  return( scenarioSize );
-}
-
 /*--------------------------------------------------------------------------*/
-
-bool DiscreteScenarioSet::is_pool_initialized() const
-{
-  return is_initialized;
-}
-
-/*--------------------------------------------------------------------------*/
-
-DiscreteScenarioSet::ScenarioWithProbability 
-DiscreteScenarioSet::get_current_scenario_with_prob() const
-{
-  // Get both the scenario and probability in one call
-  return {get_current_scenario(), get_current_scenario_probability()};
-}
 
 /*--------------------------------------------------------------------------*/
 
@@ -609,8 +584,6 @@ void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
   }
 }
 
-// Implementation for setting the seed of the pseudo-random number generator
-void DiscreteScenarioSet::set_seed( unsigned long seed ) { rng.seed( seed ); }
 
 // Initialize a pool with randomly selected scenarios
 void DiscreteScenarioSet::init_random_pool(ScenarioIndex pool_size)
@@ -681,18 +654,8 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_si
       delete default_config;
     }
     
-    // Step 3.2: Generate abstract variables and constraints
-    // With wc=7 as default, all necessary constraints are generated automatically
-    #ifndef NDEBUG
-    std::cout << "DEBUG [init_representative_pool]: Generating abstract variables" << std::endl;
-    #endif
+    // Step 3.2: Generate abstract variables (to read the solution)
     cflBlock->generate_abstract_variables();
-    
-    #ifndef NDEBUG
-    std::cout << "DEBUG [init_representative_pool]: Generating abstract constraints (using default wc=7)" << std::endl;
-    std::cout << "DEBUG [init_representative_pool]: f_max_facilities = " << cflBlock->get_NMaxFacilities() << std::endl;
-    #endif
-    cflBlock->generate_abstract_constraints();  // Uses default wc=7
     
     // Apply BlockSolverConfig to register the solver with the Block
     // IMPORTANT: apply() transfers ownership of the BlockSolverConfig to the solver
@@ -742,16 +705,6 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_si
   }
 }
 
-[[nodiscard]] ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void ) const
-{
-  const auto index = scenarioIndexes[currentScenarioIndex];
-  return Scenario(&scenarioSet[index][0], get_scenario_size());
-}
-
-[[nodiscard]] double DiscreteScenarioSet::get_current_scenario_probability( void ) const
-{
-  return normalizedPoolWeights[currentScenarioIndex];
-}
 
 
 [[nodiscard]] bool DiscreteScenarioSet::next_scenario( void )
@@ -770,11 +723,6 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_si
   return false; // No more scenario in scenarioPool to move to
 }
 
-/// Implementation for retrieving the size of a scenario
-[[nodiscard]] ScenarioGenerator::ScenarioSize DiscreteScenarioSet::get_scenario_size( void ) const
-{
-  return scenarioSize;
-}
 
 /// Concrete implementation of ScenarioGenerator
 DiscreteScenarioSet::DiscreteScenarioSet() { 

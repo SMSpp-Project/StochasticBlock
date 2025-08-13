@@ -86,7 +86,7 @@ namespace SMSpp_di_unipi_it
  * ### Configuration and Persistence
  *
  * The class supports configuration through:
- * - Direct parameter setting via set_config() overloads
+ * - Direct parameter setting via set_config()
  * - Configuration objects via set_config()
  * - Persistence through netCDF serialization/deserialization
  *
@@ -96,10 +96,10 @@ namespace SMSpp_di_unipi_it
  * ### Usage Pattern
  *
  * 1. Load scenarios via deserialize() or direct construction
- * 2. Configure scenario reduction (optional) via set_config() overloads
+ * 2. Configure scenario reduction (optional) via set_config()
  * 3. Initialize pool via init_random_pool() or init_representative_pool()
  * 4. Access scenarios via get_current_scenario() and iterate via
- *    get_next_scenario()
+ *    next_scenario()
  *
  * @see ScenarioGenerator for the base interface
  * @see CapacitatedFacilityLocationBlock for the optimization model used
@@ -126,8 +126,6 @@ public:
   * a boost::multi_array. */
  using DiscreteScenarioPool = boost::multi_array< double , 2 >;
  
- /// Type to represent a scenario with its probability
- using ScenarioWithProbability = std::pair<Scenario, double>;
 
 /** @} ---------------------------------------------------------------------*/
 /*----------- CONSTRUCTING AND DESTRUCTING DiscreteScenarioSet -------------*/
@@ -212,7 +210,7 @@ public:
   * 
   * @param seed The seed value for the random number generator
   */
- void set_seed( unsigned long seed ) override;
+ inline void set_seed( unsigned long seed ) override { rng.seed(seed); }
 
  /// Get the current scenario in the iteration
  /** Returns the scenario data at the current position in the selected pool.
@@ -223,7 +221,11 @@ public:
   * @see next_scenario() to advance to the next scenario
   * @see init_random_pool() or init_representative_pool() to initialize the pool
   */
- Scenario get_current_scenario( void ) const override;
+ // TODO: we jump in memory, should we save selected scenarios in a contiguous container? For a single pass through the pool it seems unnecessary overhead to me but in a context they are re-used... Ask Antonio.
+ [[nodiscard]] inline Scenario get_current_scenario( void ) const override {
+   const auto index = scenarioIndexes[currentScenarioIndex];
+   return Scenario(&scenarioSet[index][0], scenarioSize);
+ }
 
  /// Get the probability weight of the current scenario
  /** Returns the normalized probability of the current scenario within the selected pool.
@@ -233,7 +235,9 @@ public:
   * @throws std::runtime_error If pool not initialized
   * @note This is the normalized weight within the pool, not the original weight
   */
- double get_current_scenario_probability( void ) const override;
+ [[nodiscard]] inline double get_current_scenario_probability( void ) const override {
+   return normalizedPoolWeights[currentScenarioIndex];
+ }
 
  /// Move to the next scenario in the iteration
  /** Advances to the next scenario in the selected pool.
@@ -248,7 +252,9 @@ public:
   * 
   * @return The number of components in each scenario
   */
- ScenarioSize get_scenario_size( void ) const override;
+ [[nodiscard]] inline ScenarioSize get_scenario_size( void ) const override {
+   return scenarioSize;
+ }
 
 /** @} ---------------------------------------------------------------------*/
 /*-------------------- SCENARIO POOL MANAGEMENT METHODS --------------------*/
@@ -317,7 +323,7 @@ public:
   * @return The configuration object, or nullptr if not configured
   * @see set_config() to set the configuration
   */
- const BlockConfig* get_block_config() const { return f_block_config; }
+ [[nodiscard]] const BlockConfig* get_block_config() const { return f_block_config; }
 
  /// Check the solver configuration for scenario reduction
  /** Returns the solver configuration if available.
@@ -327,7 +333,7 @@ public:
   *         - Already used (ownership transferred to solver)
   * @see set_config() to set the configuration
   */
- const BlockSolverConfig* get_solver_config() const { return f_solver_config.get(); }
+ [[nodiscard]] const BlockSolverConfig* get_solver_config() const { return f_solver_config.get(); }
 
  /// Configure optimization-based scenario reduction
  /** Sets up the solver and parameters for advanced scenario reduction.
@@ -378,21 +384,16 @@ public:
 
  /// Get the total number of available scenarios
  /** @return Number of scenarios in the full dataset */
- const ScenarioIndex & get_nbScenarios() const;
+ [[nodiscard]] inline const ScenarioIndex & get_nbScenarios() const { return nbScenarios; }
 
  /// Get the dimension of scenario vectors
  /** @return Size of each scenario vector */
- const ScenarioSize & get_scenarioSize() const;
+ [[nodiscard]] inline const ScenarioSize & get_scenarioSize() const { return scenarioSize; }
  
  /// Check if a scenario pool has been selected
  /** @return true if init_random_pool() or init_representative_pool() has been called */
- [[nodiscard]] bool is_pool_initialized() const;
- 
- /// Get both scenario data and probability together
- /** Convenience method for getting scenario and its weight in one call.
-  * @return Pair of (scenario data, normalized probability) */
- [[nodiscard]] ScenarioWithProbability get_current_scenario_with_prob() const;
- 
+ [[nodiscard]] inline bool is_pool_initialized() const { return is_initialized; }
+
  /// Access a specific value from any scenario
  /** Direct access to individual scenario components.
   * @param scenario_idx Which scenario (0 to nbScenarios-1)
@@ -410,18 +411,7 @@ public:
  /** Returns which scenarios were selected by init_random_pool() or init_representative_pool().
   * @return Vector of scenario indices in the selected pool
   * @throws std::runtime_error If pool not initialized */
- const std::vector<ScenarioIndex>& get_selected_scenarios() const;
- 
- /// Get the index of a specific selected scenario
- /** @param index Position in the selected pool (0 to poolSize-1)
-  * @return The original index of that scenario in the full dataset
-  * @throws std::out_of_range If index >= pool size */
- [[nodiscard]] ScenarioIndex get_selected_scenario_index(size_t index) const {
-     if (index >= scenarioIndexes.size()) {
-         throw std::out_of_range("Index out of range in get_selected_scenario_index");
-     }
-     return scenarioIndexes[index];
- }
+ [[nodiscard]] const std::vector<ScenarioIndex>& get_selected_scenarios() const;
 
  /// Get the configured pool size
  /** @return Number of scenarios that will be selected */
@@ -484,7 +474,7 @@ private:
  /// Power parameter for the ell-Wasserstein distance in scenario reduction
  /** The \c ell parameter determines the power used in the ell-Wasserstein distance
   *  calculation for scenario reduction. This is the power to which the ground metric
-  *  (typically Euclidean distance) is raised.
+  *  (default Euclidean distance) is raised.
   *  
   *  In the transportation cost computation:
   *  - transport_cost[i][j] = ||scenario_i - scenario_j||^ell
@@ -492,11 +482,6 @@ private:
   *  Common values:
   *  - 1.0: Linear transportation costs (1-Wasserstein distance)
   *  - 2.0: Quadratic transportation costs (2-Wasserstein distance) [DEFAULT]
-  *  
-  *  The default value of 2.0 is chosen because:
-  *  - The 2-Wasserstein distance has favorable theoretical properties
-  *  - It provides a good balance between computational efficiency and accuracy
-  *  - It is the most commonly used value in scenario reduction literature
   *  
   *  This value can be changed via \c set_ell() or during deserialization from netCDF. */
  float ell = 2.0f;  // Default: 2-Wasserstein distance
@@ -589,6 +574,7 @@ private:
   * @param ell The power parameter for the distance calculation
   * @return The ell-power of the norm distance
   */
+  // TODO: we add overhead by making it virtual, but it's used in derived class, ask Antonio if it matters.
  virtual double compute_scenario_distance(const Eigen::VectorXd& scenario1,
                                           const Eigen::VectorXd& scenario2,
                                           float ell) const;
