@@ -71,16 +71,26 @@ void DiscreteScenarioSet::empty_pool()
   scenarioIndexes.clear();
   scenarioIndexes.shrink_to_fit();
   
-  // Reset pool state
+  // Reset pool state (poolSize is configuration, not actual size)
   currentScenarioIndex = 0;
-  poolSize = 0;
+  // poolSize is NOT reset - it's the configured/desired size
   sumPoolWeights = 0.0;
   is_initialized = false;
 }
 
+// Static helper to validate the poolSize parameter
+static void validate_poolSize_value(DiscreteScenarioSet::ScenarioIndex size, 
+                                    DiscreteScenarioSet::ScenarioIndex max_scenarios)
+{
+  if (size == 0 || size > max_scenarios) {
+    throw std::invalid_argument("Invalid pool size parameter: must be between 1 and " + 
+                                std::to_string(max_scenarios));
+  }
+}
+
 void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
 {
-  validate_poolSize(size);
+  validate_poolSize_value(size, nbScenarios);
   poolSize = size;
 }
 
@@ -113,10 +123,10 @@ void DiscreteScenarioSet::set_config(BlockConfig* block_config, BlockSolverConfi
 }
 
 // Set scenario reduction configuration with poolSize parameter
-void DiscreteScenarioSet::set_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex poolSize)
+void DiscreteScenarioSet::set_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex pool_size)
 {
   // First set poolSize with validation
-  set_poolSize(poolSize);
+  set_poolSize(pool_size);
   
   // Then set the configurations
   set_config(block_config, solver_config);
@@ -173,8 +183,21 @@ void DiscreteScenarioSet::set_config(Configuration* config)
       auto* solver_config = dynamic_cast<BlockSolverConfig*>(second_config);
       
       if (block_config && solver_config) {
-        // Extract poolSize from the provided BlockConfig and use full advanced configuration
-        ScenarioIndex pool_size = get_poolSize_parameter(block_config);
+        // Extract poolSize from the BlockConfig's extra configuration
+        if (!block_config->f_extra_Configuration) {
+          throw std::runtime_error("No extra configuration found containing poolSize parameter");
+        }
+        
+        auto* simple_config = dynamic_cast<SimpleConfiguration<int>*>(block_config->f_extra_Configuration);
+        if (!simple_config) {
+          throw std::runtime_error("Extra configuration is not a SimpleConfiguration<int>");
+        }
+        
+        ScenarioIndex pool_size = simple_config->f_value;
+        
+        // Validate the extracted poolSize
+        validate_poolSize_value(pool_size, nbScenarios);
+        
         // Pass the original BlockConfig (set_config will clone it)
         set_config(block_config, solver_config, pool_size);
       }
@@ -194,38 +217,6 @@ void DiscreteScenarioSet::set_config(Configuration* config)
   );
 }
 
-// Extract poolSize parameter with validation
-DiscreteScenarioSet::ScenarioIndex DiscreteScenarioSet::get_poolSize_parameter(const BlockConfig* config) const
-{
-  if (!config) {
-    throw std::runtime_error("Invalid configuration for getting poolSize parameter");
-  }
-  
-  // Extract poolSize from the extra configuration
-  ScenarioIndex pool_size = 0;
-  if (config->f_extra_Configuration) {
-    auto* simple_config = dynamic_cast<SimpleConfiguration<int>*>(config->f_extra_Configuration);
-    if (simple_config) {
-      pool_size = simple_config->f_value;
-    } else {
-      throw std::runtime_error("Extra configuration is not a SimpleConfiguration<int>");
-    }
-  } else {
-    throw std::runtime_error("No extra configuration found containing poolSize parameter");
-  }
-  
-  // Validate the poolSize parameter
-  if (pool_size == 0) {
-    throw std::runtime_error("poolSize parameter must be set in configuration (value is 0)");
-  }
-  
-  if (pool_size > nbScenarios) {
-    throw std::runtime_error("Invalid poolSize parameter: " + std::to_string(pool_size) + 
-                             " exceeds number of scenarios (" + std::to_string(nbScenarios) + ")");
-  }
-  
-  return pool_size;
-}
 
 /*--------------------------------------------------------------------------*/
 /*--------------------- CLASS DiscreteScenarioSet --------------------------*/
@@ -351,7 +342,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
           }
         }
       } catch (...) {
-        // No BlockSolverConfig, will generate default if needed
+        // No BlockSolverConfig
         solver_cfg = nullptr;
       }
       
@@ -395,13 +386,13 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
         throw std::runtime_error("poolSize not found: must be provided either as variable or in BlockConfig");
       }
       
-      // If no solver config provided, create default
-      if (!solver_cfg) {
-        solver_cfg = generate_default_solver_config();
-        if (!solver_cfg) {
-          throw std::runtime_error("Failed to generate default BlockSolverConfig");
-        }
-      }
+      // // If no solver config provided, create default
+      // if (!solver_cfg) {
+      //   solver_cfg = generate_default_solver_config();
+      //   if (!solver_cfg) {
+      //     throw std::runtime_error("Failed to generate default BlockSolverConfig");
+      //   }
+      // }
       
       // Store the configuration
       try {
@@ -438,7 +429,8 @@ void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
   probsVar.putVar(poolProbabilities.data());
   
   // Serialize scenario reduction configuration if it exists
-  if (f_block_config && f_solver_config) {
+  // We serialize if we have at least poolSize or BlockConfig or BlockSolverConfig
+  if (poolSize > 0 || f_block_config || f_solver_config) {
     netCDF::NcGroup cfgGroup = group.addGroup("ScenarioReductionConfig");
     
     // Serialize poolSize if available
@@ -451,13 +443,17 @@ void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
     auto ellVar = cfgGroup.addVar("ell", netCDF::ncFloat);
     ellVar.putVar(&ell);
     
-    // Serialize BlockConfig
-    auto blockGroup = cfgGroup.addGroup("BlockConfig");
-    f_block_config->serialize(blockGroup);
+    // Serialize BlockConfig if it exists
+    if (f_block_config) {
+      auto blockGroup = cfgGroup.addGroup("BlockConfig");
+      f_block_config->serialize(blockGroup);
+    }
     
-    // Serialize BlockSolverConfig  
-    auto solverGroup = cfgGroup.addGroup("BlockSolverConfig");
-    f_solver_config->serialize(solverGroup);
+    // Serialize BlockSolverConfig if it exists
+    if (f_solver_config) {
+      auto solverGroup = cfgGroup.addGroup("BlockSolverConfig");
+      f_solver_config->serialize(solverGroup);
+    }
   }
 }
 
@@ -524,10 +520,10 @@ void DiscreteScenarioSet::init_random_pool(ScenarioIndex pool_size)
 }
 
 // Initialize a representative pool using scenario reduction
-void DiscreteScenarioSet::init_representative_pool( ScenarioIndex poolSize )
+void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_size )
 {
-  // Step 1: Validate the poolSize parameter
-  validate_poolSize(poolSize);
+  // Step 1: Validate the target_pool_size parameter
+  validate_poolSize_value(target_pool_size, nbScenarios);
   
   // Clean up any existing pool
   empty_pool();
@@ -556,7 +552,7 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex poolSize )
         std::move(demands),
         std::move(transport_costs),
         false,             // Not a balanced problem
-        poolSize           // Maximum number of facilities to open
+        target_pool_size   // Maximum number of facilities to open
     );
     
     // Step 3.1: Apply BlockConfig if it exists, else generate minimal default
@@ -564,8 +560,8 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex poolSize )
       // Trust that the user provided appropriate BlockConfig for CFL
       f_block_config->apply(cflBlock.get());
     } else {
-      // Generate minimal default config (mostly empty, just poolSize in extra_Configuration)
-      auto* default_config = generate_default_cfl_config(poolSize);
+      // Generate minimal default config (mostly empty, just target_pool_size in extra_Configuration)
+      auto* default_config = generate_default_cfl_config(target_pool_size);
       default_config->apply(cflBlock.get());
       delete default_config;
     }
@@ -583,9 +579,10 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex poolSize )
     #endif
     cflBlock->generate_abstract_constraints();  // Uses default wc=7
     
-    // Apply BlockSolverConfig and transfer ownership to solver
+    // Apply BlockSolverConfig to register the solver with the Block
+    // IMPORTANT: apply() transfers ownership of the BlockSolverConfig to the solver
     f_solver_config->apply(cflBlock.get());
-    f_solver_config.release();  // Transfer ownership - we no longer own it
+    f_solver_config.release();  // Release our ownership - the solver now owns it
     
     // Get the registered solver and solve
     if (cflBlock->get_registered_solvers().empty()) {
@@ -607,22 +604,21 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex poolSize )
       throw std::runtime_error("Solver failed with status: " + std::to_string(status));
     }
     
-    // Ensure solver solution is written to block variables
+    // Ensure solver solution is written to CFL Block variables
     solver->get_var_solution();
     
     // Extract the solution from the CFL block
     get_selected_scenarios_from_block(cflBlock.get(), n_scenarios);
   } else {
-    // No solver config - use baseline method (select top poolSize by weight)
+    // No solver config - use baseline method (select top target_pool_size by weight)
     // BlockConfig alone is not useful for baseline selection
-    apply_baseline_selection(poolSize);
+    apply_baseline_selection(target_pool_size);
   }
   
   // Update pool weights and finalize
   update_pool_weights();
   
-  // Update pool size based on the selected scenarios
-  poolSize = static_cast<ScenarioIndex>(scenarioIndexes.size());
+  // Reset current index (poolSize remains as configured)
   currentScenarioIndex = 0;
   
   // Mark the pool as initialized if we have scenarios
@@ -631,141 +627,9 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex poolSize )
   }
 }
 
-// Check if scenario reduction should be used
-bool DiscreteScenarioSet::should_use_scenario_reduction(ScenarioIndex size) const
-{
-  // Skip scenario reduction for zero or single-scenario size
-  if (size <= 1) return false;
-  
-  // Check if we have valid configurations
-  if (!f_block_config || !f_solver_config) {
-    return false;
-  }
-  
-  try {
-    // Try to get the poolSize parameter and validate it
-    DiscreteScenarioSet::ScenarioIndex pool_size = get_poolSize_parameter(f_block_config);
-    
-    // If poolSize is valid, scenario reduction can be used
-    return (pool_size > 0 && pool_size <= nbScenarios);
-  } catch (const std::exception& e) {
-    // If parameter extraction fails, don't use scenario reduction
-    return false;
-  }
-}
-
-// Apply scenario reduction
-void DiscreteScenarioSet::apply_scenario_reduction()
-{
-  if (!f_block_config || !f_solver_config) {
-    throw std::runtime_error("Missing scenario reduction configuration");
-  }
-  
-  // Extract the poolSize parameter (number of scenarios to select)
-  DiscreteScenarioSet::ScenarioIndex pool_size = get_poolSize_parameter(f_block_config);
-  
-  // DEBUG: Log poolSize parameter
-  #ifndef NDEBUG
-  std::cout << "DEBUG [apply_scenario_reduction]: poolSize (max scenarios to select) = " << pool_size << std::endl;
-  std::cout << "DEBUG [apply_scenario_reduction]: total scenarios available = " << nbScenarios << std::endl;
-  #endif
-  
-  // Use the internal ell parameter for distance calculations
-  // (no longer extracted from BlockConfig)
-  
-  // Clear existing selection
-  scenarioIndexes.clear();
-  sumPoolWeights = 0.0;
-  
-  try {
-    // Create a CapacitatedFacilityLocationBlock for scenario selection
-    auto cflBlock = std::make_unique<CapacitatedFacilityLocationBlock>();
-    
-    // Set up the scenario selection problem parameters
-    ScenarioIndex n_scenarios = nbScenarios;
-    ScenarioSize scenario_size = scenarioSize;
-    
-    // Create CFL problem data using helper function
-    auto [capacities, fixed_costs, demands] = create_cfl_problem_data(n_scenarios);
-    
-    // Compute the transport cost matrix using helper function
-    auto transport_costs = compute_transport_cost_matrix(n_scenarios, scenario_size, this->ell);
-    
-    // Load the CFL problem into the block FIRST
-    #ifndef NDEBUG
-    std::cout << "DEBUG [apply_scenario_reduction]: Creating CFL block with:" << std::endl;
-    std::cout << "  - n_facilities = " << n_scenarios << std::endl;
-    std::cout << "  - n_customers = " << n_scenarios << std::endl;
-    std::cout << "  - balanced = false" << std::endl;
-    std::cout << "  - max_open_facilities = " << pool_size << std::endl;
-    #endif
-    
-    cflBlock->load(
-        n_scenarios,       // Number of facilities
-        n_scenarios,       // Number of customers
-        std::move(capacities),
-        std::move(fixed_costs),
-        std::move(demands),
-        std::move(transport_costs),
-        false,             // Not a balanced problem
-        pool_size          // Maximum number of facilities
-    );
-    
-    // Apply the BlockConfig AFTER loading data
-    if (f_block_config) {
-      f_block_config->apply(cflBlock.get());
-    }
-    
-    // Generate abstract variables (needed for all solvers to write solution back)
-    #ifndef NDEBUG
-    std::cout << "DEBUG [apply_scenario_reduction]: Generating abstract variables" << std::endl;
-    #endif
-    cflBlock->generate_abstract_variables();
-    
-    // Generate abstract constraints
-    // With wc=7 as default, all necessary constraints are generated automatically
-    #ifndef NDEBUG
-    std::cout << "DEBUG [apply_scenario_reduction]: Generating abstract constraints (using default wc=7)" << std::endl;
-    std::cout << "DEBUG [apply_scenario_reduction]: f_max_facilities = " << cflBlock->get_NMaxFacilities() << std::endl;
-    #endif
-    cflBlock->generate_abstract_constraints();  // Uses default wc=7
-    
-    // Configure the solver using helper function
-    Solver* solver = create_and_configure_solver(cflBlock.get(), this->ell);
-    #ifndef NDEBUG
-    std::cout << "DEBUG [apply_scenario_reduction]: Using solver: " << solver->classname() << std::endl;
-    #endif
-    
-    // Solve the scenario reduction problem
-    int status = solver->compute();
-    #ifndef NDEBUG
-    std::cout << "DEBUG [apply_scenario_reduction]: Solver status = " << status << std::endl;
-    #endif
-    
-    // Check if the solve was successful
-    if (status == Solver::kOK) {
-      // Ensure solver solution is written to block variables
-      solver->get_var_solution();
-      
-      // Extract selected scenarios using helper function
-      get_selected_scenarios_from_block(cflBlock.get(), n_scenarios);
-      
-      // Update pool weights using helper function
-      update_pool_weights();
-    } else {
-      throw std::runtime_error("Scenario reduction solver failed with status: " + std::to_string(status));
-    }
-    
-  } catch (const std::exception& e) {
-    // If scenario reduction fails, throw a runtime error
-    throw std::runtime_error("Scenario reduction failed: " + std::string(e.what()));
-  }
-}
-
-
 [[nodiscard]] ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void ) const
 {
-  if( currentScenarioIndex >= poolSize )
+  if( currentScenarioIndex >= scenarioIndexes.size() )
   {
     throw( std::out_of_range( "Current scenario index is out of range." ) );
   }
@@ -790,7 +654,7 @@ void DiscreteScenarioSet::apply_scenario_reduction()
 
 [[nodiscard]] double DiscreteScenarioSet::get_current_scenario_probability( void ) const
 {
-  if( currentScenarioIndex >= poolSize )
+  if( currentScenarioIndex >= scenarioIndexes.size() )
   {
     throw( std::out_of_range( "Current scenario index is out of range." ) );
   }
@@ -819,28 +683,6 @@ DiscreteScenarioSet::get_current_scenario_with_prob() const
   return {get_current_scenario(), get_current_scenario_probability()};
 }
 
-// Implementation of try_get_scenario
-[[nodiscard]] std::optional<ScenarioGenerator::Scenario> 
-DiscreteScenarioSet::try_get_scenario(ScenarioIndex index) const
-{
-  // Save current state
-  if (index >= poolSize) {
-    return std::nullopt;
-  }
-  
-  try {
-    if (index < scenarioIndexes.size()) {
-      const auto scenarioIndex = scenarioIndexes[index];
-      if (scenarioIndex < nbScenarios) {
-        return Scenario(&scenarioSet[scenarioIndex][0], scenarioSize);
-      }
-    }
-  } catch (...) {
-    return std::nullopt;
-  }
-  
-  return std::nullopt;
-}
 
 // Implementation of is_pool_initialized
 [[nodiscard]] bool DiscreteScenarioSet::is_pool_initialized() const
@@ -850,12 +692,12 @@ DiscreteScenarioSet::try_get_scenario(ScenarioIndex index) const
 
 [[nodiscard]] bool DiscreteScenarioSet::next_scenario( void )
 {
-  // If poolSize is 0 or no pool is initialized, there are no scenarios to move to
-  if (poolSize == 0 || !is_initialized) {
+  // If no pool is initialized or empty, there are no scenarios to move to
+  if (!is_initialized || scenarioIndexes.empty()) {
     return false;
   }
   
-  if (currentScenarioIndex < poolSize - 1)
+  if (currentScenarioIndex < scenarioIndexes.size() - 1)
   {
     // Use prefix increment for efficiency
     ++currentScenarioIndex;
@@ -900,48 +742,6 @@ DiscreteScenarioSet::~DiscreteScenarioSet() {
 /*--------------------------------------------------------------------------*/
 /*-------------------- HELPER METHODS IMPLEMENTATION -----------------------*/
 /*--------------------------------------------------------------------------*/
-
-
-// Validate the poolSize parameter for scenario reduction
-void DiscreteScenarioSet::validate_poolSize(ScenarioIndex poolSize) const
-{
-  if (poolSize == 0 || poolSize > nbScenarios) {
-    throw std::invalid_argument("Invalid poolSize parameter: must be between 1 and " + 
-                                std::to_string(nbScenarios));
-  }
-}
-
-// Ensure scenario reduction configuration exists
-void DiscreteScenarioSet::ensure_configuration_exists(ScenarioIndex poolSize)
-{
-  // If configuration is not initialized, create it with default values
-  if (!f_block_config || !f_solver_config) {
-    // Create default configurations
-    auto* block_cfg = generate_default_cfl_config(poolSize);
-    auto* solver_cfg = generate_default_solver_config("Dupacova");
-    
-    // Set the configuration
-    set_config(block_cfg, solver_cfg);
-    
-    // Verify configuration was created
-    if (!f_block_config || !f_solver_config) {
-      throw std::runtime_error("Failed to create scenario reduction configuration");
-    }
-  } else {
-    // Configuration exists, but verify it has the correct poolSize parameter
-    if (f_block_config && f_block_config->f_extra_Configuration) {
-      auto* poolSize_config = dynamic_cast<SimpleConfiguration<int>*>(f_block_config->f_extra_Configuration);
-      if (!poolSize_config) {
-        // Extra configuration exists but is not SimpleConfiguration<int>, fix it
-        delete f_block_config->f_extra_Configuration;
-        f_block_config->f_extra_Configuration = new SimpleConfiguration<int>(poolSize);
-      }
-    } else if (f_block_config) {
-      // No extra configuration, add it
-      f_block_config->f_extra_Configuration = new SimpleConfiguration<int>(poolSize);
-    }
-  }
-}
 
 // Create CFL problem data structures
 std::tuple<CapacitatedFacilityLocationBlock::DVector,
@@ -1002,30 +802,6 @@ double DiscreteScenarioSet::compute_scenario_distance(const Eigen::VectorXd& sce
   return std::pow((scenario1 - scenario2).norm(), ell);
 }
 
-// Create and configure the scenario reduction solver
-Solver*
-DiscreteScenarioSet::create_and_configure_solver(CapacitatedFacilityLocationBlock* cflBlock,
-                                                 float ell) const
-{
-  // Apply the BlockSolverConfig to register and configure the solver
-  if (f_solver_config) {
-    f_solver_config->apply(cflBlock);
-    f_solver_config.release();  // Transfer ownership to solver
-  }
-  
-  // Get the registered solver
-  if (cflBlock->get_registered_solvers().empty()) {
-    throw std::runtime_error("No solver registered to the block after BlockSolverConfig::apply");
-  }
-  
-  auto* base_solver = cflBlock->get_registered_solvers().front();
-  if (!base_solver) {
-    throw std::runtime_error("Failed to get solver from block");
-  }
-  
-  // Return the solver pointer (block owns it)
-  return base_solver;
-}
 
 // Extract selected scenarios from solver results
 void DiscreteScenarioSet::get_selected_scenarios_from_block(const CapacitatedFacilityLocationBlock* cflBlock,
@@ -1072,7 +848,7 @@ void DiscreteScenarioSet::get_selected_scenarios_from_block(const CapacitatedFac
 }
 
 // Apply baseline selection method
-void DiscreteScenarioSet::apply_baseline_selection(ScenarioIndex poolSize)
+void DiscreteScenarioSet::apply_baseline_selection(ScenarioIndex target_size)
 {
   // Create pairs of (index, weight) for sorting
   std::vector<std::pair<ScenarioIndex, double>> indexed_weights;
@@ -1087,11 +863,11 @@ void DiscreteScenarioSet::apply_baseline_selection(ScenarioIndex poolSize)
   std::sort(indexed_weights.begin(), indexed_weights.end(),
             [](const auto& a, const auto& b) { return a.second > b.second; });
   
-  // Select the top poolSize scenarios
+  // Select the top target_size scenarios
   scenarioIndexes.clear();
-  scenarioIndexes.reserve(poolSize);
+  scenarioIndexes.reserve(target_size);
   
-  for (ScenarioIndex i = 0; i < poolSize && i < nbScenarios; ++i) {
+  for (ScenarioIndex i = 0; i < target_size && i < nbScenarios; ++i) {
     scenarioIndexes.push_back(indexed_weights[i].first);
   }
   
@@ -1117,27 +893,27 @@ void DiscreteScenarioSet::update_pool_weights()
 
 
 // Generate default BlockConfig for CFL
-BlockConfig* DiscreteScenarioSet::generate_default_cfl_config(ScenarioIndex poolSize) const
+BlockConfig* DiscreteScenarioSet::generate_default_cfl_config(ScenarioIndex size) const
 {
   auto* config = new BlockConfig(false);  // not differential
   
-  // Set poolSize in extra_Configuration
-  config->f_extra_Configuration = new SimpleConfiguration<int>(poolSize);
+  // Set pool size in extra_Configuration
+  config->f_extra_Configuration = new SimpleConfiguration<int>(size);
   
   return config;
 }
 
-// Generate default BlockSolverConfig
-BlockSolverConfig* DiscreteScenarioSet::generate_default_solver_config(const std::string& algorithm) const
-{
-  auto* config = new BlockSolverConfig(true);  // differential
+// // Generate default BlockSolverConfig
+// BlockSolverConfig* DiscreteScenarioSet::generate_default_solver_config(const std::string& algorithm) const
+// {
+//   auto* config = new BlockSolverConfig(true);  // differential
   
-  // Add a default solver configuration
-  // Note: ScenarioReductionSolver is used as default, but user can provide any suitable solver
-  config->add_ComputeConfig("ScenarioReductionSolver", nullptr);
+//   // Add a default solver configuration
+//   // Note: ScenarioReductionSolver is used as default, but user can provide any suitable solver
+//   config->add_ComputeConfig("ScenarioReductionSolver", nullptr);
   
-  return config;
-}
+//   return config;
+// }
 
 /*--------------------------------------------------------------------------*/
 /*------------------ End file DiscreteScenarioSet.cpp ----------------------*/

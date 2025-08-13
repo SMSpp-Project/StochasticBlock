@@ -299,8 +299,8 @@ TestResult test_configuration_patterns() {
             
             // Test that baseline method works
             dss->init_representative_pool(8);
-            if (dss->get_selected_scenario_count() != 8) {
-                return {false, "Pattern 1: baseline method failed (expected 8 scenarios, got " + to_string(dss->get_selected_scenario_count()) + ")"};
+            if (dss->get_poolSize() != 8) {
+                return {false, "Pattern 1: baseline method failed (expected 8 scenarios, got " + to_string(dss->get_poolSize()) + ")"};
             }
         }
         
@@ -322,8 +322,8 @@ TestResult test_configuration_patterns() {
             
             // Test that advanced scenario reduction works
             dss->init_representative_pool(6);
-            if (dss->get_selected_scenario_count() != 6) {
-                return {false, "Pattern 2: advanced method failed (expected 6 scenarios, got " + to_string(dss->get_selected_scenario_count()) + ")"};
+            if (dss->get_poolSize() != 6) {
+                return {false, "Pattern 2: advanced method failed (expected 6 scenarios, got " + to_string(dss->get_poolSize()) + ")"};
             }
             
             // Note: Do not delete solver_config - DiscreteScenarioSet keeps a reference to it
@@ -349,9 +349,9 @@ TestResult test_configuration_patterns() {
             
             // Test that full advanced scenario reduction works
             dss->init_representative_pool(7);
-            if (dss->get_selected_scenario_count() != 7) {
+            if (dss->get_poolSize() != 7) {
                 delete block_config;  // BlockConfig is cloned, so we can delete the original
-                return {false, "Pattern 3: full advanced method failed (expected 7 scenarios, got " + to_string(dss->get_selected_scenario_count()) + ")"};
+                return {false, "Pattern 3: full advanced method failed (expected 7 scenarios, got " + to_string(dss->get_poolSize()) + ")"};
             }
             
             delete block_config;  // BlockConfig is cloned, so we can delete the original
@@ -395,7 +395,7 @@ TestResult test_scenario_reduction_algorithms() {
                 dss->set_config(block_config, solver_config);
                 dss->init_representative_pool(poolSize);
                 
-                if (dss->get_selected_scenario_count() != poolSize) {
+                if (dss->get_poolSize() != poolSize) {
                     string test_name = algorithm.empty() ? solver_name : solver_name + ":" + algorithm;
                     return {false, test_name + " failed: wrong number of scenarios selected"};
                 }
@@ -486,7 +486,7 @@ TestResult test_serialization_deserialization() {
             
             dss->init_representative_pool(5);
             
-            if (dss->get_selected_scenario_count() != 5) {
+            if (dss->get_poolSize() != 5) {
                 remove(filename.c_str());
                 return {false, "Should have 5 scenarios after init_representative_pool"};
             }
@@ -519,7 +519,7 @@ TestResult test_serialization_deserialization() {
             
             dss->init_representative_pool(7);
             
-            if (dss->get_selected_scenario_count() != 7) {
+            if (dss->get_poolSize() != 7) {
                 remove(filename.c_str());
                 return {false, "Should have 7 scenarios after init_representative_pool"};
             }
@@ -542,7 +542,7 @@ TestResult test_serialization_deserialization() {
             dss->deserialize(dataFile);
             dataFile.close();
             
-            if (dss->get_selected_scenario_count() != 0) {
+            if (dss->get_poolSize() != 0) {
                 remove(filename.c_str());
                 return {false, "No reduction should occur with poolSize=0"};
             }
@@ -589,7 +589,7 @@ TestResult test_serialization_deserialization() {
             
             dss2->init_representative_pool(8);
             
-            if (dss2->get_selected_scenario_count() != 8) {
+            if (dss2->get_poolSize() != 8) {
                 remove(filename1.c_str());
                 remove(filename2.c_str());
                 return {false, "Round-trip serialization failed - scenario selection failed"};

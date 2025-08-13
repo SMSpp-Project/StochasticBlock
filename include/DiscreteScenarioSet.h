@@ -316,12 +316,12 @@ public:
   * The baseline method sorts scenarios by their probability weights in descending
   * order and selects the scenarios with highest weights.
   * 
-  * @param poolSize Number of representative scenarios to select
-  * @throws std::invalid_argument If poolSize is invalid (0 or > available scenarios)
+  * @param target_pool_size Number of representative scenarios to select
+  * @throws std::invalid_argument If target_pool_size is invalid (0 or > available scenarios)
   * @throws std::runtime_error If the solver fails (when using configured solver)
   * @see set_config() to provide BlockConfig and BlockSolverConfig
   */
- void init_representative_pool( ScenarioIndex poolSize ) override;
+ void init_representative_pool( ScenarioIndex target_pool_size ) override;
 
 /** @} ---------------------------------------------------------------------*/
 /*----------------- SCENARIO REDUCTION CONFIG METHODS ----------------------*/
@@ -339,8 +339,13 @@ public:
  /**
   * @brief Get the solver configuration for scenario reduction
   * 
-  * @return Const pointer to the BlockSolverConfig, or nullptr if no configuration exists
-  *         Note: Returns nullptr if ownership was already transferred via apply()
+  * @return Const pointer to the BlockSolverConfig, or nullptr in these cases:
+  *         - No configuration has been set yet
+  *         - Ownership was already transferred to a solver during scenario reduction
+  *           (after init_representative_pool() has been called with a configured solver)
+  * 
+  * @note After successful scenario reduction using a solver, this will return nullptr
+  *       because the BlockSolverConfig ownership is transferred to the solver.
   */
  const BlockSolverConfig* get_solver_config() const { return f_solver_config.get(); }
 
@@ -350,8 +355,12 @@ public:
   * Configures how scenario reduction will be performed when init_representative_pool()
   * is called.
   * 
-  * @param block_config BlockConfig containing reduction parameters like poolSize
-  * @param solver_config BlockSolverConfig containing solver settings
+  * Memory management:
+  * - block_config: This method creates a clone. You retain ownership of the original.
+  * - solver_config: This method takes ownership. Do NOT delete it after this call.
+  * 
+  * @param block_config BlockConfig containing reduction parameters like poolSize (will be cloned)
+  * @param solver_config BlockSolverConfig containing solver settings (ownership transferred)
   */
  void set_config(BlockConfig* block_config, BlockSolverConfig* solver_config);
  
@@ -394,18 +403,10 @@ public:
  
  /// Check if the scenario pool has been initialized
  [[nodiscard]] bool is_pool_initialized() const;
-
- /// Get the number of selected scenarios
- [[nodiscard]] size_t get_selected_scenario_count() const {
-     return scenarioIndexes.size();
- }
  
  // Scenario Access Methods
  /// Get current scenario with its probability as a pair
  [[nodiscard]] ScenarioWithProbability get_current_scenario_with_prob() const;
- 
- /// Try to get a scenario by index, returns nullopt if index is invalid
- [[nodiscard]] std::optional<Scenario> try_get_scenario(ScenarioIndex index) const;
  
  /// Access an individual scenario value
  [[nodiscard]] double get_scenario_value(ScenarioIndex scenario_idx, ScenarioSize component_idx) const {
@@ -503,9 +504,24 @@ private:
  float ell = DEFAULT_ELL_VALUE;
  
  /// Block configuration for scenario reduction
+ /** Stores the BlockConfig used for creating the CapacitatedFacilityLocationBlock
+  * during scenario reduction. */
  BlockConfig* f_block_config = nullptr;
  
  /// Solver configuration for scenario reduction
+ /** Stores the BlockSolverConfig used for solving the CFL problem.
+  * 
+  * This is a unique_ptr that manages the lifetime of the BlockSolverConfig.
+  * When set_config() is called, ownership of the provided BlockSolverConfig
+  * is transferred to this unique_ptr.
+  * 
+  * IMPORTANT: During scenario reduction (in create_and_configure_solver()),
+  * when apply() is called on the BlockSolverConfig, ownership is transferred
+  * to the solver via release(). After this point, f_solver_config becomes
+  * nullptr and get_solver_config() will return nullptr.
+  * 
+  * The field is mutable because ownership transfer happens in the const method
+  * create_and_configure_solver() during scenario reduction. */
  mutable std::unique_ptr<BlockSolverConfig> f_solver_config;
 
 /** @} ---------------------------------------------------------------------*/
@@ -545,81 +561,6 @@ private:
   * poolSize, and is_initialized.
   */
  void empty_pool();
- 
- /**
-  * @brief Extract poolSize parameter with validation
-  * 
-  * Helper method to safely extract the poolSize parameter (number of scenarios to select)
-  * from a BlockConfig, with validation and default value handling.
-  * 
-  * This method:
-  * 1. Extracts the "poolSize" parameter from the BlockConfig
-  * 2. Validates that it's positive and doesn't exceed nbScenarios
-  * 3. Returns the validated poolSize parameter
-  * 
-  * Implementation notes:
-  * - Throws an exception if poolSize is invalid (not positive or too large)
-  * - This is especially important as poolSize controls how many scenarios are selected
-  * 
-  * @param config The BlockConfig containing the poolSize parameter
-  * @return The validated value of poolSize
-  * @throws std::runtime_error If the poolSize parameter is invalid (not positive or too large)
-  */
- ScenarioIndex get_poolSize_parameter(const BlockConfig* config) const;
- 
- /// Determines if scenario reduction should be used based on configuration
- /** This function checks if scenario reduction is configured properly and
-  * can be used for the current situation. It evaluates several conditions:
-  * 
-  * 1. The requested scenario pool size must be greater than 1 (trivial case)
-  * 2. A valid scenario reduction configuration must exist
-  * 3. The configuration must have valid poolSize and ell parameters
-  *
-  * This method is called by init_representative_pool() before attempting to use
-  * scenario reduction algorithms.
-  *
-  * @param size The desired size of the reduced scenario pool
-  * @return true if scenario reduction can be used, false otherwise
-  */
- bool should_use_scenario_reduction(ScenarioIndex size) const;
- 
- /// Helper method to apply scenario reduction
- /** This method applies scenario reduction to select a representative subset of scenarios
-  * using the configured reduction method. It:
-  * 
-  * 1. Creates a CapacitatedFacilityLocationBlock to formulate the selection problem
-  * 2. Extracts configuration parameters (ell, poolSize, algorithm) from the configuration
-  * 3. Configures and runs the ScenarioReductionSolver with the selected algorithm
-  * 4. Updates scenarioIndexes with the selected scenario indices
-  * 5. Recalculates sumPoolWeights based on the selected scenarios
-  * 
-  * Implementation notes:
-  * - This is called internally by init_representative_pool()
-  * - Uses CapacitatedFacilityLocationBlock to formulate the selection problem
-  * - Handles different algorithms: Dupacova, BestFit, FirstFit, and MILP
-  *
-  * @throws std::runtime_error If reduction fails due to configuration or solver issues
-  */
- void apply_scenario_reduction();
-
- /// Validate the poolSize parameter for scenario reduction
- /** Ensures that the poolSize parameter is valid:
-  * - Must be greater than 0
-  * - Must be less than or equal to the total number of scenarios
-  * 
-  * @param poolSize The number of scenarios to select
-  * @throws std::invalid_argument If poolSize is invalid
-  */
- void validate_poolSize(ScenarioIndex poolSize) const;
-
- /// Ensure scenario reduction configuration exists
- /** Checks if configuration exists, and creates it with default values if not.
-  * This is used by init_representative_pool when no configuration was loaded
-  * from deserialization.
-  * 
-  * @param poolSize The number of scenarios to select
-  */
- void ensure_configuration_exists(ScenarioIndex poolSize);
 
  /// Create CFL problem data structures
  /** Sets up the capacity, fixed cost, and demand vectors for the
@@ -659,16 +600,6 @@ private:
                                           const Eigen::VectorXd& scenario2,
                                           float ell) const;
 
- /// Create and configure the scenario reduction solver
- /** Sets up the ScenarioReductionSolver with the appropriate configuration.
-  * 
-  * @param cflBlock The configured CapacitatedFacilityLocationBlock
-  * @param ell The power parameter for distance calculations
-  * @return A configured ScenarioReductionSolver
-  */
- Solver*
- create_and_configure_solver(CapacitatedFacilityLocationBlock* cflBlock,
-                            float ell) const;
 
  /// Extract selected scenarios from CFL block results
  /** Reads the y variables from the CFL block to populate scenarioIndexes with the
@@ -688,34 +619,32 @@ private:
   */
  void update_pool_weights();
 
-
-
  /// Generate default BlockConfig for CFL
  /** Creates a default BlockConfig suitable for CapacitatedFacilityLocationBlock
-  * with the specified poolSize parameter.
+  * with the specified pool size parameter.
   * 
-  * @param poolSize Number of scenarios to select
+  * @param size Number of scenarios to select
   * @return A newly allocated BlockConfig (caller owns the pointer)
   */
- BlockConfig* generate_default_cfl_config(ScenarioIndex poolSize) const;
+ BlockConfig* generate_default_cfl_config(ScenarioIndex size) const;
 
- /// Generate default BlockSolverConfig for ScenarioReductionSolver
- /** Creates a default BlockSolverConfig for the ScenarioReductionSolver
-  * with the specified algorithm.
-  * 
-  * @param algorithm Algorithm name (default "Dupacova")
-  * @return A newly allocated BlockSolverConfig (caller owns the pointer)
-  */
- BlockSolverConfig* generate_default_solver_config(const std::string& algorithm = "Dupacova") const;
+//  /// Generate default BlockSolverConfig for ScenarioReductionSolver
+//  /** Creates a default BlockSolverConfig for the ScenarioReductionSolver
+//   * with the specified algorithm.
+//   * 
+//   * @param algorithm Algorithm name (default "Dupacova")
+//   * @return A newly allocated BlockSolverConfig (caller owns the pointer)
+//   */
+//  BlockSolverConfig* generate_default_solver_config(const std::string& algorithm = "Dupacova") const;
  
  /// Apply baseline selection method
- /** Selects the top poolSize scenarios based on their probability weights.
+ /** Selects the top scenarios based on their probability weights.
   * This is the fallback method when no BlockSolverConfig is provided.
   * Scenarios with higher weights are selected first.
   * 
-  * @param poolSize Number of scenarios to select
+  * @param target_size Number of scenarios to select
   */
- void apply_baseline_selection(ScenarioIndex poolSize);
+ void apply_baseline_selection(ScenarioIndex target_size);
 
   SMSpp_insert_in_factory_h;
 
