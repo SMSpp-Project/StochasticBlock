@@ -190,12 +190,6 @@ static void extract_scenarios_from_cfl_block(const CapacitatedFacilityLocationBl
 /*----------------------- GETTERS AND SETTERS ------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-/*--------------------------------------------------------------------------*/
-
-/*--------------------------------------------------------------------------*/
-
-/*--------------------------------------------------------------------------*/
-
 // Get the indices of currently selected scenarios
 const std::vector<DiscreteScenarioSet::ScenarioIndex>& 
 DiscreteScenarioSet::get_selected_scenarios() const
@@ -205,7 +199,6 @@ DiscreteScenarioSet::get_selected_scenarios() const
   }
   return scenarioIndexes;
 }
-
 
 /*--------------------------------------------------------------------------*/
 /*-------------------- HELPER METHODS OF THE CLASS -------------------------*/
