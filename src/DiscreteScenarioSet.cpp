@@ -44,26 +44,197 @@ using namespace SMSpp_di_unipi_it;
 SMSpp_insert_in_factory_cpp_0( DiscreteScenarioSet );
 
 /*--------------------------------------------------------------------------*/
-/*------------------- HELPER METHODS FOR SCENARIO REDUCTION -----------------*/
+/*------------------------- STATIC HELPER FUNCTIONS ------------------------*/
 /*--------------------------------------------------------------------------*/
+/* Static Helper Functions
+ * These are internal helper functions not part of the public interface.
+ * They provide utility functionality used by the class implementation.
+ * */
+
+// Validate the poolSize parameter
+static void validate_poolSize_value(DiscreteScenarioSet::ScenarioIndex size, 
+                                    DiscreteScenarioSet::ScenarioIndex max_scenarios)
+{
+  if (size == 0 || size > max_scenarios) {
+    throw std::invalid_argument("Invalid pool size parameter: must be between 1 and " + 
+                                std::to_string(max_scenarios));
+  }
+}
+
+// Draw k elements among n with weighted sampling
+/* The function generateWeightedRandomSubset draws k elements among n using
+ * weighted random sampling without replacement. The chosen indexes are
+ * moved into the input variable ind. */
+static void generateWeightedRandomSubset( size_t n , size_t k ,
+                                          const std::vector< double > & weights,
+                                          std::vector< ScenarioGenerator::ScenarioIndex > & ind ,
+                                          std::mt19937 & rng )
+{
+  if( k > n )
+    throw( std::invalid_argument( "k must be less or equal than n." ) );
+
+  // Clear the output container
+  ind.clear();
+  
+  // Special case: if k is 0, just return empty vector
+  if (k == 0) {
+    return;
+  }
+
+  // Special case: if k == n, return all indices
+  if (k == n) {
+    ind.resize(n);
+    std::iota(ind.begin(), ind.end(), 0);
+    return;
+  }
+
+  // Use weighted sampling without replacement
+  // Create a copy of weights that we can modify
+  std::vector<double> working_weights = weights;
+  ind.reserve(k);
+  
+  for (size_t i = 0; i < k; ++i) {
+    // Create discrete distribution with current weights
+    std::discrete_distribution<ScenarioGenerator::ScenarioIndex> dist(working_weights.begin(), working_weights.end());
+    
+    // Sample an index
+    ScenarioGenerator::ScenarioIndex selected = dist(rng);
+    
+    // Add to result
+    ind.push_back(selected);
+    
+    // Set weight to 0 to prevent re-selection
+    working_weights[selected] = 0.0;
+  }
+}
+
+// Generate default BlockConfig for CFL (static helper function)
+static BlockConfig* generate_default_cfl_config(DiscreteScenarioSet::ScenarioIndex size)
+{
+  auto* config = new BlockConfig(false);  // not differential
+  
+  // Set pool size in extra_Configuration
+  config->f_extra_Configuration = new SimpleConfiguration<int>(size);
+  
+  return config;
+}
+
+// Create CFL problem data structures
+static std::tuple<CapacitatedFacilityLocationBlock::DVector,
+                  CapacitatedFacilityLocationBlock::CVector,
+                  CapacitatedFacilityLocationBlock::DVector>
+create_cfl_problem_data(DiscreteScenarioSet::ScenarioIndex n_scenarios,
+                       const std::vector<double>& poolWeights)
+{
+  CapacitatedFacilityLocationBlock::DVector capacities(n_scenarios);
+  CapacitatedFacilityLocationBlock::CVector fixed_costs(n_scenarios);
+  CapacitatedFacilityLocationBlock::DVector demands(n_scenarios);
+  
+  // Set up the basic CFL parameters
+  for (DiscreteScenarioSet::ScenarioIndex i = 0; i < n_scenarios; ++i) {
+    capacities[i] = 1.0;      // Capacities = weights of the reduced distribution
+    fixed_costs[i] = 0.0;     // No fixed cost in scenario reduction
+    demands[i] = poolWeights[i];  // Demand equals weight
+  }
+  
+  return std::make_tuple(std::move(capacities), std::move(fixed_costs), std::move(demands));
+}
+
+// Extract selected scenarios from CFL block results
+static void extract_scenarios_from_cfl_block(const CapacitatedFacilityLocationBlock* cflBlock,
+                                             DiscreteScenarioSet::ScenarioIndex n_scenarios,
+                                             std::vector<DiscreteScenarioSet::ScenarioIndex>& scenarioIndexes)
+{
+  #ifndef NDEBUG
+  std::cout << "DEBUG [extract_scenarios_from_cfl_block]: Starting extraction from CFL block" << std::endl;
+  #endif
+  
+  // Clear existing selection
+  scenarioIndexes.clear();
+    
+  // Read variable values directly from the block variables
+  for (DiscreteScenarioSet::ScenarioIndex i = 0; i < n_scenarios; ++i) {
+    // Get the y variable for facility i
+    const auto* y_var = cflBlock->get_y(i);
+    if (!y_var) {
+      throw std::runtime_error("Failed to get y variable for facility " + std::to_string(i));
+    }
+    
+    // Get value from the variable directly
+    double y_value = y_var->get_value();
+    #ifndef NDEBUG
+    std::cout << "DEBUG [extract_scenarios_from_cfl_block]: y[" << i << "] = " << y_value << std::endl;
+    #endif
+    
+    // Check if facility i is open (y[i] > 0.5)
+    if (y_value > 0.5) {
+      scenarioIndexes.push_back(i);
+    }
+  }
+  
+  #ifndef NDEBUG
+  std::cout << "DEBUG [extract_scenarios_from_cfl_block]: Selected " << scenarioIndexes.size() 
+            << " scenarios: ";
+  for (auto idx : scenarioIndexes) std::cout << idx << " ";
+  std::cout << std::endl;
+  #endif
+  
+  // If no scenarios were selected, throw an error
+  if (scenarioIndexes.empty()) {
+    throw std::runtime_error("No scenarios selected by the reduction algorithm");
+  }
+}
 
 /*--------------------------------------------------------------------------*/
-/*-------------------- HELPER METHODS OF THE CLASS -------------------------*/
+/*----------------------- GETTERS AND SETTERS ------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-// Get for nbScenarios
 const ScenarioGenerator::ScenarioIndex &
- DiscreteScenarioSet::get_nbScenarios() const
+DiscreteScenarioSet::get_nbScenarios() const
 {
   return( nbScenarios );
 }
 
-// Get for scenarioSize
+/*--------------------------------------------------------------------------*/
+
 const ScenarioGenerator::ScenarioSize &
- DiscreteScenarioSet::get_scenarioSize() const
+DiscreteScenarioSet::get_scenarioSize() const
 {
   return( scenarioSize );
 }
+
+/*--------------------------------------------------------------------------*/
+
+bool DiscreteScenarioSet::is_pool_initialized() const
+{
+  return is_initialized;
+}
+
+/*--------------------------------------------------------------------------*/
+
+DiscreteScenarioSet::ScenarioWithProbability 
+DiscreteScenarioSet::get_current_scenario_with_prob() const
+{
+  // Get both the scenario and probability in one call
+  return {get_current_scenario(), get_current_scenario_probability()};
+}
+
+/*--------------------------------------------------------------------------*/
+
+// Get the indices of currently selected scenarios
+const std::vector<DiscreteScenarioSet::ScenarioIndex>& 
+DiscreteScenarioSet::get_selected_scenarios() const
+{
+  if (!is_initialized) {
+    throw std::runtime_error("Pool has not been initialized. Call init_random_pool() or init_representative_pool() first.");
+  }
+  return scenarioIndexes;
+}
+
+
+/*--------------------------------------------------------------------------*/
+/*-------------------- HELPER METHODS OF THE CLASS -------------------------*/
+/*--------------------------------------------------------------------------*/
 
 void DiscreteScenarioSet::empty_pool()
 {
@@ -80,16 +251,6 @@ void DiscreteScenarioSet::empty_pool()
   // poolSize is NOT reset - it's the configured/desired size
   sumPoolWeights = 0.0;
   is_initialized = false;
-}
-
-// Static helper to validate the poolSize parameter
-static void validate_poolSize_value(DiscreteScenarioSet::ScenarioIndex size, 
-                                    DiscreteScenarioSet::ScenarioIndex max_scenarios)
-{
-  if (size == 0 || size > max_scenarios) {
-    throw std::invalid_argument("Invalid pool size parameter: must be between 1 and " + 
-                                std::to_string(max_scenarios));
-  }
 }
 
 void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
@@ -390,14 +551,6 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
         throw std::runtime_error("poolSize not found: must be provided either as variable or in BlockConfig");
       }
       
-      // // If no solver config provided, create default
-      // if (!solver_cfg) {
-      //   solver_cfg = generate_default_solver_config();
-      //   if (!solver_cfg) {
-      //     throw std::runtime_error("Failed to generate default BlockSolverConfig");
-      //   }
-      // }
-      
       // Store the configuration
       try {
         set_config(block_cfg, solver_cfg);
@@ -464,53 +617,6 @@ void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
 // Implementation for setting the seed of the pseudo-random number generator
 void DiscreteScenarioSet::set_seed( unsigned long seed ) { rng.seed( seed ); }
 
-// Draw k elements among n with weighted sampling
-/* The function generateWeightedRandomSubset draws k elements among n using
- * weighted random sampling without replacement. The chosen indexes are
- * moved into the input variable ind. */
-static void generateWeightedRandomSubset( size_t n , size_t k ,
-                                          const std::vector< double > & weights,
-                                          std::vector< ScenarioGenerator::ScenarioIndex > & ind ,
-                                          std::mt19937 & rng )
-{
-  if( k > n )
-    throw( std::invalid_argument( "k must be less or equal than n." ) );
-
-  // Clear the output container
-  ind.clear();
-  
-  // Special case: if k is 0, just return empty vector
-  if (k == 0) {
-    return;
-  }
-
-  // Special case: if k == n, return all indices
-  if (k == n) {
-    ind.resize(n);
-    std::iota(ind.begin(), ind.end(), 0);
-    return;
-  }
-
-  // Use weighted sampling without replacement
-  // Create a copy of weights that we can modify
-  std::vector<double> working_weights = weights;
-  ind.reserve(k);
-  
-  for (size_t i = 0; i < k; ++i) {
-    // Create discrete distribution with current weights
-    std::discrete_distribution<ScenarioGenerator::ScenarioIndex> dist(working_weights.begin(), working_weights.end());
-    
-    // Sample an index
-    ScenarioGenerator::ScenarioIndex selected = dist(rng);
-    
-    // Add to result
-    ind.push_back(selected);
-    
-    // Set weight to 0 to prevent re-selection
-    working_weights[selected] = 0.0;
-  }
-}
-
 // Initialize a pool with randomly selected scenarios
 void DiscreteScenarioSet::init_random_pool(ScenarioIndex pool_size)
 {
@@ -551,7 +657,7 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_si
     ScenarioSize scenario_size = scenarioSize;
     
     // Create CFL problem data
-    auto [capacities, fixed_costs, demands] = create_cfl_problem_data(n_scenarios);
+    auto [capacities, fixed_costs, demands] = create_cfl_problem_data(n_scenarios, poolWeights);
     
     // Compute the transport cost matrix with ell-powered distances
     auto transport_costs = compute_transport_cost_matrix(n_scenarios, scenario_size, this->ell);
@@ -621,7 +727,7 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_si
     solver->get_var_solution();
     
     // Extract the solution from the CFL block
-    get_selected_scenarios_from_block(cflBlock.get(), n_scenarios);
+    extract_scenarios_from_cfl_block(cflBlock.get(), n_scenarios, scenarioIndexes);
   } else {
     // No solver config - use baseline method (select top target_pool_size by weight)
     // BlockConfig alone is not useful for baseline selection
@@ -688,20 +794,6 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_si
   return normalizedPoolWeights[currentScenarioIndex];
 }
 
-// Implementation of the new structured binding method
-[[nodiscard]] DiscreteScenarioSet::ScenarioWithProbability 
-DiscreteScenarioSet::get_current_scenario_with_prob() const
-{
-  // Get both the scenario and probability in one call
-  return {get_current_scenario(), get_current_scenario_probability()};
-}
-
-
-// Implementation of is_pool_initialized
-[[nodiscard]] bool DiscreteScenarioSet::is_pool_initialized() const
-{
-  return is_initialized;
-}
 
 [[nodiscard]] bool DiscreteScenarioSet::next_scenario( void )
 {
@@ -726,7 +818,9 @@ DiscreteScenarioSet::get_current_scenario_with_prob() const
 }
 
 /// Concrete implementation of ScenarioGenerator
-DiscreteScenarioSet::DiscreteScenarioSet() { set_seed(DEFAULT_SEED); }
+DiscreteScenarioSet::DiscreteScenarioSet() { 
+  set_seed(1337);  // Default seed for reproducibility
+}
 
 /// Destructor
 DiscreteScenarioSet::~DiscreteScenarioSet() {
@@ -759,25 +853,6 @@ DiscreteScenarioSet::~DiscreteScenarioSet() {
 /*-------------------- HELPER METHODS IMPLEMENTATION -----------------------*/
 /*--------------------------------------------------------------------------*/
 
-// Create CFL problem data structures
-std::tuple<CapacitatedFacilityLocationBlock::DVector,
-           CapacitatedFacilityLocationBlock::CVector,
-           CapacitatedFacilityLocationBlock::DVector>
-DiscreteScenarioSet::create_cfl_problem_data(ScenarioIndex n_scenarios) const
-{
-  CapacitatedFacilityLocationBlock::DVector capacities(n_scenarios);
-  CapacitatedFacilityLocationBlock::CVector fixed_costs(n_scenarios);
-  CapacitatedFacilityLocationBlock::DVector demands(n_scenarios);
-  
-  // Set up the basic CFL parameters
-  for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
-    capacities[i] = 1.0;      // Capacities = weights of the reduced distribution
-    fixed_costs[i] = 0.0;     // No fixed cost in scenario reduction, but we do have a constraint on the maximal number of facilities that can (should) be opened.
-    demands[i] = poolWeights[i];  // Demand equals weight
-  }
-  
-  return std::make_tuple(std::move(capacities), std::move(fixed_costs), std::move(demands));
-}
 
 // Compute the transport cost matrix between scenarios
 CapacitatedFacilityLocationBlock::CMatrix
@@ -818,50 +893,6 @@ double DiscreteScenarioSet::compute_scenario_distance(const Eigen::VectorXd& sce
   return std::pow((scenario1 - scenario2).norm(), ell);
 }
 
-
-// Extract selected scenarios from solver results
-void DiscreteScenarioSet::get_selected_scenarios_from_block(const CapacitatedFacilityLocationBlock* cflBlock,
-                                                          ScenarioIndex n_scenarios)
-{
-  #ifndef NDEBUG
-  std::cout << "DEBUG [get_selected_scenarios_from_block]: Starting extraction from CFL block" << std::endl;
-  #endif
-  
-  // Clear existing selection
-  scenarioIndexes.clear();
-    
-  // Read variable values directly from the block variables
-  for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
-    // Get the y variable for facility i
-    const auto* y_var = cflBlock->get_y(i);
-    if (!y_var) {
-      throw std::runtime_error("Failed to get y variable for facility " + std::to_string(i));
-    }
-    
-    // Get value from the variable directly
-    double y_value = y_var->get_value();
-    #ifndef NDEBUG
-    std::cout << "DEBUG [get_selected_scenarios_from_block]: y[" << i << "] = " << y_value << std::endl;
-    #endif
-    
-    // Check if facility i is open (y[i] > 0.5)
-    if (y_value > 0.5) {
-      scenarioIndexes.push_back(i);
-    }
-  }
-  
-  #ifndef NDEBUG
-  std::cout << "DEBUG [get_selected_scenarios_from_block]: Selected " << scenarioIndexes.size() 
-            << " scenarios: ";
-  for (auto idx : scenarioIndexes) std::cout << idx << " ";
-  std::cout << std::endl;
-  #endif
-  
-  // If no scenarios were selected, throw an error
-  if (scenarioIndexes.empty()) {
-    throw std::runtime_error("No scenarios selected by the reduction algorithm");
-  }
-}
 
 // Apply baseline selection method
 void DiscreteScenarioSet::apply_baseline_selection(ScenarioIndex target_size)
@@ -919,29 +950,6 @@ void DiscreteScenarioSet::update_pool_weights()
     normalizedPoolWeights.assign(scenarioIndexes.size(), uniform_weight);
   }
 }
-
-// Generate default BlockConfig for CFL (static helper function)
-static BlockConfig* generate_default_cfl_config(DiscreteScenarioSet::ScenarioIndex size)
-{
-  auto* config = new BlockConfig(false);  // not differential
-  
-  // Set pool size in extra_Configuration
-  config->f_extra_Configuration = new SimpleConfiguration<int>(size);
-  
-  return config;
-}
-
-// // Generate default BlockSolverConfig
-// BlockSolverConfig* DiscreteScenarioSet::generate_default_solver_config(const std::string& algorithm) const
-// {
-//   auto* config = new BlockSolverConfig(true);  // differential
-  
-//   // Add a default solver configuration
-//   // Note: ScenarioReductionSolver is used as default, but user can provide any suitable solver
-//   config->add_ComputeConfig("ScenarioReductionSolver", nullptr);
-  
-//   return config;
-// }
 
 /*--------------------------------------------------------------------------*/
 /*------------------ End file DiscreteScenarioSet.cpp ----------------------*/

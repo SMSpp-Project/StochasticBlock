@@ -125,11 +125,6 @@ public:
   * pool is of known size at this point. Hence, the choice to store it inside
   * a boost::multi_array. */
  using DiscreteScenarioPool = boost::multi_array< double , 2 >;
-
- /// Type to hold a scenario reference (used within implementation)
- /** For ease of linear algebra manipulations, we use Eigen::VectorXd when
-  * scenario operations need to be performed. */
- using Point = Eigen::Map< Eigen::VectorXd >;
  
  /// Type to represent a scenario with its probability
  using ScenarioWithProbability = std::pair<Scenario, double>;
@@ -319,7 +314,7 @@ public:
   * @param target_pool_size Number of representative scenarios to select
   * @throws std::invalid_argument If target_pool_size is invalid (0 or > available scenarios)
   * @throws std::runtime_error If the solver fails (when using configured solver)
-  * @see set_config() to provide BlockConfig and BlockSolverConfig
+  * @see set_config() to provide BlockConfig or BlockSolverConfig
   */
  void init_representative_pool( ScenarioIndex target_pool_size ) override;
 
@@ -389,32 +384,34 @@ public:
  void set_config( Configuration* config ) override;
 
 /** @} ---------------------------------------------------------------------*/
-/*------------------- GETTERS AND SETTERS METHODS --------------------------*/
+/*----------------------- GETTERS AND SETTERS ------------------------------*/
 /*--------------------------------------------------------------------------*/
-/** @name Getters and Setters for DiscreteScenarioSet properties
+/** @name Getters and Setters
+ * Methods to access properties and configuration parameters
  *  @{ */
 
- // Basic Properties Getters
- /// get a reference to nbScenarios
+ /// Get the total number of scenarios in the dataset
  const ScenarioIndex & get_nbScenarios() const;
 
- /// get a reference to scenarioSize
+ /// Get the dimension of each scenario vector
  const ScenarioSize & get_scenarioSize() const;
  
  /// Check if the scenario pool has been initialized
  [[nodiscard]] bool is_pool_initialized() const;
  
- // Scenario Access Methods
  /// Get current scenario with its probability as a pair
  [[nodiscard]] ScenarioWithProbability get_current_scenario_with_prob() const;
  
- /// Access an individual scenario value
+ /// Access an individual scenario value by indices
  [[nodiscard]] double get_scenario_value(ScenarioIndex scenario_idx, ScenarioSize component_idx) const {
      if (scenario_idx >= nbScenarios || component_idx >= scenarioSize) {
          throw std::out_of_range("Index out of range in get_scenario_value");
      }
      return scenarioSet[scenario_idx][component_idx];
  }
+ 
+ /// Get the indices of currently selected scenarios
+ const std::vector<ScenarioIndex>& get_selected_scenarios() const;
  
  /// Get a specific selected scenario index
  [[nodiscard]] ScenarioIndex get_selected_scenario_index(size_t index) const {
@@ -442,27 +439,16 @@ public:
  }
 
 /** @} ---------------------------------------------------------------------*/
-/*--------------------- PROTECTED PART OF THE CLASS -------------------------*/
-/*--------------------------------------------------------------------------*/
-/** Following members are protected rather than private to allow:
- *  1. Access from test code when validating scenario reduction functionality
- *  2. Access from derived scenario reduction methods that need to manipulate
- *     the scenario sets and selected indexes directly
- */
-
-protected:
- /// Container for Scenario-s
- DiscreteScenarioPool scenarioSet;
- 
- /// Indexes of the discrete pool
- std::vector< ScenarioIndex > scenarioIndexes; 
-
-
-/** @} ---------------------------------------------------------------------*/
 /*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
 /*--------------------------------------------------------------------------*/
 
 private:
+
+ /// Container for Scenario-s
+ DiscreteScenarioPool scenarioSet;
+ 
+ /// Indexes of the discrete pool
+ std::vector< ScenarioIndex > scenarioIndexes;
 
 /*--------------------------------------------------------------------------*/
 /*--------------------------- PRIVATE FIELDS -------------------------------*/
@@ -490,17 +476,25 @@ private:
  /// Flag to check if pool is initialized
  bool is_initialized{false};
  
- /// Compile-time constants
- static constexpr double DEFAULT_EPSILON = 1e-10;
- static constexpr unsigned long DEFAULT_SEED = 1337;
- static constexpr float DEFAULT_ELL_VALUE = 2.0f;
- static constexpr double DEFAULT_RHO_VALUE = 0.0;
- 
- /// Power parameter for Wasserstein distance calculation in scenario reduction
- /** The ell parameter determines the power of the norm used when computing
-  *  distances between scenarios. Default value is 2.0 (Euclidean distance).
-  *  This can be overridden during deserialization from the netCDF file. */
- float ell = DEFAULT_ELL_VALUE;
+ /// Power parameter for the ell-Wasserstein distance in scenario reduction
+ /** The \c ell parameter determines the power used in the ell-Wasserstein distance
+  *  calculation for scenario reduction. This is the power to which the ground metric
+  *  (typically Euclidean distance) is raised.
+  *  
+  *  In the transportation cost computation:
+  *  - transport_cost[i][j] = ||scenario_i - scenario_j||^ell
+  *  
+  *  Common values:
+  *  - 1.0: Linear transportation costs (1-Wasserstein distance)
+  *  - 2.0: Quadratic transportation costs (2-Wasserstein distance) [DEFAULT]
+  *  
+  *  The default value of 2.0 is chosen because:
+  *  - The 2-Wasserstein distance has favorable theoretical properties
+  *  - It provides a good balance between computational efficiency and accuracy
+  *  - It is the most commonly used value in scenario reduction literature
+  *  
+  *  This value can be changed via \c set_ell() or during deserialization from netCDF. */
+ float ell = 2.0f;  // Default: 2-Wasserstein distance
  
  /// Block configuration for scenario reduction
  /** Stores the BlockConfig used for creating the CapacitatedFacilityLocationBlock
@@ -536,15 +530,13 @@ private:
   * for selected scenarios. */
  std::vector< double > poolWeights;
 
-/** @name Fields for the discrete pool
-   * When the scenario pool is made of a discrete subset of the input scenarios,
-   * it is characterized by a std::vector< ScenarioIndex > and the probability
-   * weights can be deduced from the input weights saved in
-   * \c poolWeights and the \c sumPoolWeights of the scenarios that
-   * belong to the scenario pool.
+/** @name Pool weight management fields
+   * These fields manage the weights and probabilities of selected scenarios
  * @{ */
 
- /// holder for the sum of the weights inside the discrete pool. */
+ /// Sum of the weights of scenarios in the discrete pool
+ /** Holds the sum of weights for all selected scenarios in \c scenarioIndexes.
+  * Used as denominator when computing normalized probabilities. */
  double sumPoolWeights;
  
  /// Normalized weights of scenarios in the current pool
@@ -569,17 +561,6 @@ private:
   */
  void empty_pool();
 
- /// Create CFL problem data structures
- /** Sets up the capacity, fixed cost, and demand vectors for the
-  * Capacitated Facility Location problem formulation.
-  * 
-  * @param n_scenarios The total number of scenarios
-  * @return A tuple containing (capacities, fixed_costs, demands)
-  */
- std::tuple<CapacitatedFacilityLocationBlock::DVector,
-            CapacitatedFacilityLocationBlock::CVector,
-            CapacitatedFacilityLocationBlock::DVector>
- create_cfl_problem_data(ScenarioIndex n_scenarios) const;
 
  /// Compute the transport cost matrix between scenarios
  /** Calculates the distance matrix between all pairs of scenarios using
@@ -607,19 +588,6 @@ private:
                                           const Eigen::VectorXd& scenario2,
                                           float ell) const;
 
-
- /// Extract selected scenarios from CFL block results
- /** Reads the y variables from the CFL block to populate \c scenarioIndexes with the
-  * selected scenario indices. The solver solution must have been written to the
-  * block variables before calling this function.
-  * 
-  * @param cflBlock The CapacitatedFacilityLocationBlock containing the solution
-  * @param n_scenarios The total number of scenarios
-  * @throws std::runtime_error If no scenarios were selected
-  */
- void get_selected_scenarios_from_block(const CapacitatedFacilityLocationBlock* cflBlock,
-                                       ScenarioIndex n_scenarios);
-
  /// Update pool weights after scenario selection
  /** Computes \c sumPoolWeights and populates \c normalizedPoolWeights based on 
   * the selected scenarios in \c scenarioIndexes after either \c init_random_pool() 
@@ -632,16 +600,6 @@ private:
   * 3. Falls back to uniform distribution if \c sumPoolWeights is zero.
   */
  void update_pool_weights();
-
-
-//  /// Generate default BlockSolverConfig for ScenarioReductionSolver
-//  /** Creates a default BlockSolverConfig for the ScenarioReductionSolver
-//   * with the specified algorithm.
-//   * 
-//   * @param algorithm Algorithm name (default "Dupacova")
-//   * @return A newly allocated BlockSolverConfig (caller owns the pointer)
-//   */
-//  BlockSolverConfig* generate_default_solver_config(const std::string& algorithm = "Dupacova") const;
  
  /// Apply baseline selection method
  /** Selects the top scenarios based on their probability weights.
