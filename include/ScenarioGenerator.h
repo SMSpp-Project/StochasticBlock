@@ -625,7 +625,7 @@ class ScenarioGenerator
   * number of scenarios in the pool seen so far is lower than the size
   * specified in init_*_pool(). Upon receiving a true response, the user can
   * call again get_current_scenario[_probability]() to retrieve the data of
-  * the ew scenario, knowing that any Scenario corresponding to the previous
+  * the new scenario, knowing that any Scenario corresponding to the previous
   * scenarios seen has potentially been invalidated and should no longer be
   * used. */
 

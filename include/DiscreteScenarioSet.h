@@ -427,11 +427,6 @@ public:
  /** @return Number of scenarios that will be selected */
  [[nodiscard]] ScenarioIndex get_poolSize() const { return poolSize; }
  
- /// Set how many scenarios to select
- /** @param poolSize Number of scenarios (must be > 0 and ≤ total scenarios)
-  * @throws std::invalid_argument If poolSize is invalid */
- void set_poolSize(ScenarioIndex poolSize);
- 
  /// Get the distance power parameter
  /** @return The ell parameter for ell-Wasserstein distance (default: 2.0) */
  [[nodiscard]] float get_ell() const { return ell; }

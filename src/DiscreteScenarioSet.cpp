@@ -253,12 +253,6 @@ void DiscreteScenarioSet::empty_pool()
   is_initialized = false;
 }
 
-void DiscreteScenarioSet::set_poolSize( ScenarioIndex size )
-{
-  validate_poolSize_value(size, nbScenarios);
-  poolSize = size;
-}
-
 /*--------------------------------------------------------------------------*/
 /*------ SCENARIO REDUCTION CONFIGURATION METHODS --------------------------*/
 /*--------------------------------------------------------------------------*/
@@ -290,8 +284,9 @@ void DiscreteScenarioSet::set_config(BlockConfig* block_config, BlockSolverConfi
 // Set scenario reduction configuration with poolSize parameter
 void DiscreteScenarioSet::set_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex pool_size)
 {
-  // First set poolSize with validation
-  set_poolSize(pool_size);
+  // Validate and set pool size
+  validate_poolSize_value(pool_size, nbScenarios);
+  poolSize = pool_size;
   
   // Then set the configurations
   set_config(block_config, solver_config);
@@ -623,8 +618,9 @@ void DiscreteScenarioSet::init_random_pool(ScenarioIndex pool_size)
   // Clean up any existing pool
   empty_pool();
   
-  // Initialize the pool parameters
-  set_poolSize(pool_size);
+  // Validate and set pool size
+  validate_poolSize_value(pool_size, nbScenarios);
+  poolSize = pool_size;
   currentScenarioIndex = 0;
   
   // Generate random indices for the pool using weighted sampling
@@ -748,49 +744,12 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_si
 
 [[nodiscard]] ScenarioGenerator::Scenario DiscreteScenarioSet::get_current_scenario( void ) const
 {
-  if( currentScenarioIndex >= scenarioIndexes.size() )
-  {
-    throw( std::out_of_range( "Current scenario index is out of range." ) );
-  }
-
-  // Make sure scenarioIndexes has the expected size
-  if (scenarioIndexes.size() <= currentScenarioIndex)
-  {
-    throw( std::out_of_range( "scenarioIndexes is too small" ) );
-  }
-  
-  // Make sure the index is valid
   const auto index = scenarioIndexes[currentScenarioIndex];
-  if (index >= nbScenarios)
-  {
-    throw( std::out_of_range( "Scenario index is out of range" ) );
-  }
-
-  // Transform the scenarioIndexes[currentScenarioIndex]-th row of
-  // scenarioSet into a span<const double>
   return Scenario(&scenarioSet[index][0], get_scenario_size());
 }
 
 [[nodiscard]] double DiscreteScenarioSet::get_current_scenario_probability( void ) const
 {
-  if( currentScenarioIndex >= scenarioIndexes.size() )
-  {
-    throw( std::out_of_range( "Current scenario index is out of range." ) );
-  }
-
-  // Check if normalized weights are populated
-  if (normalizedPoolWeights.empty())
-  {
-    throw( std::runtime_error( "Normalized pool weights not initialized. Call init_random_pool or init_representative_pool first." ) );
-  }
-  
-  // Make sure currentScenarioIndex is valid for normalizedPoolWeights
-  if (currentScenarioIndex >= normalizedPoolWeights.size())
-  {
-    throw( std::out_of_range( "Current scenario index is out of range for normalized weights" ) );
-  }
-  
-  // Simply return the pre-computed normalized weight
   return normalizedPoolWeights[currentScenarioIndex];
 }
 
@@ -839,14 +798,14 @@ DiscreteScenarioSet::~DiscreteScenarioSet() {
   
   // Release the configuration objects following SMS++ ownership patterns
   
-  // BlockConfig: We always own our clone, safe to delete
+  // BlockConfig: We own our clone, safe to delete
   if (f_block_config) {
     delete f_block_config;
     f_block_config = nullptr;
   }
   
-  // BlockSolverConfig: unique_ptr handles cleanup automatically
-  // If ownership was transferred via release(), this will be nullptr and safe
+  // BlockSolverConfig: unique_ptr handles cleanup
+  // If ownership was transferred via release(), this will be nullptr
 }
 
 /*--------------------------------------------------------------------------*/
