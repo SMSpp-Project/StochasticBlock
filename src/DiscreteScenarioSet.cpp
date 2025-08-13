@@ -71,6 +71,10 @@ void DiscreteScenarioSet::empty_pool()
   scenarioIndexes.clear();
   scenarioIndexes.shrink_to_fit();
   
+  // Clear normalized weights and free memory
+  normalizedPoolWeights.clear();
+  normalizedPoolWeights.shrink_to_fit();
+  
   // Reset pool state (poolSize is configuration, not actual size)
   currentScenarioIndex = 0;
   // poolSize is NOT reset - it's the configured/desired size
@@ -234,7 +238,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
 
   // Clear existing data
   scenarioSet.resize(boost::extents[0][0]);
-  poolProbabilities.clear();
+  poolWeights.clear();
   scenarioIndexes.clear();
   
   // Clean up any existing configuration
@@ -262,19 +266,19 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   ::deserialize( group , "Scenarios" , sizes , scenarioSet , true , false );
 
   // Deserialize probabilities (optional, default to uniform)
-  bool probsLoaded = ::deserialize(group, "poolProbabilities", nbScenarios, poolProbabilities);
+  bool probsLoaded = ::deserialize(group, "poolWeights", nbScenarios, poolWeights);
   
   if (!probsLoaded) {
     // No probabilities in file, create uniform weights
-    poolProbabilities.assign(nbScenarios, 1.0 / nbScenarios);
-  } else if (poolProbabilities.size() != nbScenarios) {
+    poolWeights.assign(nbScenarios, 1.0 / nbScenarios);
+  } else if (poolWeights.size() != nbScenarios) {
     // Probabilities were loaded but have wrong size - this is an error
-    throw std::invalid_argument("poolProbabilities size (" + std::to_string(poolProbabilities.size()) + 
+    throw std::invalid_argument("poolWeights size (" + std::to_string(poolWeights.size()) + 
                                 ") does not match NumberScenarios (" + std::to_string(nbScenarios) + ")");
   }
   
   // Validate probabilities sum to approximately 1.0
-  double sum = std::accumulate(poolProbabilities.begin(), poolProbabilities.end(), 0.0);
+  double sum = std::accumulate(poolWeights.begin(), poolWeights.end(), 0.0);
   if (std::abs(sum - 1.0) > 1e-6) {
     throw std::invalid_argument("Scenario probabilities must sum to 1.0, got: " + std::to_string(sum));
   }
@@ -425,8 +429,8 @@ void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
   scenariosVar.putVar(scenarioSet.data());
   
   // Serialize probabilities
-  auto probsVar = group.addVar("poolProbabilities", netCDF::NcDouble(), nbScenariosDim);
-  probsVar.putVar(poolProbabilities.data());
+  auto probsVar = group.addVar("poolWeights", netCDF::NcDouble(), nbScenariosDim);
+  probsVar.putVar(poolWeights.data());
   
   // Serialize scenario reduction configuration if it exists
   // We serialize if we have at least poolSize or BlockConfig or BlockSolverConfig
@@ -460,13 +464,14 @@ void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
 // Implementation for setting the seed of the pseudo-random number generator
 void DiscreteScenarioSet::set_seed( unsigned long seed ) { rng.seed( seed ); }
 
-// Draw k elements among n
-/* The function generateRandomSubset draws k elements among n by use of
- * the std::shuffle function and the internal rng. The chosen indexes are
+// Draw k elements among n with weighted sampling
+/* The function generateWeightedRandomSubset draws k elements among n using
+ * weighted random sampling without replacement. The chosen indexes are
  * moved into the input variable ind. */
-static void generateRandomSubset( size_t n , size_t k ,
-                                  std::vector< ScenarioGenerator::ScenarioIndex > & ind ,
-                                  std::mt19937 & rng )
+static void generateWeightedRandomSubset( size_t n , size_t k ,
+                                          const std::vector< double > & weights,
+                                          std::vector< ScenarioGenerator::ScenarioIndex > & ind ,
+                                          std::mt19937 & rng )
 {
   if( k > n )
     throw( std::invalid_argument( "k must be less or equal than n." ) );
@@ -479,18 +484,31 @@ static void generateRandomSubset( size_t n , size_t k ,
     return;
   }
 
-  // Generate ordered indexes using C++20 ranges and views
-  ind.resize(k);
+  // Special case: if k == n, return all indices
+  if (k == n) {
+    ind.resize(n);
+    std::iota(ind.begin(), ind.end(), 0);
+    return;
+  }
+
+  // Use weighted sampling without replacement
+  // Create a copy of weights that we can modify
+  std::vector<double> working_weights = weights;
+  ind.reserve(k);
   
-  // Create a vector with indexes 0 to n-1
-  auto indexes = [n]() {
-    std::vector<ScenarioGenerator::ScenarioIndex> result(n);
-    std::iota(result.begin(), result.end(), 0);
-    return result;
-  }();
-  
-  // Use standard library algorithm std::sample to randomly select k items from indexes
-  std::sample(indexes.begin(), indexes.end(), ind.begin(), k, rng);
+  for (size_t i = 0; i < k; ++i) {
+    // Create discrete distribution with current weights
+    std::discrete_distribution<ScenarioGenerator::ScenarioIndex> dist(working_weights.begin(), working_weights.end());
+    
+    // Sample an index
+    ScenarioGenerator::ScenarioIndex selected = dist(rng);
+    
+    // Add to result
+    ind.push_back(selected);
+    
+    // Set weight to 0 to prevent re-selection
+    working_weights[selected] = 0.0;
+  }
 }
 
 // Initialize a pool with randomly selected scenarios
@@ -500,19 +518,14 @@ void DiscreteScenarioSet::init_random_pool(ScenarioIndex pool_size)
   empty_pool();
   
   // Initialize the pool parameters
-  sumPoolWeights = 0.0;
   set_poolSize(pool_size);
   currentScenarioIndex = 0;
   
-  // Generate random indices for the pool
+  // Generate random indices for the pool using weighted sampling
   if (pool_size > 0) {
-    generateRandomSubset(nbScenarios, pool_size, scenarioIndexes, rng);
+    generateWeightedRandomSubset(nbScenarios, pool_size, poolWeights, scenarioIndexes, rng);
     
-    // Calculate the sum of weights for the selected scenarios
-    sumPoolWeights = std::accumulate(scenarioIndexes.begin(), scenarioIndexes.end(), 0.0,
-      [this](double sum, ScenarioIndex index) -> double {
-        return sum + (index < poolProbabilities.size() ? poolProbabilities[index] : 0.0);
-      });
+    update_pool_weights();
       
     // Mark the pool as initialized
     is_initialized = true;
@@ -659,20 +672,20 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_si
     throw( std::out_of_range( "Current scenario index is out of range." ) );
   }
 
-  // Make sure scenarioIndexes has the expected size
-  if (scenarioIndexes.size() <= currentScenarioIndex)
+  // Check if normalized weights are populated
+  if (normalizedPoolWeights.empty())
   {
-    throw( std::out_of_range( "scenarioIndexes is too small for probability" ) );
+    throw( std::runtime_error( "Normalized pool weights not initialized. Call init_random_pool or init_representative_pool first." ) );
   }
   
-  // Make sure the index is valid
-  const auto idx = scenarioIndexes[currentScenarioIndex];
-  if (idx >= poolProbabilities.size())
+  // Make sure currentScenarioIndex is valid for normalizedPoolWeights
+  if (currentScenarioIndex >= normalizedPoolWeights.size())
   {
-    throw( std::out_of_range( "Probability index is out of range" ) );
+    throw( std::out_of_range( "Current scenario index is out of range for normalized weights" ) );
   }
   
-  return (sumPoolWeights > 0.0) ? poolProbabilities[idx] / sumPoolWeights : 0.0;
+  // Simply return the pre-computed normalized weight
+  return normalizedPoolWeights[currentScenarioIndex];
 }
 
 // Implementation of the new structured binding method
@@ -724,8 +737,11 @@ DiscreteScenarioSet::~DiscreteScenarioSet() {
   scenarioIndexes.clear();
   scenarioIndexes.shrink_to_fit();
   
-  poolProbabilities.clear();
-  poolProbabilities.shrink_to_fit();
+  poolWeights.clear();
+  poolWeights.shrink_to_fit();
+  
+  normalizedPoolWeights.clear();
+  normalizedPoolWeights.shrink_to_fit();
   
   // Release the configuration objects following SMS++ ownership patterns
   
@@ -757,7 +773,7 @@ DiscreteScenarioSet::create_cfl_problem_data(ScenarioIndex n_scenarios) const
   for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
     capacities[i] = 1.0;      // Capacities = weights of the reduced distribution
     fixed_costs[i] = 0.0;     // No fixed cost in scenario reduction, but we do have a constraint on the maximal number of facilities that can (should) be opened.
-    demands[i] = poolProbabilities[i];  // Demand equals probability weight
+    demands[i] = poolWeights[i];  // Demand equals weight
   }
   
   return std::make_tuple(std::move(capacities), std::move(fixed_costs), std::move(demands));
@@ -855,7 +871,7 @@ void DiscreteScenarioSet::apply_baseline_selection(ScenarioIndex target_size)
   indexed_weights.reserve(nbScenarios);
   
   for (ScenarioIndex i = 0; i < nbScenarios; ++i) {
-    double weight = (i < poolProbabilities.size()) ? poolProbabilities[i] : 1.0 / nbScenarios;
+    double weight = (i < poolWeights.size()) ? poolWeights[i] : 1.0 / nbScenarios;
     indexed_weights.emplace_back(i, weight);
   }
   
@@ -886,14 +902,26 @@ void DiscreteScenarioSet::update_pool_weights()
   // Calculate sum of weights of selected scenarios for normalization
   sumPoolWeights = 0.0;
   for (const auto& idx : scenarioIndexes) {
-    sumPoolWeights += poolProbabilities[idx];
+    sumPoolWeights += poolWeights[idx];
+  }
+  
+  // Populate normalized weights
+  normalizedPoolWeights.clear();
+  normalizedPoolWeights.reserve(scenarioIndexes.size());
+  
+  if (sumPoolWeights > 0.0) {
+    for (const auto& idx : scenarioIndexes) {
+      normalizedPoolWeights.push_back(poolWeights[idx] / sumPoolWeights);
+    }
+  } else {
+    // Fallback to uniform if all weights are zero
+    double uniform_weight = 1.0 / scenarioIndexes.size();
+    normalizedPoolWeights.assign(scenarioIndexes.size(), uniform_weight);
   }
 }
 
-
-
-// Generate default BlockConfig for CFL
-BlockConfig* DiscreteScenarioSet::generate_default_cfl_config(ScenarioIndex size) const
+// Generate default BlockConfig for CFL (static helper function)
+static BlockConfig* generate_default_cfl_config(DiscreteScenarioSet::ScenarioIndex size)
 {
   auto* config = new BlockConfig(false);  // not differential
   

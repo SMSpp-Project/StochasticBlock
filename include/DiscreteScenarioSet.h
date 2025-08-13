@@ -75,7 +75,7 @@ namespace SMSpp_di_unipi_it
  *
  * DiscreteScenarioSet provides two primary methods for selecting scenario subsets:
  *
- * - **Random Selection** (init_random_pool()): Randomly samples poolSize scenarios from
+ * - **Random Selection** (init_random_pool()): Randomly samples \c poolSize scenarios from
  *   the full set, always available without additional configuration
  *
  * - **Scenario Reduction** (init_representative_pool()): Selects a representative
@@ -161,9 +161,9 @@ public:
   * The dimensions "NumberScenarios" and "ScenarioSize" and the variable
   * "Scenarios" are mandatory. However, the optional
   *
-  * - variable "poolProbabilities", of type double and indexed over the
+  * - variable "poolWeights", of type double and indexed over the
   *   dimension "NumberScenarios"; the i-th entry of the variable is assumed
-  *   to contain the probability of the i-th scenario
+  *   to contain the weight of the i-th scenario
   *
   * may also be present to represent the probabilities of the scenarios (if
   * not present, uniform probabilities 1.0/NumberScenarios are assumed). If 
@@ -174,24 +174,24 @@ public:
   * - group "ScenarioReductionConfig" can be present; if so, it may contain:
   *
   *   = variable "poolSize", of type int, containing the number of scenarios to select
-  *     for scenario reduction (takes precedence over any SimpleConfiguration<int>
-  *     in BlockConfig's extra_Configuration if both exist)
+  *     for scenario reduction (takes precedence over any \c SimpleConfiguration<int>
+  *     in BlockConfig's \c extra_Configuration if both exist)
   *
   *   = variable "ell", of type float, containing the power parameter for
   *     Wasserstein distance calculation (default 2.0)
   *
   *   = group "BlockConfig" containing the configuration for the
   *     CapacitatedFacilityLocationBlock used in scenario reduction. If this
-  *     contains a SimpleConfiguration<int> in its extra_Configuration and no
-  *     "poolSize" variable exists, the integer value is used as poolSize. If BlockConfig
-  *     is not provided but poolSize is, a default BlockConfig is generated.
+  *     contains a \c SimpleConfiguration<int> in its \c extra_Configuration and no
+  *     "poolSize" variable exists, the integer value is used as \c poolSize. If BlockConfig
+  *     is not provided but \c poolSize is, a default BlockConfig is generated.
   *
   *   = group "BlockSolverConfig" containing the configuration for the solver
   *     used with the CapacitatedFacilityLocationBlock. If not provided, a
   *     default solver configuration is generated.
   *
-  * If "ScenarioReductionConfig" is present, poolSize must be provided either as a
-  * variable or within BlockConfig's extra_Configuration, otherwise an error
+  * If "ScenarioReductionConfig" is present, \c poolSize must be provided either as a
+  * variable or within BlockConfig's \c extra_Configuration, otherwise an error
   * is thrown.
   *
   * Note: This method clears any existing data and configuration before
@@ -211,7 +211,7 @@ public:
   *    - dimension "NumberScenarios" with the number of scenarios
   *    - dimension "ScenarioSize" with the scenario dimension
   *    - variable "Scenarios" (double array) with all scenario data
-  *    - variable "poolProbabilities" (double array) with scenario probabilities
+  *    - variable "poolWeights" (double array) with scenario weights
   * 3. If scenario reduction configuration exists, creates "ScenarioReductionConfig" group
   * 4. Within "ScenarioReductionConfig", writes:
   *    - variable "poolSize" (int) with the number of scenarios to select
@@ -359,16 +359,16 @@ public:
   * - block_config: This method creates a clone. You retain ownership of the original.
   * - solver_config: This method takes ownership. Do NOT delete it after this call.
   * 
-  * @param block_config BlockConfig containing reduction parameters like poolSize (will be cloned)
+  * @param block_config BlockConfig containing reduction parameters like \c poolSize (will be cloned)
   * @param solver_config BlockSolverConfig containing solver settings (ownership transferred)
   */
  void set_config(BlockConfig* block_config, BlockSolverConfig* solver_config);
  
  /**
-  * @brief Set the scenario reduction configuration with poolSize parameter (convenience overload)
+  * @brief Set the scenario reduction configuration with \c poolSize parameter (convenience overload)
   * 
-  * Convenience method that sets both the configuration objects and the poolSize parameter.
-  * This ensures that poolSize is properly set for scenario reduction.
+  * Convenience method that sets both the configuration objects and the \c poolSize parameter.
+  * This ensures that \c poolSize is properly set for scenario reduction.
   * 
   * @param block_config BlockConfig containing reduction parameters 
   * @param solver_config BlockSolverConfig containing the Solver to use for CFL optimization
@@ -380,8 +380,8 @@ public:
   * @brief Set configuration for the DiscreteScenarioSet
   * 
   * Supports multiple configuration patterns:
-  * - SimpleConfiguration<int>: poolSize only (baseline method)
-  * - SimpleConfiguration<pair<int, Configuration*>>: poolSize + solver config
+  * - \c SimpleConfiguration<int>: \c poolSize only (baseline method)
+  * - \c SimpleConfiguration<pair<int,Configuration*>>: \c poolSize + solver config
   * - SimpleConfiguration<pair<Configuration*, Configuration*>>: full block + solver config
   * 
   * @param config The Configuration object containing scenario reduction parameters
@@ -424,11 +424,10 @@ public:
      return scenarioIndexes[index];
  }
 
- // Scenario Reduction Parameters - Getters and Setters
- /// Get the poolSize parameter for scenario reduction
+ /// Get the \c poolSize parameter for scenario reduction
  [[nodiscard]] ScenarioIndex get_poolSize() const { return poolSize; }
  
- /// Set the poolSize parameter for scenario reduction
+ /// Set the \c poolSize parameter for scenario reduction
  void set_poolSize(ScenarioIndex poolSize);
  
  /// Get the ell parameter for Wasserstein distance calculation
@@ -481,8 +480,8 @@ private:
  ScenarioSize scenarioSize;
 
  /// Pool size
- /** The variable poolSize is initialized when
-  * init_representative_pool() or init_random_pool() is used. */
+ /** The variable \c poolSize is initialized when
+  * \c init_representative_pool() or \c init_random_pool() is used. */
  ScenarioIndex poolSize = 0;
 
  /// Random generator
@@ -531,22 +530,30 @@ private:
    * These fields store information about scenario probabilities
  * @{ */
 
- /// Probabilities of scenarios in the input pool
- /** Vector containing the probability weights of all input scenarios
+ /// Weights of scenarios in the input pool
+ /** Vector containing the weights of all input scenarios
   * (before any selection). Used to compute normalized probabilities
   * for selected scenarios. */
- std::vector< double > poolProbabilities;
+ std::vector< double > poolWeights;
 
 /** @name Fields for the discrete pool
    * When the scenario pool is made of a discrete subset of the input scenarios,
    * it is characterized by a std::vector< ScenarioIndex > and the probability
    * weights can be deduced from the input weights saved in
-   * scenarioProbabilities and the sumPoolWeights of the scenarios that
+   * \c poolWeights and the \c sumPoolWeights of the scenarios that
    * belong to the scenario pool.
  * @{ */
 
  /// holder for the sum of the weights inside the discrete pool. */
  double sumPoolWeights;
+ 
+ /// Normalized weights of scenarios in the current pool
+ /** Vector containing the normalized weights of scenarios that have been
+  * selected for the current pool (via init_random_pool or init_representative_pool).
+  * These weights are computed as: <tt>poolWeights[scenario_i] / sumPoolWeights</tt>.
+  * The size of this vector equals the number of selected scenarios (\c poolSize).
+  * This container is only populated after pool initialization. */
+ std::vector< double > normalizedPoolWeights;
 
 /** @} ---------------------------------------------------------------------*/
 /*-------------------- HELPER METHODS OF THE CLASS -------------------------*/
@@ -557,8 +564,8 @@ private:
 
  /// Empty the scenario pool
  /** Function to clear the internal pool of selected scenario indices.
-  * Resets scenarioIndexes, sumPoolWeights, currentScenarioIndex,
-  * poolSize, and is_initialized.
+  * Resets \c scenarioIndexes, \c sumPoolWeights, \c currentScenarioIndex,
+  * \c poolSize, and \c is_initialized.
   */
  void empty_pool();
 
@@ -602,7 +609,7 @@ private:
 
 
  /// Extract selected scenarios from CFL block results
- /** Reads the y variables from the CFL block to populate scenarioIndexes with the
+ /** Reads the y variables from the CFL block to populate \c scenarioIndexes with the
   * selected scenario indices. The solver solution must have been written to the
   * block variables before calling this function.
   * 
@@ -614,19 +621,18 @@ private:
                                        ScenarioIndex n_scenarios);
 
  /// Update pool weights after scenario selection
- /** Recalculates sumPoolWeights based on the selected scenarios in
-  * scenarioIndexes.
+ /** Computes \c sumPoolWeights and populates \c normalizedPoolWeights based on 
+  * the selected scenarios in \c scenarioIndexes after either \c init_random_pool() 
+  * or \c init_representative_pool() have been used.
+  * 
+  * This method:
+  * 1. Calculates the sum of weights for all selected scenarios (\c sumPoolWeights)
+  * 2. Populates the \c normalizedPoolWeights container with normalized probabilities
+  *    computed as: <tt>poolWeights[scenario_i] / sumPoolWeights</tt>
+  * 3. Falls back to uniform distribution if \c sumPoolWeights is zero.
   */
  void update_pool_weights();
 
- /// Generate default BlockConfig for CFL
- /** Creates a default BlockConfig suitable for CapacitatedFacilityLocationBlock
-  * with the specified pool size parameter.
-  * 
-  * @param size Number of scenarios to select
-  * @return A newly allocated BlockConfig (caller owns the pointer)
-  */
- BlockConfig* generate_default_cfl_config(ScenarioIndex size) const;
 
 //  /// Generate default BlockSolverConfig for ScenarioReductionSolver
 //  /** Creates a default BlockSolverConfig for the ScenarioReductionSolver
