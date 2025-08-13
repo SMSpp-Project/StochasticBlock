@@ -137,86 +137,65 @@ public:
 
  DiscreteScenarioSet();
 
- /// deserialize a discrete distribution from a netCDF group
- /** Extends ScenarioGenerator::deserialize( netCDF::NcGroup ) to the
-  * specific format of a DiscreteScenarioSet. Besides what is managed by the
-  * serialize() method of the base ScenarioGenerator class, the group should
-  * contain the following:
-  *
-  * - the dimension "NumberScenarios" containing the number of scenarios in
-  *   the discrete probability distribution (must be positive)
-  *
-  * - the dimension "ScenarioSize" containing the dimension of the Euclidean
-  *   space (R^d) representing a single scenario (must be positive)
-  *
-  * - the variable "Scenarios", of type double and indexed over both the
-  *   dimensions "NumberScenarios" and "ScenarioSize"; the entry ( i , j )
-  *   is assumed to contain the j-th component of the i-th scenario
-  *
-  * The dimensions "NumberScenarios" and "ScenarioSize" and the variable
-  * "Scenarios" are mandatory. However, the optional
-  *
-  * - variable "poolWeights", of type double and indexed over the
-  *   dimension "NumberScenarios"; the i-th entry of the variable is assumed
-  *   to contain the weight of the i-th scenario
-  *
-  * may also be present to represent the probabilities of the scenarios (if
-  * not present, uniform probabilities 1.0/NumberScenarios are assumed). If 
-  * provided, the variable must have exactly NumberScenarios elements and
-  * probabilities must sum to approximately 1.0 (within 1e-6 tolerance). Also,
-  * the optional
-  *
-  * - group "ScenarioReductionConfig" can be present; if so, it may contain:
-  *
-  *   = variable "poolSize", of type int, containing the number of scenarios to select
-  *     for scenario reduction (takes precedence over any \c SimpleConfiguration<int>
-  *     in BlockConfig's \c extra_Configuration if both exist)
-  *
-  *   = variable "ell", of type float, containing the power parameter for
-  *     Wasserstein distance calculation (default 2.0)
-  *
-  *   = group "BlockConfig" containing the configuration for the
-  *     CapacitatedFacilityLocationBlock used in scenario reduction. If this
-  *     contains a \c SimpleConfiguration<int> in its \c extra_Configuration and no
-  *     "poolSize" variable exists, the integer value is used as \c poolSize. If BlockConfig
-  *     is not provided but \c poolSize is, a default BlockConfig is generated.
-  *
-  *   = group "BlockSolverConfig" containing the configuration for the solver
-  *     used with the CapacitatedFacilityLocationBlock. If not provided, a
-  *     default solver configuration is generated.
-  *
-  * If "ScenarioReductionConfig" is present, \c poolSize must be provided either as a
-  * variable or within BlockConfig's \c extra_Configuration, otherwise an error
-  * is thrown.
-  *
-  * Note: This method clears any existing data and configuration before
-  * deserializing. 
+ /// Deserialize the DiscreteScenarioSet from a netCDF group
+ /** Read the discrete scenario set from a netCDF::NcGroup. The method expects
+  * the following format in the group:
+  * 
+  * Required dimensions:
+  * - "NumberScenarios": Dimension defining the number of scenarios in the pool
+  * - "ScenarioSize": Dimension defining the size of each scenario vector
+  * 
+  * Required variables:
+  * - "Scenarios": 2D variable of dimensions [NumberScenarios][ScenarioSize] 
+  *   containing the scenario data
+  * 
+  * Optional variables:
+  * - "poolWeights": 1D variable of dimension [NumberScenarios] containing the
+  *   probability weights of each scenario. If not present, uniform weights
+  *   are assumed. The weights must sum to 1.0 (with tolerance of 1e-6).
+  * 
+  * Optional subgroup:
+  * - "ScenarioReductionConfig": A subgroup containing scenario reduction
+  *   configuration, which may include:
+  *   - "poolSize": Attribute (scalar) specifying the target pool size for 
+  *     scenario reduction
+  *   - "ell": Attribute (scalar) specifying the power parameter for the 
+  *     ell-Wasserstein distance (default: 2.0)
+  *   - "BlockConfig": Subgroup containing serialized BlockConfig for the CFL 
+  *     problem
+  *   - "BlockSolverConfig": Subgroup containing serialized BlockSolverConfig 
+  *     for solving the scenario reduction problem
+  * 
+  * @param group The netCDF group from which to read the data
+  * @throws std::invalid_argument If required dimensions or variables are missing
+  * @throws std::runtime_error If data cannot be read from the netCDF file
+  * @note This method clears any existing data before loading new data
   */
  void deserialize( const netCDF::NcGroup & group ) override;
 
- /**
-  * @brief Serialize the object to a netCDF group
+ /// Serialize the DiscreteScenarioSet to a netCDF group
+ /** Write the discrete scenario set to a netCDF::NcGroup. The method writes
+  * the following format to the group:
   * 
-  * Extends the base class serialization to include scenario reduction configuration.
-  * Writes the DiscreteScenarioSet data in the format expected by deserialize().
+  * Created dimensions:
+  * - "NumberScenarios": Dimension set to the current number of scenarios
+  * - "ScenarioSize": Dimension set to the size of each scenario vector
   * 
-  * This method:
-  * 1. Calls the base class serialize (from ScenarioGenerator)
-  * 2. Writes mandatory data:
-  *    - dimension "NumberScenarios" with the number of scenarios
-  *    - dimension "ScenarioSize" with the scenario dimension
-  *    - variable "Scenarios" (double array) with all scenario data
-  *    - variable "poolWeights" (double array) with scenario weights
-  * 3. If scenario reduction configuration exists, creates "ScenarioReductionConfig" group
-  * 4. Within "ScenarioReductionConfig", writes:
-  *    - variable "poolSize" (int) with the number of scenarios to select
-  *    - variable "ell" (float) with the Wasserstein distance power parameter
-  * 5. Creates subgroups "BlockConfig" and "BlockSolverConfig" within
-  *    "ScenarioReductionConfig" for the respective configurations
+  * Created variables:
+  * - "Scenarios": 2D variable of dimensions [NumberScenarios][ScenarioSize] 
+  *   containing all scenario data
+  * - "poolWeights": 1D variable of dimension [NumberScenarios] containing the
+  *   probability weights of each scenario
   * 
-  * Note that scenario reduction configuration is only serialized if it exists
+  * If scenario reduction configuration exists, creates subgroup:
+  * - "ScenarioReductionConfig": Subgroup containing:
+  *   - "poolSize": Attribute (scalar) with the configured pool size
+  *   - "ell": Attribute (scalar) with the ell parameter for distance calculation
+  *   - "BlockConfig": Subgroup with serialized BlockConfig if available
+  *   - "BlockSolverConfig": Subgroup with serialized BlockSolverConfig if available
   * 
-  * @param group The netCDF group to serialize the object to
+  * @param group The netCDF group to which to write the data
+  * @note All scenarios are written, not just the selected pool
   */
  void serialize(netCDF::NcGroup& group) const override;
 
@@ -228,51 +207,47 @@ public:
 /** @name Functions inherited from ScenarioGenerator.h
  *  @{ */
 
- /// Setting the seed of the pseudo-random number generator
+ /// Set the random seed for reproducible scenario selection
+ /** Use this to ensure reproducible results when using random sampling methods.
+  * 
+  * @param seed The seed value for the random number generator
+  */
  void set_seed( unsigned long seed ) override;
 
- /// Function for retrieving the current scenario.
- /** Checks that the internal variable currentScenarioIndex is within bounds,
-  * then converts the currentScenarioIndex-th scenario of the selected pool as a
-  * Scenario, that is as a std::span< const double >.
-  *
-  * The function returns a span of the scenarioIndex[currentScenarioIndex]-th 
-  * row of the scenarioSet (since we only use the discrete pool approach).
+ /// Get the current scenario in the iteration
+ /** Returns the scenario data at the current position in the selected pool.
+  * Use this together with next_scenario() to iterate through all selected scenarios.
   * 
-  * @return A span representing the current scenario
-  * @throws std::out_of_range If currentScenarioIndex is out of range
+  * @return A read-only view of the current scenario's data
+  * @throws std::out_of_range If called before pool initialization or after iteration ends
+  * @see next_scenario() to advance to the next scenario
+  * @see init_random_pool() or init_representative_pool() to initialize the pool
   */
  Scenario get_current_scenario( void ) const override;
 
- /// Function to query the probability weight of the current scenario
- /** When sampling a pool, what are the weights of the drawn scenarios?
-  * When using get_scenario_probabilities, we return "the" probability weight
-  * inside the pool and not the input probability weight.
-  *
-  * For scenario pools: We take the input weight and normalize it. Given a
-  * scenario with an input_weight, we compute its new_weight by:
-  *  "new_weight = input_weight / sum( input_weights_in_the_pool )".
-  *
-  * This normalization ensures that the weights of all scenarios in the 
-  * pool sum to 1.0.
+ /// Get the probability weight of the current scenario
+ /** Returns the normalized probability of the current scenario within the selected pool.
+  * The probabilities of all selected scenarios sum to 1.0.
   * 
-  * @return The normalized probability of the current scenario
-  * @throws std::out_of_range If currentScenarioIndex is out of range
+  * @return The normalized probability (between 0 and 1)
+  * @throws std::runtime_error If pool not initialized
+  * @note This is the normalized weight within the pool, not the original weight
   */
  double get_current_scenario_probability( void ) const override;
 
- /// Move currentScenarioIndex to the next scenario
- /** The function increments currentScenarioIndex by 1 if there is still
-  * a scenario left in the pool and returns true. Otherwise, it returns false.
+ /// Move to the next scenario in the iteration
+ /** Advances to the next scenario in the selected pool.
   * 
-  * @return true if successfully moved to the next scenario, false if at the end
+  * @return true if there is a next scenario, false if iteration is complete
+  * @see get_current_scenario() to access the scenario data
   */
  bool next_scenario( void ) override;
 
- /// return the dimension of the scenarios
- /** Every scenario (vector in some Euclidean space R^d) is assumed to have
-  * the same dimension. The dimension has been saved in scenarioSize when
-  * deserializing the input discrete distribution. */
+ /// Get the dimension of scenario vectors
+ /** Returns the size of each scenario vector (all scenarios have the same dimension).
+  * 
+  * @return The number of components in each scenario
+  */
  ScenarioSize get_scenario_size( void ) const override;
 
 /** @} ---------------------------------------------------------------------*/
@@ -281,40 +256,52 @@ public:
 /** @name Scenario Pool Management Methods
  *  @{ */
 
- /**
-  * @brief Randomly select scenarios from the available set
+ /// Randomly sample scenarios for Monte Carlo simulation
+ /** Creates a random subset of scenarios using weighted sampling.
+  * Scenarios with higher weights are more likely to be selected.
   * 
-  * Creates a pool by randomly selecting scenarios with uniform probability.
-  * This provides an unbiased sample suitable for simulation and validation
-  * of decisions made using a smaller representative set.
+  * @param pool_size Number of scenarios to select (must be ≤ total scenarios)
+  * @throws std::invalid_argument If pool_size is 0 or exceeds available scenarios
   * 
-  * @param pool_size Number of scenarios to randomly select
-  * @throws std::invalid_argument If pool_size exceeds the available scenarios
+  * Example:
+  * \code
+  * set.init_random_pool(100);  // Select 100 random scenarios
+  * while(set.next_scenario()) {
+  *     auto scenario = set.get_current_scenario();
+  *     // Process scenario...
+  * }
+  * \endcode
   */
  void init_random_pool(ScenarioIndex pool_size) override;
 
- /**
-  * @brief Select the most representative scenarios
+ /// Select representative scenarios using scenario reduction
+ /** Chooses a subset of scenarios that best represents the full distribution.
   * 
-  * Creates a pool of scenarios from the full distribution. The selection
-  * method depends on whether a BlockSolverConfig is provided:
+  * Two methods are available:
+  * - **With solver configuration**: Uses optimization to minimize the Wasserstein
+  *   distance between the original and reduced distributions
+  * - **Without solver (baseline)**: Selects scenarios with highest weights
   * 
-  * 1. If BlockSolverConfig is provided:
-  *    - Creates a CapacitatedFacilityLocationBlock to model scenario selection
-  *    - Applies BlockConfig if provided (or generates minimal default)
-  *    - Applies the configured solver (e.g., "Dupacova", "BestFit", "MILP")
-  *    - Solves to minimize Wasserstein distance between original and reduced sets
+  * Use this when you need:
+  * - A smaller set that preserves statistical properties
+  * - To reduce computational cost while maintaining solution quality
+  * - Scenarios for robust optimization approaches
   * 
-  * 2. If no BlockSolverConfig is provided:
-  *    - Uses baseline method (selects top scenarios by probability weight)
+  * @param target_pool_size Number of scenarios to select
+  * @throws std::invalid_argument If target_pool_size is invalid
+  * @throws std::runtime_error If optimization solver fails
   * 
-  * The baseline method sorts scenarios by their probability weights in descending
-  * order and selects the scenarios with highest weights.
+  * Example with optimization:
+  * \code
+  * // Configure solver for optimal selection
+  * set.set_config(block_config, solver_config);
+  * set.init_representative_pool(50);  // Find 50 best scenarios
+  * \endcode
   * 
-  * @param target_pool_size Number of representative scenarios to select
-  * @throws std::invalid_argument If target_pool_size is invalid (0 or > available scenarios)
-  * @throws std::runtime_error If the solver fails (when using configured solver)
-  * @see set_config() to provide BlockConfig or BlockSolverConfig
+  * Example without optimization (baseline):
+  * \code
+  * set.init_representative_pool(50);  // Select 50 highest-weight scenarios
+  * \endcode
   */
  void init_representative_pool( ScenarioIndex target_pool_size ) override;
 
@@ -324,62 +311,61 @@ public:
 /** @name Scenario Reduction Configuration Methods
  *  @{ */
 
- /**
-  * @brief Get the block configuration for scenario reduction
+ /// Check the current scenario reduction configuration
+ /** Returns the block configuration used for scenario reduction.
   * 
-  * @return Const pointer to the BlockConfig, or nullptr if no configuration exists
+  * @return The configuration object, or nullptr if not configured
+  * @see set_config() to set the configuration
   */
  const BlockConfig* get_block_config() const { return f_block_config; }
 
- /**
-  * @brief Get the solver configuration for scenario reduction
+ /// Check the solver configuration for scenario reduction
+ /** Returns the solver configuration if available.
   * 
-  * @return Const pointer to the BlockSolverConfig, or nullptr in these cases:
-  *         - No configuration has been set yet
-  *         - Ownership was already transferred to a solver during scenario reduction
-  *           (after init_representative_pool() has been called with a configured solver)
-  * 
-  * @note After successful scenario reduction using a solver, this will return nullptr
-  *       because the BlockSolverConfig ownership is transferred to the solver.
+  * @return The solver configuration, or nullptr if:
+  *         - Not configured yet
+  *         - Already used (ownership transferred to solver)
+  * @see set_config() to set the configuration
   */
  const BlockSolverConfig* get_solver_config() const { return f_solver_config.get(); }
 
- /**
-  * @brief Set the scenario reduction configuration
+ /// Configure optimization-based scenario reduction
+ /** Sets up the solver and parameters for advanced scenario reduction.
+  * When configured, init_representative_pool() will use optimization to find
+  * the best representative scenarios.
   * 
-  * Configures how scenario reduction will be performed when init_representative_pool()
-  * is called.
+  * @param block_config Configuration parameters (will be copied)
+  * @param solver_config Solver to use (ownership transferred - do not delete)
   * 
-  * Memory management:
-  * - block_config: This method creates a clone. You retain ownership of the original.
-  * - solver_config: This method takes ownership. Do NOT delete it after this call.
-  * 
-  * @param block_config BlockConfig containing reduction parameters like \c poolSize (will be cloned)
-  * @param solver_config BlockSolverConfig containing solver settings (ownership transferred)
+  * Example:
+  * \code
+  * auto* solver_config = new MILPSolverConfig();
+  * set.set_config(block_config, solver_config);
+  * // Do NOT delete solver_config - ownership transferred
+  * \endcode
   */
  void set_config(BlockConfig* block_config, BlockSolverConfig* solver_config);
  
- /**
-  * @brief Set the scenario reduction configuration with \c poolSize parameter (convenience overload)
+ /// Configure scenario reduction with explicit pool size
+ /** Convenience method to set configuration and pool size together.
   * 
-  * Convenience method that sets both the configuration objects and the \c poolSize parameter.
-  * This ensures that \c poolSize is properly set for scenario reduction.
-  * 
-  * @param block_config BlockConfig containing reduction parameters 
-  * @param solver_config BlockSolverConfig containing the Solver to use for CFL optimization
-  * @param poolSize Number of scenarios to select (must be > 0 and <= nbScenarios)
+  * @param block_config Configuration parameters (will be copied)
+  * @param solver_config Solver configuration (ownership transferred)
+  * @param poolSize Number of scenarios to select
+  * @throws std::invalid_argument If poolSize is invalid
   */
  void set_config(BlockConfig* block_config, BlockSolverConfig* solver_config, ScenarioIndex poolSize);
 
- /**
-  * @brief Set configuration for the DiscreteScenarioSet
+ /// Set configuration using a Configuration object
+ /** Alternative way to configure scenario reduction using SMS++ Configuration objects.
   * 
-  * Supports multiple configuration patterns:
-  * - \c SimpleConfiguration<int>: \c poolSize only (baseline method)
-  * - \c SimpleConfiguration<pair<int,Configuration*>>: \c poolSize + solver config
-  * - SimpleConfiguration<pair<Configuration*, Configuration*>>: full block + solver config
+  * Supported patterns:
+  * - SimpleConfiguration<int>: Just pool size (uses baseline method)
+  * - SimpleConfiguration<pair<int,Configuration*>>: Pool size + solver
+  * - SimpleConfiguration<pair<Configuration*,Configuration*>>: Full configuration
   * 
-  * @param config The Configuration object containing scenario reduction parameters
+  * @param config The configuration object
+  * @throws std::invalid_argument If configuration type is not supported
   */
  void set_config( Configuration* config ) override;
 
@@ -390,19 +376,29 @@ public:
  * Methods to access properties and configuration parameters
  *  @{ */
 
- /// Get the total number of scenarios in the dataset
+ /// Get the total number of available scenarios
+ /** @return Number of scenarios in the full dataset */
  const ScenarioIndex & get_nbScenarios() const;
 
- /// Get the dimension of each scenario vector
+ /// Get the dimension of scenario vectors
+ /** @return Size of each scenario vector */
  const ScenarioSize & get_scenarioSize() const;
  
- /// Check if the scenario pool has been initialized
+ /// Check if a scenario pool has been selected
+ /** @return true if init_random_pool() or init_representative_pool() has been called */
  [[nodiscard]] bool is_pool_initialized() const;
  
- /// Get current scenario with its probability as a pair
+ /// Get both scenario data and probability together
+ /** Convenience method for getting scenario and its weight in one call.
+  * @return Pair of (scenario data, normalized probability) */
  [[nodiscard]] ScenarioWithProbability get_current_scenario_with_prob() const;
  
- /// Access an individual scenario value by indices
+ /// Access a specific value from any scenario
+ /** Direct access to individual scenario components.
+  * @param scenario_idx Which scenario (0 to nbScenarios-1)
+  * @param component_idx Which component of that scenario (0 to scenarioSize-1)
+  * @return The requested value
+  * @throws std::out_of_range If indices are invalid */
  [[nodiscard]] double get_scenario_value(ScenarioIndex scenario_idx, ScenarioSize component_idx) const {
      if (scenario_idx >= nbScenarios || component_idx >= scenarioSize) {
          throw std::out_of_range("Index out of range in get_scenario_value");
@@ -410,10 +406,16 @@ public:
      return scenarioSet[scenario_idx][component_idx];
  }
  
- /// Get the indices of currently selected scenarios
+ /// Get all indices of selected scenarios
+ /** Returns which scenarios were selected by init_random_pool() or init_representative_pool().
+  * @return Vector of scenario indices in the selected pool
+  * @throws std::runtime_error If pool not initialized */
  const std::vector<ScenarioIndex>& get_selected_scenarios() const;
  
- /// Get a specific selected scenario index
+ /// Get the index of a specific selected scenario
+ /** @param index Position in the selected pool (0 to poolSize-1)
+  * @return The original index of that scenario in the full dataset
+  * @throws std::out_of_range If index >= pool size */
  [[nodiscard]] ScenarioIndex get_selected_scenario_index(size_t index) const {
      if (index >= scenarioIndexes.size()) {
          throw std::out_of_range("Index out of range in get_selected_scenario_index");
@@ -421,16 +423,24 @@ public:
      return scenarioIndexes[index];
  }
 
- /// Get the \c poolSize parameter for scenario reduction
+ /// Get the configured pool size
+ /** @return Number of scenarios that will be selected */
  [[nodiscard]] ScenarioIndex get_poolSize() const { return poolSize; }
  
- /// Set the \c poolSize parameter for scenario reduction
+ /// Set how many scenarios to select
+ /** @param poolSize Number of scenarios (must be > 0 and ≤ total scenarios)
+  * @throws std::invalid_argument If poolSize is invalid */
  void set_poolSize(ScenarioIndex poolSize);
  
- /// Get the ell parameter for Wasserstein distance calculation
+ /// Get the distance power parameter
+ /** @return The ell parameter for ell-Wasserstein distance (default: 2.0) */
  [[nodiscard]] float get_ell() const { return ell; }
  
- /// Set the ell parameter for Wasserstein distance calculation
+ /// Set the distance power parameter
+ /** Controls how distances are calculated in scenario reduction.
+  * Common values: 1.0 (linear), 2.0 (quadratic, default)
+  * @param ell_value Power parameter (must be > 0)
+  * @throws std::invalid_argument If ell_value ≤ 0 */
  void set_ell(float ell_value) {
      if (ell_value <= 0) {
          throw std::invalid_argument("ell must be positive");
