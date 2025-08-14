@@ -4,12 +4,15 @@
 /** @file
  * Test suite for DiscreteScenarioSet class. 
  * 
- * Test 1 - Basic Functionality:
- * - Scenario loading and deserialization
- * - Parameter validation for init_representative_pool
- * - Random pool initialization
+ * Test 1 - Basic Functionality (Comprehensive):
+ * - Part 1: Scenario loading and deserialization
+ * - Part 2: Parameter validation (invalid poolSize)
+ * - Part 3: Random pool initialization
+ * - Part 4: Rejection sampling verification (unique selections)
+ * - Part 5: Utility methods (is_pool_initialized, set_seed, get_ell/set_ell, get_scenario_value)
+ * - Part 6: Edge cases and error conditions (single scenario, select all, access before init, weighted probabilities)
  * 
- * Test 2 - Enhanced Configuration Patterns:
+ * Test 2 - Configuration Patterns:
  * - Pattern 1: SimpleConfiguration<int> (baseline method)
  * - Pattern 2: SimpleConfiguration<pair<int, BlockSolverConfig*>> (advanced + generated BlockConfig)
  * - Pattern 3: SimpleConfiguration<pair<BlockConfig*, BlockSolverConfig*>> (full advanced)
@@ -18,13 +21,19 @@
  * - ScenarioReductionSolver algorithms (Dupacova, BestFit, FirstFit)
  * - MILPSolver implementations (CPLEX, HiGHS)
  * 
- * Test 4 - NetCDF Serialization and Deserialization:
+ * Test 4 - Serialization and Deserialization:
  * - DiscreteScenarioSet persistence with scenario reduction configuration
  * - Full serialization/deserialization round-trip with solver configs
  * - Deserialization with various configurations (no config, poolSize only, poolSize+ell)
  * - Complete scenario data persistence and restoration
  * - BlockConfig and BlockSolverConfig serialization
  * - Invalid poolSize value handling during deserialization
+ * 
+ * Test 5 - Iteration and Span-based Getters:
+ * - Full iteration through selected scenarios
+ * - Span-based getters (get_selected_scenarios, get_pool_weights, get_normalized_weights)
+ * - Probability normalization verification
+ * - Index validation
  * 
  * \author Benoît Tran \n
  *         Dipartimento di Informatica \n
@@ -45,6 +54,8 @@
 #include <chrono>    // std::chrono for timing
 #include <iomanip>   // std::setprecision 
 #include <cmath>     // std::abs, std::sqrt
+#include <set>       // std::set for uniqueness testing
+#include <span>      // std::span for C++20 features
 
 /*--------------------------------------------------------------------------*/
 /*------------------------------- USING ------------------------------------*/
@@ -272,6 +283,197 @@ TestResult test_basic_functionality() {
             return {false, "Invalid probability: " + to_string(prob)};
         }
         
+        // Part 4: Test rejection sampling (random pool produces unique selections)
+        // Create a larger dataset for testing
+        auto dss_large = load_test_scenarios(100, 10);
+        dss_large->set_seed(42);  // For reproducibility
+        
+        // Select 50 scenarios using random pool (uses rejection sampling internally)
+        dss_large->init_random_pool(50);
+        
+        auto selected = dss_large->get_selected_scenarios();
+        if (selected.size() != 50) {
+            return {false, "Random pool selection size mismatch: expected 50, got " + to_string(selected.size())};
+        }
+        
+        // Verify all selected indices are unique (key property of rejection sampling)
+        set<ScenarioGenerator::ScenarioIndex> unique_indices(selected.begin(), selected.end());
+        if (unique_indices.size() != selected.size()) {
+            return {false, "Random pool produced duplicate indices (rejection sampling failed)"};
+        }
+        
+        // Verify all indices are valid
+        for (auto idx : selected) {
+            if (idx >= 100) {
+                return {false, "Invalid scenario index: " + to_string(idx)};
+            }
+        }
+        
+        // Part 5: Test utility methods
+        // Test is_pool_initialized
+        auto dss_util = load_test_scenarios(10, 4);
+        if (dss_util->is_pool_initialized()) {
+            return {false, "Pool should not be initialized initially"};
+        }
+        
+        dss_util->init_random_pool(5);
+        if (!dss_util->is_pool_initialized()) {
+            return {false, "Pool should be initialized after init_random_pool"};
+        }
+        
+        // Test set_seed for reproducibility
+        auto dss1_seed = load_test_scenarios(10, 4);
+        auto dss2_seed = load_test_scenarios(10, 4);
+        
+        dss1_seed->set_seed(12345);
+        dss2_seed->set_seed(12345);
+        
+        dss1_seed->init_random_pool(5);
+        dss2_seed->init_random_pool(5);
+        
+        auto indices1 = dss1_seed->get_selected_scenarios();
+        auto indices2 = dss2_seed->get_selected_scenarios();
+        
+        bool same_selection = true;
+        for (size_t i = 0; i < indices1.size(); ++i) {
+            if (indices1[i] != indices2[i]) {
+                same_selection = false;
+                break;
+            }
+        }
+        
+        if (!same_selection) {
+            return {false, "Same seed should produce same random selection"};
+        }
+        
+        // Test get_ell and set_ell
+        float original_ell = dss->get_ell();
+        if (abs(original_ell - 2.0f) > 1e-6) {
+            return {false, "Default ell should be 2.0"};
+        }
+        
+        dss->set_ell(3.0f);
+        if (abs(dss->get_ell() - 3.0f) > 1e-6) {
+            return {false, "set_ell didn't update value correctly"};
+        }
+        
+        // Test invalid ell
+        try {
+            dss->set_ell(-1.0f);
+            return {false, "Should throw for negative ell"};
+        } catch (const invalid_argument&) {
+            // Expected
+        }
+        
+        // Test get_scenario_value direct access
+        double value = dss->get_scenario_value(0, 0);
+        if (isnan(value) || isinf(value)) {
+            return {false, "Invalid scenario value"};
+        }
+        
+        // Test out of bounds
+        try {
+            (void)dss->get_scenario_value(100, 0);  // Explicitly discard [[nodiscard]] result
+            return {false, "Should throw for out-of-bounds scenario index"};
+        } catch (const out_of_range&) {
+            // Expected
+        }
+        
+        try {
+            (void)dss->get_scenario_value(0, 100);  // Explicitly discard [[nodiscard]] result
+            return {false, "Should throw for out-of-bounds component index"};
+        } catch (const out_of_range&) {
+            // Expected
+        }
+        
+        // Part 6: Edge cases and error conditions
+        // Test single scenario
+        auto dss_single = load_test_scenarios(1, 3);
+        dss_single->init_random_pool(1);
+        
+        // After init, we're positioned at the first (and only) scenario
+        // next_scenario() should return false as there's no next
+        if (dss_single->next_scenario()) {
+            return {false, "Single scenario pool should not have next"};
+        }
+        
+        // Test select all scenarios
+        auto dss_all = load_test_scenarios(5, 3);
+        dss_all->init_random_pool(5);
+        
+        int count = 1; // Start at 1 for current scenario
+        while (dss_all->next_scenario()) {
+            count++;
+        }
+        
+        if (count != 5) {
+            return {false, "Should iterate through all 5 scenarios"};
+        }
+        
+        // Test error conditions - access before initialization
+        auto dss_uninit = load_test_scenarios(10, 4);
+        
+        try {
+            (void)dss_uninit->get_selected_scenarios();  // Explicitly discard [[nodiscard]] result
+            return {false, "Should throw when accessing selected scenarios before init"};
+        } catch (const runtime_error&) {
+            // Expected
+        }
+        
+        try {
+            (void)dss_uninit->get_normalized_weights();  // Explicitly discard [[nodiscard]] result
+            return {false, "Should throw when accessing normalized weights before init"};
+        } catch (const runtime_error&) {
+            // Expected
+        }
+        
+        // Test weighted vs uniform probabilities
+        auto dss_weighted = make_unique<DiscreteScenarioSet>();
+        
+        // Create temporary netCDF file with weighted scenarios
+        string temp_file = "test_weighted_" + to_string(chrono::steady_clock::now().time_since_epoch().count()) + ".nc";
+        
+        try {
+            {
+                netCDF::NcFile file(temp_file, netCDF::NcFile::replace);
+                auto group = file.addGroup("scenarios");
+                
+                group.addDim("NumberScenarios", 5);
+                group.addDim("ScenarioSize", 2);
+                
+                auto scenarios_var = group.addVar("Scenarios", netCDF::ncDouble, 
+                                                 {group.getDim("NumberScenarios"), 
+                                                  group.getDim("ScenarioSize")});
+                
+                // Add non-uniform weights
+                auto weights_var = group.addVar("poolWeights", netCDF::ncDouble,
+                                               group.getDim("NumberScenarios"));
+                
+                double scenario_data[5][2] = {{1,2}, {3,4}, {5,6}, {7,8}, {9,10}};
+                double weights[5] = {0.1, 0.2, 0.3, 0.3, 0.1}; // Non-uniform, sum = 1.0
+                
+                scenarios_var.putVar(scenario_data);
+                weights_var.putVar(weights);
+                
+                dss_weighted->deserialize(group);
+            }
+        } catch (...) {
+            remove(temp_file.c_str());
+            throw;
+        }
+        remove(temp_file.c_str());
+        
+        // Test that weights are correctly loaded
+        auto loaded_weights = dss_weighted->get_pool_weights();
+        if (loaded_weights.size() != 5) {
+            return {false, "Weights not loaded correctly"};
+        }
+        
+        // Verify non-uniform distribution
+        if (abs(loaded_weights[0] - 0.1) > 1e-6 || abs(loaded_weights[2] - 0.3) > 1e-6) {
+            return {false, "Non-uniform weights not preserved"};
+        }
+        
         return {true, "Basic functionality tests passed"};
         
     } catch (const exception& e) {
@@ -281,7 +483,7 @@ TestResult test_basic_functionality() {
 
 REGISTER_TEST("Basic Functionality", test_basic_functionality);
 
-// Test 3: Configuration Patterns
+// Test 2: Configuration Patterns
 TestResult test_configuration_patterns() {
     try {
         // Test Pattern 1: SimpleConfiguration<int> - baseline method
@@ -323,7 +525,7 @@ TestResult test_configuration_patterns() {
             // Test that advanced scenario reduction works
             dss->init_representative_pool(6);
             if (dss->get_poolSize() != 6) {
-                return {false, "Pattern 2: advanced method failed (expected 6 scenarios, got " + to_string(dss->get_poolSize()) + ")"};
+                return {false, "Pattern 2: failed (expected 6 scenarios, got " + to_string(dss->get_poolSize()) + ")"};
             }
             
             // Note: Do not delete solver_config - DiscreteScenarioSet keeps a reference to it
@@ -351,24 +553,24 @@ TestResult test_configuration_patterns() {
             dss->init_representative_pool(7);
             if (dss->get_poolSize() != 7) {
                 delete block_config;  // BlockConfig is cloned, so we can delete the original
-                return {false, "Pattern 3: full advanced method failed (expected 7 scenarios, got " + to_string(dss->get_poolSize()) + ")"};
+                return {false, "Pattern 3: failed (expected 7 scenarios, got " + to_string(dss->get_poolSize()) + ")"};
             }
             
             delete block_config;  // BlockConfig is cloned, so we can delete the original
             // Note: Do not delete solver_config - DiscreteScenarioSet keeps a reference to it
         }
         
-        return {true, "All three enhanced configuration patterns tested successfully"};
+        return {true, "All three configuration patterns tested successfully"};
         
     } catch (const exception& e) {
-        return {false, string("Enhanced patterns test failed: ") + e.what()};
+        return {false, string("Patterns test failed: ") + e.what()};
     }
 }
 
 REGISTER_TEST("Configuration Patterns", test_configuration_patterns);
 
 
-// Test 4: Scenario reduction algorithms
+// Test 3: Scenario reduction algorithms
 TestResult test_scenario_reduction_algorithms() {
     try {
         const int num_scenarios = 15;
@@ -415,7 +617,7 @@ TestResult test_scenario_reduction_algorithms() {
 
 REGISTER_TEST("Scenario Reduction Algorithms", test_scenario_reduction_algorithms);
 
-// Test 5: Serialization and deserialization
+// Test 4: Serialization and deserialization
 TestResult test_serialization_deserialization() {
     try {
         // Part 1: Basic serialization with config
@@ -690,6 +892,81 @@ TestResult test_serialization_deserialization() {
 }
 
 REGISTER_TEST("Serialization and Deserialization", test_serialization_deserialization);
+
+// Test 5: Iteration and Span-based Getters
+TestResult test_iteration_and_spans() {
+    try {
+        auto dss = load_test_scenarios(15, 5);
+        
+        // Initialize pool for testing
+        dss->init_random_pool(8);
+        
+        // Part 1: Test full iteration through selected scenarios
+        int iteration_count = 0;
+        double total_prob = 0.0;
+        
+        do {
+            auto scenario = dss->get_current_scenario();
+            double prob = dss->get_current_scenario_probability();
+            
+            if (scenario.size() != 5) {
+                return {false, "Scenario size mismatch during iteration"};
+            }
+            
+            total_prob += prob;
+            iteration_count++;
+        } while (dss->next_scenario());
+        
+        if (iteration_count != 8) {
+            return {false, "Expected 8 iterations, got " + to_string(iteration_count)};
+        }
+        
+        if (abs(total_prob - 1.0) > 1e-6) {
+            return {false, "Probabilities don't sum to 1.0, got " + to_string(total_prob)};
+        }
+        
+        // Part 2: Test span-based getters
+        auto selected_indices = dss->get_selected_scenarios();
+        if (selected_indices.size() != 8) {
+            return {false, "Selected scenarios span size mismatch"};
+        }
+        
+        // Verify indices are valid
+        for (auto idx : selected_indices) {
+            if (idx >= 15) {
+                return {false, "Invalid scenario index in selection: " + to_string(idx)};
+            }
+        }
+        
+        auto pool_weights = dss->get_pool_weights();
+        if (pool_weights.size() != 15) {
+            return {false, "Pool weights span should have all scenarios"};
+        }
+        
+        auto normalized_weights = dss->get_normalized_weights();
+        if (normalized_weights.size() != 8) {
+            return {false, "Normalized weights span size mismatch"};
+        }
+        
+        // Verify normalized weights sum to 1
+        double norm_sum = 0.0;
+        for (auto w : normalized_weights) {
+            norm_sum += w;
+        }
+        if (abs(norm_sum - 1.0) > 1e-6) {
+            return {false, "Normalized weights don't sum to 1.0"};
+        }
+        
+        return {true, "Iteration and span tests passed"};
+        
+    } catch (const exception& e) {
+        return {false, string("Exception: ") + e.what()};
+    }
+}
+
+REGISTER_TEST("Iteration and Spans", test_iteration_and_spans);
+
+
 
 /*--------------------------------------------------------------------------*/
 /*-------------------------------- MAIN ------------------------------------*/
