@@ -28,9 +28,11 @@
 #include "Solver.h"
 
 #include <chrono>   // For timestamp generation
+#include <cmath>    // For std::abs
 #include <cstdio>   // For std::remove
 #include <numeric>  // For std::accumulate (not in SMSTypedefs)
 #include <unordered_set>  // For std::unordered_set (rejection sampling)
+#include <unordered_map> // For std::unordered_map (weight aggregation)
 
 using namespace SMSpp_di_unipi_it;
 
@@ -125,7 +127,7 @@ static std::tuple<CapacitatedFacilityLocationBlock::DVector,
                   CapacitatedFacilityLocationBlock::CVector,
                   CapacitatedFacilityLocationBlock::DVector>
 create_cfl_problem_data(DiscreteScenarioSet::ScenarioIndex n_scenarios,
-                       const std::vector<double>& poolWeights)
+                       const std::vector<double>& setWeights)
 {
   CapacitatedFacilityLocationBlock::DVector capacities(n_scenarios);
   CapacitatedFacilityLocationBlock::CVector fixed_costs(n_scenarios);
@@ -135,26 +137,33 @@ create_cfl_problem_data(DiscreteScenarioSet::ScenarioIndex n_scenarios,
   for (DiscreteScenarioSet::ScenarioIndex i = 0; i < n_scenarios; ++i) {
     capacities[i] = 1.0;      // Capacities = weights of the reduced distribution
     fixed_costs[i] = 0.0;     // No fixed cost in scenario reduction
-    demands[i] = poolWeights[i];  // Demand equals weight
+    demands[i] = setWeights[i];  // Demand equals weight
   }
   
   return std::make_tuple(std::move(capacities), std::move(fixed_costs), std::move(demands));
 }
 
-// Extract selected scenarios from CFL block results
-static void extract_scenarios_from_cfl_block(const CapacitatedFacilityLocationBlock* cflBlock,
-                                             DiscreteScenarioSet::ScenarioIndex n_scenarios,
-                                             std::vector<DiscreteScenarioSet::ScenarioIndex>& scenarioIndexes)
+// Extract selected scenarios and assignments from CFL block results
+static void extract_scenarios_and_assignments_from_cfl_block(
+    const CapacitatedFacilityLocationBlock* cflBlock,
+    DiscreteScenarioSet::ScenarioIndex n_scenarios,
+    std::vector<DiscreteScenarioSet::ScenarioIndex>& scenarioIndexes,
+    std::vector<DiscreteScenarioSet::ScenarioIndex>& scenario_assignments)
 {
   #ifndef NDEBUG
-  std::cout << "DEBUG [extract_scenarios_from_cfl_block]: Starting extraction from CFL block" << std::endl;
+  std::cout << "DEBUG [extract_scenarios_and_assignments_from_cfl_block]: Starting extraction from CFL block" << std::endl;
   #endif
   
-  // Clear existing selection and reserve space (worst case: all scenarios selected)
+  // Clear existing selection and reserve space
   scenarioIndexes.clear();
   scenarioIndexes.reserve(n_scenarios);
+  
+  // Initialize assignments vector
+  scenario_assignments.clear();
+  scenario_assignments.resize(n_scenarios);
     
-  // Read variable values directly from the block variables
+  // identify open facilities (selected scenarios)
+  std::vector<bool> is_open(n_scenarios, false);
   for (DiscreteScenarioSet::ScenarioIndex i = 0; i < n_scenarios; ++i) {
     // Get the y variable for facility i
     const auto* y_var = cflBlock->get_y(i);
@@ -165,18 +174,59 @@ static void extract_scenarios_from_cfl_block(const CapacitatedFacilityLocationBl
     // Get value from the variable directly
     double y_value = y_var->get_value();
     #ifndef NDEBUG
-    std::cout << "DEBUG [extract_scenarios_from_cfl_block]: y[" << i << "] = " << y_value << std::endl;
+    std::cout << "DEBUG [extract_scenarios_and_assignments_from_cfl_block]: y[" << i << "] = " << y_value << std::endl;
     #endif
     
     // Check if facility i is open (y[i] > 0.5)
     if (y_value > 0.5) {
       scenarioIndexes.push_back(i);
+      is_open[i] = true;
     }
   }
   
+  // determine assignments (which facility serves each customer)
+  // In scenario reduction with unsplittable demand, each scenario is assigned to exactly one representative
+  for (DiscreteScenarioSet::ScenarioIndex customer = 0; customer < n_scenarios; ++customer) {
+    DiscreteScenarioSet::ScenarioIndex assigned_facility = 0;
+    bool found_assignment = false;
+    
+    // Find the single facility this customer is assigned to (x[facility][customer] = 1.0)
+    for (DiscreteScenarioSet::ScenarioIndex facility = 0; facility < n_scenarios; ++facility) {
+      if (!is_open[facility]) continue;
+      
+      // Get the x variable for assignment of customer to facility
+      const auto* x_var = cflBlock->get_x(facility, customer);
+      if (!x_var) continue;
+      
+      double x_value = x_var->get_value();
+      
+      // With unsplittable demand, x should be either 0 or 1
+      if (x_value > 0.5) {  // Consider values > 0.5 as 1 (for numerical tolerance)
+        assigned_facility = facility;
+        found_assignment = true;
+        break;  // Found the single assignment, no need to check others
+      }
+    }
+    
+    if (!found_assignment) {
+      // This shouldn't happen if the solver correctly sets x variables
+      throw std::runtime_error("No assignment found for scenario " + std::to_string(customer) + 
+                               ". The solver may not have set x variables correctly.");
+    }
+    
+    scenario_assignments[customer] = assigned_facility;
+    
+    #ifndef NDEBUG
+    if (found_assignment && customer < 10) {  // Only print first 10 for debugging
+      std::cout << "DEBUG [extract_scenarios_and_assignments_from_cfl_block]: Scenario " << customer 
+                << " assigned to representative " << assigned_facility << std::endl;
+    }
+    #endif
+  }
+  
   #ifndef NDEBUG
-  std::cout << "DEBUG [extract_scenarios_from_cfl_block]: Selected " << scenarioIndexes.size() 
-            << " scenarios: ";
+  std::cout << "DEBUG [extract_scenarios_and_assignments_from_cfl_block]: Selected " << scenarioIndexes.size() 
+            << " representative scenarios: ";
   for (auto idx : scenarioIndexes) std::cout << idx << " ";
   std::cout << std::endl;
   #endif
@@ -211,9 +261,9 @@ void DiscreteScenarioSet::empty_pool()
   scenarioIndexes.clear();
   scenarioIndexes.shrink_to_fit();
   
-  // Clear normalized weights and free memory
-  normalizedPoolWeights.clear();
-  normalizedPoolWeights.shrink_to_fit();
+  // Clear pool weights and free memory
+  poolWeights.clear();
+  poolWeights.shrink_to_fit();
   
   // Reset pool state (poolSize is configuration, not actual size)
   currentScenarioIndex = 0;
@@ -363,7 +413,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
 
   // Clear existing data
   scenarioSet.resize(boost::extents[0][0]);
-  poolWeights.clear();
+  setWeights.clear();
   scenarioIndexes.clear();
   
   // Clean up any existing configuration
@@ -388,23 +438,23 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   std::vector< std::size_t > sizes = { nbScenarios, scenarioSize };
   ::deserialize( group , "Scenarios" , sizes , scenarioSet , true , false );
 
-  // Reserve space for poolWeights before deserializing
-  poolWeights.reserve(nbScenarios);
+  // Reserve space for setWeights before deserializing
+  setWeights.reserve(nbScenarios);
   
   // Deserialize probabilities (optional, default to uniform)
-  bool probsLoaded = ::deserialize(group, "poolWeights", nbScenarios, poolWeights);
+  bool probsLoaded = ::deserialize(group, "poolWeights", nbScenarios, setWeights);
   
   if (!probsLoaded) {
     // No probabilities in file, create uniform weights
-    poolWeights.assign(nbScenarios, 1.0 / nbScenarios);
-  } else if (poolWeights.size() != nbScenarios) {
+    setWeights.assign(nbScenarios, 1.0 / nbScenarios);
+  } else if (setWeights.size() != nbScenarios) {
     // Probabilities were loaded but have wrong size - this is an error
-    throw std::invalid_argument("poolWeights size (" + std::to_string(poolWeights.size()) + 
+    throw std::invalid_argument("poolWeights size (" + std::to_string(setWeights.size()) + 
                                 ") does not match NumberScenarios (" + std::to_string(nbScenarios) + ")");
   }
   
   // Validate probabilities sum to approximately 1.0
-  double sum = std::accumulate(poolWeights.begin(), poolWeights.end(), 0.0);
+  double sum = std::accumulate(setWeights.begin(), setWeights.end(), 0.0);
   if (std::abs(sum - 1.0) > 1e-6) {
     throw std::invalid_argument("Scenario probabilities must sum to 1.0, got: " + std::to_string(sum));
   }
@@ -547,7 +597,7 @@ void DiscreteScenarioSet::serialize(netCDF::NcGroup& group) const
   
   // Serialize probabilities
   auto probsVar = group.addVar("poolWeights", netCDF::NcDouble(), nbScenariosDim);
-  probsVar.putVar(poolWeights.data());
+  probsVar.putVar(setWeights.data());
   
   // Serialize scenario reduction configuration if it exists
   // We serialize if we have at least poolSize or BlockConfig or BlockSolverConfig
@@ -592,11 +642,11 @@ void DiscreteScenarioSet::init_random_pool(ScenarioIndex pool_size)
   
   // Generate random indices for the pool using weighted sampling
   if (pool_size > 0) {
-    // Reserve space for normalized weights that will be populated by update_pool_weights
-    normalizedPoolWeights.reserve(pool_size);
+    // Reserve space for pool weights that will be populated by update_pool_weights
+    poolWeights.reserve(pool_size);
     
     // Generate the random subset (already reserves internally)
-    generateWeightedRandomSubset(nbScenarios, pool_size, poolWeights, scenarioIndexes, rng);
+    generateWeightedRandomSubset(nbScenarios, pool_size, setWeights, scenarioIndexes, rng);
     
     update_pool_weights();
       
@@ -624,7 +674,7 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_si
     ScenarioSize scenario_size = scenarioSize;
     
     // Create CFL problem data
-    auto [capacities, fixed_costs, demands] = create_cfl_problem_data(n_scenarios, poolWeights);
+    auto [capacities, fixed_costs, demands] = create_cfl_problem_data(n_scenarios, setWeights);
     
     // Compute the transport cost matrix with ell-powered distances
     auto transport_costs = compute_transport_cost_matrix(n_scenarios, scenario_size, this->ell);
@@ -637,7 +687,7 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_si
         std::move(fixed_costs),
         std::move(demands),
         std::move(transport_costs),
-        false,             // Not a balanced problem
+        true,               // unsplittable: each scenario assigned to exactly one representative
         target_pool_size   // Maximum number of facilities to open
     );
     
@@ -683,16 +733,21 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_si
     // Ensure solver solution is written to CFL Block variables
     solver->get_var_solution();
     
-    // Extract the solution from the CFL block
-    extract_scenarios_from_cfl_block(cflBlock.get(), n_scenarios, scenarioIndexes);
+    // Extract the solution from the CFL block (including assignments)
+    std::vector<ScenarioIndex> scenario_assignments;
+    extract_scenarios_and_assignments_from_cfl_block(cflBlock.get(), n_scenarios, 
+                                                     scenarioIndexes, scenario_assignments);
+    
+    // Update weights using assignment information
+    update_pool_weights_with_assignments(scenario_assignments);
   } else {
     // No solver config - use baseline method (select top target_pool_size by weight)
     // BlockConfig alone is not useful for baseline selection
     apply_baseline_selection(target_pool_size);
+    
+    // For baseline selection, use simple renormalization
+    update_pool_weights();
   }
-  
-  // Update pool weights and finalize
-  update_pool_weights();
   
   // Reset current index (poolSize remains as configured)
   currentScenarioIndex = 0;
@@ -736,11 +791,11 @@ DiscreteScenarioSet::~DiscreteScenarioSet() {
   scenarioIndexes.clear();
   scenarioIndexes.shrink_to_fit();
   
+  setWeights.clear();
+  setWeights.shrink_to_fit();
+  
   poolWeights.clear();
   poolWeights.shrink_to_fit();
-  
-  normalizedPoolWeights.clear();
-  normalizedPoolWeights.shrink_to_fit();
   
   // Release the configuration objects following SMS++ ownership patterns
   
@@ -810,7 +865,7 @@ void DiscreteScenarioSet::apply_baseline_selection(ScenarioIndex target_size)
   indexed_weights.reserve(nbScenarios);
   
   for (ScenarioIndex i = 0; i < nbScenarios; ++i) {
-    double weight = (i < poolWeights.size()) ? poolWeights[i] : 1.0 / nbScenarios;
+    double weight = (i < setWeights.size()) ? setWeights[i] : 1.0 / nbScenarios;
     indexed_weights.emplace_back(i, weight);
   }
   
@@ -835,28 +890,88 @@ void DiscreteScenarioSet::apply_baseline_selection(ScenarioIndex target_size)
   #endif
 }
 
-// Update pool weights after scenario selection
+// Update pool weights after scenario selection (for random pool)
 void DiscreteScenarioSet::update_pool_weights()
 {
   // Calculate sum of weights of selected scenarios for normalization
   sumPoolWeights = 0.0;
   for (const auto& idx : scenarioIndexes) {
-    sumPoolWeights += poolWeights[idx];
+    sumPoolWeights += setWeights[idx];
   }
   
-  // Populate normalized weights
-  normalizedPoolWeights.clear();
-  normalizedPoolWeights.reserve(scenarioIndexes.size());
+  // Populate pool weights with renormalized values
+  poolWeights.clear();
+  poolWeights.reserve(scenarioIndexes.size());
   
   if (sumPoolWeights > 0.0) {
     for (const auto& idx : scenarioIndexes) {
-      normalizedPoolWeights.push_back(poolWeights[idx] / sumPoolWeights);
+      poolWeights.push_back(setWeights[idx] / sumPoolWeights);
     }
   } else {
     // Fallback to uniform if all weights are zero
     double uniform_weight = 1.0 / scenarioIndexes.size();
-    normalizedPoolWeights.assign(scenarioIndexes.size(), uniform_weight);
+    poolWeights.assign(scenarioIndexes.size(), uniform_weight);
   }
+}
+
+// Update pool weights with assignment information (for representative pool)
+void DiscreteScenarioSet::update_pool_weights_with_assignments(
+    const std::vector<ScenarioIndex>& scenario_assignments)
+{
+  if (scenario_assignments.size() != nbScenarios) {
+    throw std::invalid_argument("scenario_assignments size must equal nbScenarios");
+  }
+  
+  // Create a map from representative index to its position in scenarioIndexes
+  std::unordered_map<ScenarioIndex, size_t> repr_to_pos;
+  for (size_t pos = 0; pos < scenarioIndexes.size(); ++pos) {
+    repr_to_pos[scenarioIndexes[pos]] = pos;
+  }
+  
+  // Initialize aggregated weights for each representative
+  std::vector<double> aggregated_weights(scenarioIndexes.size(), 0.0);
+  
+  // Sum weights of all scenarios assigned to each representative
+  for (ScenarioIndex i = 0; i < nbScenarios; ++i) {
+    ScenarioIndex assigned_repr = scenario_assignments[i];
+    
+    // Find the position of this representative in scenarioIndexes
+    auto it = repr_to_pos.find(assigned_repr);
+    if (it != repr_to_pos.end()) {
+      // Add this scenario's weight to its representative
+      aggregated_weights[it->second] += setWeights[i];
+    } else {
+      // This shouldn't happen if assignments are correct
+      throw std::runtime_error("Scenario " + std::to_string(i) + 
+                               " assigned to non-selected representative " + 
+                               std::to_string(assigned_repr));
+    }
+  }
+  
+  // Calculate total weight (should be ~1.0 if all scenarios are assigned)
+  sumPoolWeights = std::accumulate(aggregated_weights.begin(), aggregated_weights.end(), 0.0);
+  
+  // Populate pool weights with aggregated and normalized values
+  poolWeights.clear();
+  poolWeights.reserve(scenarioIndexes.size());
+  
+  if (sumPoolWeights > 0.0) {
+    for (const auto& weight : aggregated_weights) {
+      poolWeights.push_back(weight / sumPoolWeights);
+    }
+  } else {
+    // Fallback to uniform if all weights are zero
+    double uniform_weight = 1.0 / scenarioIndexes.size();
+    poolWeights.assign(scenarioIndexes.size(), uniform_weight);
+  }
+  
+  #ifndef NDEBUG
+  std::cout << "DEBUG [update_pool_weights_with_assignments]: Aggregated weights:" << std::endl;
+  for (size_t i = 0; i < scenarioIndexes.size(); ++i) {
+    std::cout << "  Representative " << scenarioIndexes[i] 
+              << " has aggregated weight " << poolWeights[i] << std::endl;
+  }
+  #endif
 }
 
 /*--------------------------------------------------------------------------*/

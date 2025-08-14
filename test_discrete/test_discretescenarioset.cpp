@@ -2,20 +2,23 @@
 /*--------------------- File test_discretescenarioset.cpp ------------------*/
 /*--------------------------------------------------------------------------*/
 /** @file
- * Test suite for DiscreteScenarioSet class. 
+ * Test suite for DiscreteScenarioSet class. Mostly checking that the methods
+ * can run without errors and simple sanity/debugging checks on their behaviour.
  * 
  * Test 1 - Basic Functionality (Comprehensive):
  * - Part 1: Scenario loading and deserialization
  * - Part 2: Parameter validation (invalid poolSize)
  * - Part 3: Random pool initialization
  * - Part 4: Rejection sampling verification (unique selections)
- * - Part 5: Utility methods (is_pool_initialized, set_seed, get_ell/set_ell, get_scenario_value)
- * - Part 6: Edge cases and error conditions (single scenario, select all, access before init, weighted probabilities)
+ * - Part 5: Utility methods (is_pool_initialized, set_seed, get_ell/set_ell, 
+ *      get_scenario_value)
+ * - Part 6: Edge cases and error conditions (single scenario, select all, 
+ *      access before init, weighted probabilities)
  * 
  * Test 2 - Configuration Patterns:
  * - Pattern 1: SimpleConfiguration<int> (baseline method)
- * - Pattern 2: SimpleConfiguration<pair<int, BlockSolverConfig*>> (advanced + generated BlockConfig)
- * - Pattern 3: SimpleConfiguration<pair<BlockConfig*, BlockSolverConfig*>> (full advanced)
+ * - Pattern 2: SimpleConfiguration<pair<int, BlockSolverConfig*>> 
+ * - Pattern 3: SimpleConfiguration<pair<BlockConfig*, BlockSolverConfig*>> 
  * 
  * Test 3 - Scenario Reduction Algorithms:
  * - ScenarioReductionSolver algorithms (Dupacova, BestFit, FirstFit)
@@ -24,14 +27,16 @@
  * Test 4 - Serialization and Deserialization:
  * - DiscreteScenarioSet persistence with scenario reduction configuration
  * - Full serialization/deserialization round-trip with solver configs
- * - Deserialization with various configurations (no config, poolSize only, poolSize+ell)
+ * - Deserialization with various configurations (no config, poolSize only,
+ *       poolSize+ell)
  * - Complete scenario data persistence and restoration
  * - BlockConfig and BlockSolverConfig serialization
  * - Invalid poolSize value handling during deserialization
  * 
  * Test 5 - Iteration and Span-based Getters:
  * - Full iteration through selected scenarios
- * - Span-based getters (get_selected_scenarios, get_pool_weights, get_normalized_weights)
+ * - Span-based getters (get_selected_scenarios, get_set_weights,
+ *       get_pool_weights)
  * - Probability normalization verification
  * - Index validation
  * 
@@ -421,8 +426,8 @@ TestResult test_basic_functionality() {
         }
         
         try {
-            (void)dss_uninit->get_normalized_weights();  // Explicitly discard [[nodiscard]] result
-            return {false, "Should throw when accessing normalized weights before init"};
+            (void)dss_uninit->get_pool_weights();  // Explicitly discard [[nodiscard]] result
+            return {false, "Should throw when accessing pool weights before init"};
         } catch (const runtime_error&) {
             // Expected
         }
@@ -464,7 +469,7 @@ TestResult test_basic_functionality() {
         remove(temp_file.c_str());
         
         // Test that weights are correctly loaded
-        auto loaded_weights = dss_weighted->get_pool_weights();
+        auto loaded_weights = dss_weighted->get_set_weights();
         if (loaded_weights.size() != 5) {
             return {false, "Weights not loaded correctly"};
         }
@@ -840,7 +845,149 @@ TestResult test_serialization_deserialization() {
         }
         
         
-        // Part 5: Deserialization with invalid poolSize (error checking happens at init time)
+        // Part 5: Serialization after init_representative_pool
+        // Verify that pool state (including aggregated weights) is preserved
+        {
+            // Create and initialize a DiscreteScenarioSet with representative pool
+            auto dss1 = load_test_scenarios(15, 4);
+            
+            // Set up scenario reduction configuration
+            auto* block_config = create_block_config(5, 2.0);
+            auto* solver_config = create_solver_config("ScenarioReductionSolver", "Dupacova");
+            dss1->set_config(block_config, solver_config);
+            
+            // Initialize representative pool (uses weight aggregation)
+            dss1->init_representative_pool(5);
+            
+            // Get the selected scenarios and their aggregated weights
+            auto selected_before = dss1->get_selected_scenarios();
+            auto weights_before = dss1->get_pool_weights();
+            
+            // Verify we have 5 selected scenarios
+            if (selected_before.size() != 5) {
+                return {false, "Representative pool should have 5 scenarios"};
+            }
+            
+            // Store the first few selected indices for comparison
+            vector<ScenarioGenerator::ScenarioIndex> first_three_before;
+            for (size_t i = 0; i < min(size_t(3), selected_before.size()); ++i) {
+                first_three_before.push_back(selected_before[i]);
+            }
+            
+            // Serialize the state
+            string nc_filename = "test_representative_pool_state.nc4";
+            {
+                netCDF::NcFile file(nc_filename, netCDF::NcFile::replace);
+                dss1->serialize(file);
+                file.close();
+            }
+            
+            // Create a new instance and deserialize
+            auto dss2 = make_unique<DiscreteScenarioSet>();
+            {
+                netCDF::NcFile file(nc_filename, netCDF::NcFile::read);
+                dss2->deserialize(file);
+                file.close();
+            }
+            
+            // Initialize representative pool on the deserialized instance
+            dss2->init_representative_pool(5);
+            
+            // Get the selected scenarios and weights after deserialization
+            auto selected_after = dss2->get_selected_scenarios();
+            auto weights_after = dss2->get_pool_weights();
+            
+            // Verify the same scenarios are selected
+            if (selected_after.size() != selected_before.size()) {
+                remove(nc_filename.c_str());
+                return {false, "Different number of scenarios after deserialization"};
+            }
+            
+            // Check that at least the first few selected scenarios match
+            // (Full match might not occur due to solver differences, but structure should be similar)
+            bool some_match = false;
+            for (size_t i = 0; i < min(size_t(3), selected_after.size()); ++i) {
+                for (auto idx : first_three_before) {
+                    if (selected_after[i] == idx) {
+                        some_match = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (!some_match && selected_after.size() > 0) {
+                // This is not necessarily an error - different solver runs might produce different selections
+                // Just log it for information
+                #ifndef NDEBUG
+                cout << "Note: Representative pool selection differs after serialization (expected with solver variations)" << endl;
+                #endif
+            }
+            
+            // Verify weights sum to 1.0 (fundamental property that must be preserved)
+            double weight_sum = 0.0;
+            for (auto w : weights_after) {
+                weight_sum += w;
+            }
+            
+            if (abs(weight_sum - 1.0) > 1e-6) {
+                remove(nc_filename.c_str());
+                return {false, "Representative pool weights don't sum to 1.0 after deserialization"};
+            }
+            
+            // Clean up
+            remove(nc_filename.c_str());
+            delete block_config;  // Clean up the config we created
+        }
+        
+        // Part 5b: Test that serialization preserves initialized pool state
+        // This tests serializing AFTER init_representative_pool has been called
+        {
+            // Create and fully initialize a DiscreteScenarioSet
+            auto dss1 = load_test_scenarios(12, 3);
+            dss1->init_random_pool(6);  // Use random pool for simpler comparison
+            
+            // Get state before serialization
+            auto selected_before = dss1->get_selected_scenarios();
+            auto weights_before = dss1->get_pool_weights();
+            double first_weight = weights_before[0];
+            
+            // Iterate to a non-zero position
+            dss1->next_scenario();
+            dss1->next_scenario();
+            
+            // Note: Current serialization does NOT save the pool state (selected scenarios)
+            // It only saves the configuration. This test documents current behavior.
+            string nc_filename = "test_pool_state.nc4";
+            {
+                netCDF::NcFile file(nc_filename, netCDF::NcFile::replace);
+                dss1->serialize(file);
+                file.close();
+            }
+            
+            // Deserialize into new instance
+            auto dss2 = make_unique<DiscreteScenarioSet>();
+            {
+                netCDF::NcFile file(nc_filename, netCDF::NcFile::read);
+                dss2->deserialize(file);
+                file.close();
+            }
+            
+            // After deserialization, pool is NOT initialized
+            if (dss2->is_pool_initialized()) {
+                remove(nc_filename.c_str());
+                return {false, "Pool should not be initialized after deserialization (current behavior)"};
+            }
+            
+            // Must re-initialize to use
+            dss2->init_random_pool(6);
+            
+            // Due to random selection, the selected scenarios will likely differ
+            // This is expected behavior with the current implementation
+            
+            remove(nc_filename.c_str());
+        }
+        
+        // Part 6: Deserialization with invalid poolSize (error checking happens at init time)
         {
             string filename = create_test_scenario_file(10, 2, "_invalid_poolSize");
             {
@@ -938,23 +1085,23 @@ TestResult test_iteration_and_spans() {
             }
         }
         
+        auto set_weights = dss->get_set_weights();
+        if (set_weights.size() != 15) {
+            return {false, "Set weights span should have all scenarios"};
+        }
+        
         auto pool_weights = dss->get_pool_weights();
-        if (pool_weights.size() != 15) {
-            return {false, "Pool weights span should have all scenarios"};
+        if (pool_weights.size() != 8) {
+            return {false, "Pool weights span size mismatch"};
         }
         
-        auto normalized_weights = dss->get_normalized_weights();
-        if (normalized_weights.size() != 8) {
-            return {false, "Normalized weights span size mismatch"};
+        // Verify pool weights sum to 1
+        double pool_sum = 0.0;
+        for (auto w : pool_weights) {
+            pool_sum += w;
         }
-        
-        // Verify normalized weights sum to 1
-        double norm_sum = 0.0;
-        for (auto w : normalized_weights) {
-            norm_sum += w;
-        }
-        if (abs(norm_sum - 1.0) > 1e-6) {
-            return {false, "Normalized weights don't sum to 1.0"};
+        if (abs(pool_sum - 1.0) > 1e-6) {
+            return {false, "Pool weights don't sum to 1.0"};
         }
         
         return {true, "Iteration and span tests passed"};

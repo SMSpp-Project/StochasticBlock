@@ -237,7 +237,7 @@ public:
   * @note This is the normalized weight within the pool, not the original weight
   */
  [[nodiscard]] inline double get_current_scenario_probability( void ) const override {
-   return normalizedPoolWeights[currentScenarioIndex];
+   return poolWeights[currentScenarioIndex];
  }
 
  /// Move to the next scenario in the iteration
@@ -422,23 +422,25 @@ public:
  /** @return The ell parameter for ell-Wasserstein distance (default: 2.0) */
  [[nodiscard]] float get_ell() const { return ell; }
  
- /// Get all scenario weights
- /** Returns the weights of all scenarios (not just selected ones).
-  * @return Read-only view of all scenario weights */
- [[nodiscard]] inline std::span<const double> get_pool_weights() const { 
-   return poolWeights; 
+ /// Get all scenario weights from the input set
+ /** Returns the weights of all scenarios in the input set (not just selected ones).
+  * @return Read-only view of all scenario weights from the input set */
+ [[nodiscard]] inline std::span<const double> get_set_weights() const { 
+   return setWeights; 
  }
  
- /// Get normalized weights of selected scenarios
- /** Returns the normalized weights of scenarios in the current pool.
+ /// Get weights of selected scenarios in the pool
+ /** Returns the weights of scenarios in the current pool after selection.
   * These weights sum to 1.0 and correspond to the selected scenarios.
-  * @return Read-only view of normalized weights
+  * For init_random_pool: simple renormalization of original weights
+  * For init_representative_pool: aggregated weights from assignments
+  * @return Read-only view of pool weights
   * @throws std::runtime_error If pool not initialized */
- [[nodiscard]] inline std::span<const double> get_normalized_weights() const {
+ [[nodiscard]] inline std::span<const double> get_pool_weights() const {
    if (!is_initialized) {
      throw std::runtime_error("Pool not initialized");
    }
-   return normalizedPoolWeights;
+   return poolWeights;
  }
  
  /// Set the distance power parameter
@@ -534,11 +536,11 @@ private:
    * These fields store information about scenario probabilities
  * @{ */
 
- /// Weights of scenarios in the input pool
- /** Vector containing the weights of all input scenarios
-  * (before any selection). Used to compute normalized probabilities
-  * for selected scenarios. */
- std::vector< double > poolWeights;
+ /// Weights of scenarios in the input set
+ /** Vector containing the weights of all scenarios in the input set
+  * (before any selection). These are the weights loaded from deserialization.
+  * Used as input for computing pool weights after selection. */
+ std::vector< double > setWeights;
 
 /** @name Pool weight management fields
    * These fields manage the weights and probabilities of selected scenarios
@@ -549,13 +551,14 @@ private:
   * Used as denominator when computing normalized probabilities. */
  double sumPoolWeights;
  
- /// Normalized weights of scenarios in the current pool
- /** Vector containing the normalized weights of scenarios that have been
+ /// Weights of scenarios in the selected pool
+ /** Vector containing the weights of scenarios that have been
   * selected for the current pool (via init_random_pool or init_representative_pool).
-  * These weights are computed as: <tt>poolWeights[scenario_i] / sumPoolWeights</tt>.
-  * The size of this vector equals the number of selected scenarios (\c poolSize).
+  * For random pool: renormalized original weights
+  * For representative pool: aggregated weights from assignments
+  * The size of this vector equals the number of selected scenarios.
   * This container is only populated after pool initialization. */
- std::vector< double > normalizedPoolWeights;
+ std::vector< double > poolWeights;
 
 /** @} ---------------------------------------------------------------------*/
 /*-------------------- HELPER METHODS OF THE CLASS -------------------------*/
@@ -599,18 +602,38 @@ private:
                                           const Eigen::VectorXd& scenario2,
                                           float ell) const;
 
- /// Update pool weights after scenario selection
- /** Computes \c sumPoolWeights and populates \c normalizedPoolWeights based on 
-  * the selected scenarios in \c scenarioIndexes after either \c init_random_pool() 
-  * or \c init_representative_pool() have been used.
+ /// Update pool weights after scenario selection (for random pool)
+ /** Computes \c sumPoolWeights and populates \c poolWeights based on 
+  * the selected scenarios in \c scenarioIndexes after \c init_random_pool().
   * 
   * This method:
   * 1. Calculates the sum of weights for all selected scenarios (\c sumPoolWeights)
-  * 2. Populates the \c normalizedPoolWeights container with normalized probabilities
-  *    computed as: <tt>poolWeights[scenario_i] / sumPoolWeights</tt>
+  * 2. Populates the \c poolWeights container with normalized probabilities
+  *    computed as: <tt>setWeights[scenario_i] / sumPoolWeights</tt>
   * 3. Falls back to uniform distribution if \c sumPoolWeights is zero.
+  * 
+  * @note This method is used by init_random_pool(). For init_representative_pool(),
+  *       use update_pool_weights_with_assignments() instead.
   */
  void update_pool_weights();
+ 
+ /// Update pool weights with assignment information (for representative pool)
+ /** Computes aggregated weights for representative scenarios based on the 
+  * assignment of all scenarios to their closest representatives.
+  * 
+  * In scenario reduction, each selected scenario acts as a representative for
+  * a cluster of scenarios. The weight of each representative is the sum of 
+  * weights of all scenarios assigned to it (those for which it is the closest
+  * selected scenario).
+  * 
+  * @param scenario_assignments Vector where element i contains the index of the
+  *                            representative scenario that scenario i is assigned to.
+  *                            Must have size equal to nbScenarios.
+  * 
+  * @note This method is used by init_representative_pool() to properly aggregate
+  *       weights based on the scenario reduction solution.
+  */
+ void update_pool_weights_with_assignments(const std::vector<ScenarioIndex>& scenario_assignments);
  
  /// Apply baseline selection method
  /** Selects the top scenarios based on their probability weights.
