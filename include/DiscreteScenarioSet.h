@@ -45,6 +45,7 @@
 #include <Eigen/Dense>  // For Eigen::VectorXd, Eigen::Map
 #include <random>       // For std::mt19937
 #include <memory>       // For std::unique_ptr
+#include <span>         // For std::span (C++20)
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
@@ -409,9 +410,9 @@ public:
  
  /// Get all indices of selected scenarios
  /** Returns which scenarios were selected by init_random_pool() or init_representative_pool().
-  * @return Vector of scenario indices in the selected pool
+  * @return Read-only view of scenario indices in the selected pool
   * @throws std::runtime_error If pool not initialized */
- [[nodiscard]] const std::vector<ScenarioIndex>& get_selected_scenarios() const;
+ [[nodiscard]] std::span<const ScenarioIndex> get_selected_scenarios() const;
 
  /// Get the configured pool size
  /** @return Number of scenarios that will be selected */
@@ -420,6 +421,25 @@ public:
  /// Get the distance power parameter
  /** @return The ell parameter for ell-Wasserstein distance (default: 2.0) */
  [[nodiscard]] float get_ell() const { return ell; }
+ 
+ /// Get all scenario weights
+ /** Returns the weights of all scenarios (not just selected ones).
+  * @return Read-only view of all scenario weights */
+ [[nodiscard]] inline std::span<const double> get_pool_weights() const { 
+   return poolWeights; 
+ }
+ 
+ /// Get normalized weights of selected scenarios
+ /** Returns the normalized weights of scenarios in the current pool.
+  * These weights sum to 1.0 and correspond to the selected scenarios.
+  * @return Read-only view of normalized weights
+  * @throws std::runtime_error If pool not initialized */
+ [[nodiscard]] inline std::span<const double> get_normalized_weights() const {
+   if (!is_initialized) {
+     throw std::runtime_error("Pool not initialized");
+   }
+   return normalizedPoolWeights;
+ }
  
  /// Set the distance power parameter
  /** Controls how distances are calculated in scenario reduction.

@@ -30,6 +30,7 @@
 #include <chrono>   // For timestamp generation
 #include <cstdio>   // For std::remove
 #include <numeric>  // For std::accumulate (not in SMSTypedefs)
+#include <unordered_set>  // For std::unordered_set (rejection sampling)
 
 using namespace SMSpp_di_unipi_it;
 
@@ -89,24 +90,23 @@ static void generateWeightedRandomSubset( size_t n , size_t k ,
     return;
   }
 
-  // Use weighted sampling without replacement
-  // Create a copy of weights that we can modify
-  std::vector<double> working_weights = weights;
-  ind.reserve(k);
+  // Use weighted sampling without replacement via rejection sampling
+  std::discrete_distribution<ScenarioGenerator::ScenarioIndex> dist(weights.begin(), weights.end());
   
-  for (size_t i = 0; i < k; ++i) {
-    // Create discrete distribution with current weights
-    std::discrete_distribution<ScenarioGenerator::ScenarioIndex> dist(working_weights.begin(), working_weights.end());
-    
-    // Sample an index
+  // Use unordered_set to track unique selections
+  std::unordered_set<ScenarioGenerator::ScenarioIndex> selected_set;
+  selected_set.reserve(k);
+  
+  // Keep sampling until we have k unique indices
+  while (selected_set.size() < k) {
     ScenarioGenerator::ScenarioIndex selected = dist(rng);
-    
-    // Add to result
-    ind.push_back(selected);
-    
-    // Set weight to 0 to prevent re-selection
-    working_weights[selected] = 0.0;
+    selected_set.insert(selected);  // Automatically handles duplicates
   }
+  
+  // Convert set to vector
+  ind.clear();
+  ind.reserve(k);
+  ind.assign(selected_set.begin(), selected_set.end());
 }
 
 // Generate default BlockConfig for CFL (static helper function)
@@ -150,8 +150,9 @@ static void extract_scenarios_from_cfl_block(const CapacitatedFacilityLocationBl
   std::cout << "DEBUG [extract_scenarios_from_cfl_block]: Starting extraction from CFL block" << std::endl;
   #endif
   
-  // Clear existing selection
+  // Clear existing selection and reserve space (worst case: all scenarios selected)
   scenarioIndexes.clear();
+  scenarioIndexes.reserve(n_scenarios);
     
   // Read variable values directly from the block variables
   for (DiscreteScenarioSet::ScenarioIndex i = 0; i < n_scenarios; ++i) {
@@ -191,13 +192,13 @@ static void extract_scenarios_from_cfl_block(const CapacitatedFacilityLocationBl
 /*--------------------------------------------------------------------------*/
 
 // Get the indices of currently selected scenarios
-const std::vector<DiscreteScenarioSet::ScenarioIndex>& 
+std::span<const DiscreteScenarioSet::ScenarioIndex> 
 DiscreteScenarioSet::get_selected_scenarios() const
 {
   if (!is_initialized) {
     throw std::runtime_error("Pool has not been initialized. Call init_random_pool() or init_representative_pool() first.");
   }
-  return scenarioIndexes;
+  return scenarioIndexes;  // Implicit conversion to span
 }
 
 /*--------------------------------------------------------------------------*/
@@ -389,6 +390,9 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
   std::vector< std::size_t > sizes = { nbScenarios, scenarioSize };
   ::deserialize( group , "Scenarios" , sizes , scenarioSet , true , false );
 
+  // Reserve space for poolWeights before deserializing
+  poolWeights.reserve(nbScenarios);
+  
   // Deserialize probabilities (optional, default to uniform)
   bool probsLoaded = ::deserialize(group, "poolWeights", nbScenarios, poolWeights);
   
@@ -591,6 +595,10 @@ void DiscreteScenarioSet::init_random_pool(ScenarioIndex pool_size)
   
   // Generate random indices for the pool using weighted sampling
   if (pool_size > 0) {
+    // Reserve space for normalized weights that will be populated by update_pool_weights
+    normalizedPoolWeights.reserve(pool_size);
+    
+    // Generate the random subset (already reserves internally)
     generateWeightedRandomSubset(nbScenarios, pool_size, poolWeights, scenarioIndexes, rng);
     
     update_pool_weights();
