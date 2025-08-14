@@ -371,9 +371,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
     delete f_block_config;
     f_block_config = nullptr;
   }
-  
-  // f_solver_config will be reset automatically
-  
+    
   // Deserialize mandatory dimensions
   ::deserialize_dim( group , "NumberScenarios" , nbScenarios , false );
   ::deserialize_dim( group , "ScenarioSize" , scenarioSize , false );
@@ -454,10 +452,9 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
             delete cfg;
             throw std::runtime_error("BlockConfig deserialization failed");
           }
-          // Trust the user provided appropriate config after dynamic_cast succeeded
         }
       } catch (...) {
-        // No BlockConfig or invalid, will generate default if needed
+        // No BlockConfig or invalid
         block_cfg = nullptr;
       }
       
@@ -774,18 +771,21 @@ DiscreteScenarioSet::compute_transport_cost_matrix(ScenarioIndex n_scenarios,
   Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> 
       all_scenarios(scenarioSet.data(), n_scenarios, scenario_size);
   
-  // Compute the distance/transportation cost matrix
+  // Compute only upper triangle of the symmetric distance matrix
   for (ScenarioIndex i = 0; i < n_scenarios; ++i) {
-    for (ScenarioIndex j = 0; j < n_scenarios; ++j) {
-      if (i == j) {
-        transport_costs[i][j] = 0.0;
-        continue;
-      }
-      
+    // Diagonal is always zero (distance from scenario to itself)
+    transport_costs[i][i] = 0.0;
+    
+    // Compute upper triangle only
+    for (ScenarioIndex j = i + 1; j < n_scenarios; ++j) {
       // Calculate distance between scenarios
       Eigen::VectorXd scenario_i = all_scenarios.row(i);
       Eigen::VectorXd scenario_j = all_scenarios.row(j);
-      transport_costs[i][j] = compute_scenario_distance(scenario_i, scenario_j, ell);
+      
+      // Compute once and set both symmetric positions
+      double distance = compute_scenario_distance(scenario_i, scenario_j, ell);
+      transport_costs[i][j] = distance;
+      transport_costs[j][i] = distance;  // Symmetric: d(i,j) = d(j,i)
     }
   }
   
