@@ -948,7 +948,7 @@ void DiscreteScenarioSet::update_pool_weights_with_assignments(
     }
   }
   
-  // Calculate total weight (should be ~1.0 if all scenarios are assigned)
+  // Calculate total weight (should be ~1.0 if all scenarios are assigned, 0 in default uniform case)
   sumPoolWeights = std::accumulate(aggregated_weights.begin(), aggregated_weights.end(), 0.0);
   
   // Populate pool weights with aggregated and normalized values
