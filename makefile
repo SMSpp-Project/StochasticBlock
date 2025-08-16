@@ -21,6 +21,7 @@
 #   Output: $(StcBlkOBJ)   = the final object(s) / library                   #
 #           $(StcBlkH)     = the .h files to include                         #
 #           $(StcBlkINC)   = the -I$( source directory )                     #
+#           $(StcBlkLIB)   = the external libraries + -L< libdirs >          #
 #                                                                            #
 #                              Antonio Frangioni                             #
 #                         Dipartimento di Informatica                        #
@@ -28,10 +29,19 @@
 #                                                                            #
 ##############################################################################
 
+# include dependencies needed by DiscreteScenarioSet - - - - - - - - - - - - -
+
+# CapacitatedFacilityLocationBlock
+CFLBkSDR = $(StcBlkSDR)/../CapacitatedFacilityLocationBlock
+include $(CFLBkSDR)/makefile-s
+
 # macros to be exported - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 StcBlkOBJ = $(StcBlkSDR)/obj/DiscreteScenarioSet.o \
-	$(StcBlkSDR)/obj/StochasticBlock.o
+	$(StcBlkSDR)/obj/StochasticBlock.o \
+	$(CFLBkOBJ)
+
+StcBlkLIB = $(CFLBkLIB)
 
 StcBlkINC = -I$(StcBlkSDR)/include -I$(StcBlkSDR)/../CapacitatedFacilityLocationBlock/include -I$(StcBlkSDR)/../BinaryKnapsackBlock/include -I$(StcBlkSDR)/../MCFBlock/include -I$(StcBlkSDR)/../MILPSolver/include
 
