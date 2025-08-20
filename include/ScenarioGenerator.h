@@ -72,14 +72,9 @@
 #include "SMSTypedefs.h"
 #include "Configuration.h" // For Configuration class
 
-
 // Required for Scenario type but not available in SMSTypedefs.h yet
 // TODO: Consider adding to SMSTypedefs.h in a future update
 #include <span>  // C++20: For non-owning views of contiguous data
-#include <utility> // for std::pair
-#include <optional> // for std::optional
-
-// TODO: In production, ensure C++20 support is available or provide fallback
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
@@ -385,12 +380,13 @@ class ScenarioGenerator
   * supposedly containing all the information required to de-serialize the
   * ScenarioGenerator, and initialize the current ScenarioGenerator out of it.
   *
-  * A group containing a :Block must have a mandatory string attribute "type"
-  * that contains the classname() of the :ScenarioGenerator, which is actually
-  * useful at the higher level of the deserialize() hierarchy where the
-  * :ScenarioGenerator has already to be constructed, rather than at this
-  * point where it clearly already has, plus whatever other information is
-  * required by the specific :ScenarioGenerator.
+  * A group containing a :ScenarioGenerator must have a mandatory string
+  * attribute "type" that contains the classname() of the
+  * :ScenarioGenerator, which is actually useful at the higher level of the
+  * deserialize() hierarchy where the :ScenarioGenerator has yet to be
+  * constructed, rather than at this point where it clearly already has,
+  * plus whatever other information is required by the specific
+  * :ScenarioGenerator.
   *
   *      THIS IS THE METHOD TO BE IMPLEMENTED BY DERIVED CLASSES
   *
@@ -408,8 +404,8 @@ class ScenarioGenerator
   * to serialize. Derived classes should override this method to save
   * their specific data.
   * 
-  * @param group The netCDF group to serialize to
-  */
+  * @param group The netCDF group to serialize to */
+
  virtual void serialize( netCDF::NcGroup & group ) const {}
 
 /*--------------------------------------------------------------------------*/
@@ -431,8 +427,7 @@ class ScenarioGenerator
   * In the case of the random variable being continuous, the support size is
   * (theoretically) infinite, so INFScenario is reported. This is done by the
   * base class implementation, so that the method only needs to be redefined
-  * by derived classes implementing variables with finite support.
-  */
+  * by derived classes implementing variables with finite support. */
 
  [[nodiscard]] virtual ScenarioIndex get_support_size( void ) {
   return( INFScenario );
@@ -470,58 +465,61 @@ class ScenarioGenerator
 
 /*--------------------------------------------------------------------------*/
  /// setting a partner Block
- /** In the context of scenario reduction, one may want to construct a 
-  * problem-dependent metric to guide the scenario reduction process. In such
-  * case, the problem's data need to be extracted and often one may construct
-  * tailored problem-dependent metric that uses it. 
+ /** Although ScenarioGenerator operations should be completely independent
+  * on the specific type of :Block in which the scenario gets realised,
+  * there may be cases in which some dependency may be necessary / useful.
+  * For instance, in the context of scenario reduction (cf.
+  * init_representative_pool() and the comments therein), one may want to
+  * construct a problem-dependent metric to guide the scenario reduction
+  * process. In such case, the definition of the tailored problem-dependent
+  * metric depends on some of the problem's data that needs to be extracted
+  * from the :Block. This means that 1) a specialised :ScenarioGenerator
+  * must be written to handle this, and 2) it has to be provided with a
+  * pointer to the original Block.
   * 
-  * ScenarioGenerator provides a virtual function `set_Block` that by default 
-  * does nothing.
+  * ScenarioGenerator provides this virtual method for this purpose.
+  * Whomever is building a ScenarioGenerator should pass it the pointer to
+  * the interested Block via this method, that by default does nothing.
+  * Derived classes that need information from the Block will have to
+  * overwrite the method and check dynamically that the given Block pointer
+  * is indeed if the expected type.
   * 
-  * But if a derived class needs to have an associated Block, then this 
-  * virtual method needs to be overwritten and should check dynamically that 
-  * the given Block pointer is indeed the one expected. 
-  * 
-  * IMPORTANT: When used within a StochasticBlock context, the passed Block 
-  * pointer will typically be the StochasticBlock itself (not its inner Block).
-  * This allows access to both:
-  * - The inner Block (via get_inner_block() after dynamic_cast to StochasticBlock)
-  * - The stochastic structure/scenarios managed by the StochasticBlock
-  * 
-  * The overriding method should:
+  * A main user of ScenarioGenerator is StochasticBlock, so it will be
+  * it providing ScenarioGenerator with the Block pointer. In this case,
+  * the passed Block will be the StochasticBlock itself rather than its
+  * inner Block. This allows access to both:
+  * - the inner Block, via get_inner_block(), after the pointer is
+  *   dynamic_cast< StochasticBlock * >-ed;
+  * - the stochastic structure / scenarios managed by the StochasticBlock.
+  *
+  * Thus, the overriding method should:
   * 1. Check if the Block is a StochasticBlock (via dynamic_cast)
   * 2. Access the inner Block via get_inner_block()
   * 3. Verify the inner Block is of the expected type
   * 4. Verify that scenarios at ScenarioGenerator's disposal are coherent 
   *    with the expected stochasticity of the Block's problem
   * 
-  * For instance, a StochasticBlock wrapping a CapacitatedFacilityLocationBlock 
-  * might have stochasticity in either demands or capacities. The function 
-  * `set_Block` takes care of checking that the scenarios generated by the 
-  * derived class of ScenarioGenerator are coherent with demands or capacities.
-  */
+  * For instance, a StochasticBlock wrapping a
+  * CapacitatedFacilityLocationBlock might have stochasticity in either
+  * demands or capacities. The corresponding derived version of set_Block
+  * should then take care of checking that the scenarios generated by the
+  * derived class of ScenarioGenerator are coherent with demands or
+  * capacities. */
 
-  virtual void set_Block( Block* ){};
+  virtual void set_Block( Block * ) {};
 
 /*--------------------------------------------------------------------------*/
  /// setting configuration for the ScenarioGenerator
  /** This method allows setting configuration parameters for the 
   * ScenarioGenerator. The base class implementation does nothing, but
-  * derived classes can override this to accept configuration objects.
-  * 
-  * For example, DiscreteScenarioSet uses this to configure scenario
-  * reduction parameters including:
-  * - k: number of scenarios to select
-  * - ell: power parameter for Wasserstein distance
-  * - algorithm: scenario reduction method to use
+  * derived classes can override this to accept Configuration objects.
   * 
   * The Configuration object passed should contain the appropriate
-  * parameters for the specific ScenarioGenerator implementation.
-  * Implementations should validate the configuration and may throw
+  * parameters for the specific :ScenarioGenerator implementation.
+  * Implementations should validate the Configuration and may throw
   * exceptions if invalid parameters are provided.
   * 
-  * @param config The Configuration object containing parameters
-  */
+  * @param config The Configuration object containing parameters */
   
   virtual void set_config( Configuration* config ) {}
 
@@ -616,7 +614,8 @@ class ScenarioGenerator
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
  /// return the probability associated to the current scenario
  
- [[nodiscard]] virtual double get_current_scenario_probability( void ) const = 0;
+ [[nodiscard]] virtual double get_current_scenario_probability( void )
+  const = 0;
 
 /*--------------------------------------------------------------------------*/
  /// move the current scenario to the next scenario in the pool
