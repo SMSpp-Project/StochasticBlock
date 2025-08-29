@@ -45,8 +45,6 @@
 
 #include <Eigen/Dense>  // for Eigen::VectorXd, Eigen::Map
 #include <random>       // for std::mt19937
-#include <memory>       // for std::unique_ptr
-#include <span>         // for std::span (C++20)
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
@@ -349,12 +347,9 @@ public:
 
 /*--------------------------------------------------------------------------*/
  /// Check the solver configuration for scenario reduction
- /** Returns the solver configuration if available.
+ /** Returns the solver configuration if set.
   * 
-  * @return The solver configuration, or nullptr if:
-  *         - Not configured yet
-  *         - Already used (ownership transferred to solver)
-  *
+  * @return The solver configuration, or nullptr if not configured
   * @see set_config() to set the configuration */
  
  [[nodiscard]] const BlockSolverConfig * get_solver_config( void ) const {
@@ -590,19 +585,12 @@ private:
  /// Solver configuration for scenario reduction
  /** Stores the BlockSolverConfig used for solving the CFL problem.
   * 
-  * This is a unique_ptr that manages the lifetime of the BlockSolverConfig.
-  * When set_config() is called, ownership of the provided BlockSolverConfig
-  * is transferred to this unique_ptr.
-  * 
-  * IMPORTANT: During scenario reduction (in create_and_configure_solver()),
-  * when apply() is called on the BlockSolverConfig, ownership is transferred
-  * to the solver via release(). After this point, f_solver_config becomes
-  * nullptr and get_solver_config() will return nullptr.
-  * 
-  * The field is mutable because ownership transfer happens in the const
-  * method create_and_configure_solver() during scenario reduction. */
+  * When init_representative_pool() is called, this configuration is
+  * cloned and applied to create a new solver for the
+  * CapacitatedFacilityLocationBlock. The original configuration
+  * remains available for reuse in subsequent calls. */
 
- mutable std::unique_ptr< BlockSolverConfig > f_solver_config;
+ std::unique_ptr< BlockSolverConfig > f_solver_config;
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PROBABILITY FIELDS ---------------------------------*/

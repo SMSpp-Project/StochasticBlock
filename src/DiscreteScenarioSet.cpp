@@ -705,10 +705,10 @@ void DiscreteScenarioSet::init_representative_pool( ScenarioIndex target_pool_si
     // Step 3.2: Generate abstract variables (to read the solution)
     cflBlock->generate_abstract_variables();
     
-    // Apply BlockSolverConfig to register the solver with the Block
-    // IMPORTANT: apply() transfers ownership of the BlockSolverConfig to the solver
-    f_solver_config->apply(cflBlock.get());
-    f_solver_config.release();  // Release our ownership - the solver now owns it
+    // Clone and apply BlockSolverConfig to register a solver with the Block
+    // clone config to allow reuse
+    auto config_copy = std::unique_ptr<BlockSolverConfig>(f_solver_config->clone());
+    config_copy->apply(cflBlock.get());
     
     // Get the registered solver and solve
     if (cflBlock->get_registered_solvers().empty()) {
@@ -805,8 +805,7 @@ DiscreteScenarioSet::~DiscreteScenarioSet() {
     f_block_config = nullptr;
   }
   
-  // BlockSolverConfig: unique_ptr handles cleanup
-  // If ownership was transferred via release(), this will be nullptr
+  // BlockSolverConfig: unique_ptr handles cleanup automatically
 }
 
 /*--------------------------------------------------------------------------*/
