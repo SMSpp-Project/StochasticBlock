@@ -70,10 +70,6 @@ include $(SMS++SDR)/lib/makefile-inc
 StcBlkSDR = ..
 include $(StcBlkSDR)/makefile
 
-# MILPSolver - we need it for ScenarioReductionSolver
-MILPSSDR = ../../MILPSolver
-include $(MILPSSDR)/makefile-c
-
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
 # object files
