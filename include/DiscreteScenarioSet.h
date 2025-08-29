@@ -41,7 +41,6 @@
 #include "ScenarioGenerator.h"
 #include "Block.h"              // for BlockConfig
 #include "BlockSolverConfig.h"  // for BlockSolverConfig
-#include "CapacitatedFacilityLocationBlock.h"
 
 #include <Eigen/Dense>  // for Eigen::VectorXd, Eigen::Map
 #include <random>       // for std::mt19937
@@ -129,6 +128,12 @@ public:
   * a boost::multi_array. */
 
  using DiscreteScenarioPool = boost::multi_array< double , 2 >;
+
+ /// Type for cost matrix (copied from CapacitatedFacilityLocationBlock)
+ /** This type definition matches CapacitatedFacilityLocationBlock::CMatrix
+  * to avoid needing to include the full header. */
+ 
+ using CMatrix = boost::multi_array< double , 2 >;
 
 /** @} ---------------------------------------------------------------------*/
 /*----------- CONSTRUCTING AND DESTRUCTING DiscreteScenarioSet -------------*/
@@ -649,7 +654,7 @@ private:
   * @param ell The power parameter for the distance calculation
   * @return The transport cost matrix
   */
- virtual CapacitatedFacilityLocationBlock::CMatrix
+ virtual CMatrix
  compute_transport_cost_matrix( ScenarioIndex n_scenarios ,
 				ScenarioSize scenario_size ,
 				float ell ) const;

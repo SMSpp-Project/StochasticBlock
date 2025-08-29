@@ -814,12 +814,12 @@ DiscreteScenarioSet::~DiscreteScenarioSet() {
 
 
 // Compute the transport cost matrix between scenarios
-CapacitatedFacilityLocationBlock::CMatrix
+DiscreteScenarioSet::CMatrix
 DiscreteScenarioSet::compute_transport_cost_matrix(ScenarioIndex n_scenarios,
                                                    ScenarioSize scenario_size,
                                                    float ell) const
 {
-  CapacitatedFacilityLocationBlock::CMatrix transport_costs(boost::extents[n_scenarios][n_scenarios]);
+  CMatrix transport_costs(boost::extents[n_scenarios][n_scenarios]);
   
   // Map scenarios to Eigen matrix for easier distance calculations
   Eigen::Map<const Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> 
