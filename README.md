@@ -28,6 +28,64 @@ following:
   (a vector) as parameter and sets the data of the inner `Block` according
   to its set of `DataMapping`
 
+### DiscreteScenarioSet
+
+The `DiscreteScenarioSet` class extends `ScenarioGenerator` to manage discrete sets of scenarios loaded from data files or generated programmatically. Key features include:
+
+- **Scenario Pool Management**: Supports both random sampling and representative pool selection
+- **Serialization**: Read/write scenarios from/to netCDF files with associated probabilities
+- **Scenario Reduction**: When built with `CapacitatedFacilityLocationBlock`, provides advanced scenario reduction capabilities (see below)
+
+### Scenario Reduction
+
+The `DiscreteScenarioSet` class provides scenario reduction capabilities when built with the `CapacitatedFacilityLocationBlock` dependency. This feature allows for reducing a large set of scenarios to a smaller representative subset while minimizing the Wasserstein distance between the original and reduced distributions.
+
+#### Available Algorithms
+
+- **Dupacova algorithm**: The default scenario reduction method that uses a forward selection approach to minimize Wasserstein distance
+- **BestFit**: An alternative algorithm that uses local search with best improvement selection at each step
+- **FirstFit**: A simpler, faster algorithm that selects the first satisfactory improvement
+
+#### Configuration
+
+Scenario reduction can be configured in three ways:
+
+1. **Manual Configuration**: Create BlockConfig and BlockSolverConfig objects:
+   ```cpp
+   // Create BlockConfig with k parameter
+   auto* block_config = new BlockConfig();
+   block_config->f_extra_Configuration = new SimpleConfiguration<int>(10);  // k=10
+   block_config->f_static_variables_Configuration = new SimpleConfiguration<double>(2.0);  // ell=2.0
+   
+   // Create BlockSolverConfig for solver selection
+   auto* solver_config = new BlockSolverConfig(true);  // differential mode
+   solver_config->add_ComputeConfig("ScenarioReductionSolver", nullptr);  // For Dupacova algorithm
+   // Or for MILP solver:
+   // solver_config->add_ComputeConfig("CPXMILPSolver", compute_config);
+   
+   // Apply to scenario set
+   discreteScenarioSet.set_scenario_reduction_config(block_config, solver_config);
+   ```
+
+2. **From netCDF File**: The DiscreteScenarioSet can deserialize previously saved configurations from netCDF files. When a `ScenarioReductionConfig` group is present in the file, it will be loaded automatically. Note that this requires the configuration to have been previously serialized using DiscreteScenarioSet's serialize method - you cannot manually create this structure in the netCDF file as it contains serialized BlockConfig and BlockSolverConfig objects. Will be fixed soonish.
+
+3. **Alternative Configuration Approach**: Using nested configuration objects:
+   ```cpp
+   auto config = new BlockConfig(false);  // Not differential
+   auto cflConfig = new BlockConfig(false);
+   cflConfig->add_conf_prop("k", 5);
+   cflConfig->add_conf_prop("ell", 2.0f);
+   config->add_R3_BlockConfig("CFLConfig", cflConfig);
+   
+   auto solverConfig = new BlockSolverConfig(false);  // Not differential
+   solverConfig->add_conf_prop("algorithm", std::string("Dupacova"));
+   config->add_Solver_Configuration("SolverConfig", solverConfig);
+   
+   discreteScenarioSet.set_scenario_reduction_config(config);
+   ```
+
+When the `CapacitatedFacilityLocationBlock` is not available, the class automatically falls back to a simpler selection method based on scenario probabilities.
+
 
 ## Getting started
 
@@ -36,6 +94,7 @@ These instructions will let you build StochasticBlock on your system.
 ### Requirements
 
 - [SMS++ core library](https://gitlab.com/smspp/smspp)
+- [CapacitatedFacilityLocationBlock](https://gitlab.com/smspp/capacitatedfacilitylocationblock) (optional, enables scenario reduction functionality)
 
 ### Build and install with CMake
 
@@ -115,6 +174,12 @@ conduct, and the process for submitting merge requests to us.
 ### Lead Authors
 
 - **Rafael Durbano Lobato**  
+  Dipartimento di Informatica  
+  Università di Pisa
+
+### Contributors
+
+- **Benoît Tran**  
   Dipartimento di Informatica  
   Università di Pisa
 

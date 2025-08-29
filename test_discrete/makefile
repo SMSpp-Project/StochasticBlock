@@ -2,7 +2,7 @@
 ################################ makefile ####################################
 ##############################################################################
 #                                                                            #
-#   makefile of test_discrete (for StochasticBlock)                          #
+#   makefile of test for DiscreteScenarioSet                                 #
 #                                                                            #
 #                              Antonio Frangioni                             #
 #                          Dipartimento di Informatica                       #
@@ -10,19 +10,19 @@
 #                                                                            #
 ##############################################################################
 
-# module name
-NAME = test_discrete
+# module name - must match the binary name and source file
+NAME = test_discretescenarioset
 
 # basic directory
 DIR = .
 
 # common flags
-COMMON_SW = -std=c++20 -ferror-limit=1
+COMMON_SW = -std=c++20 -ferror-limit=1 -Wno-enum-compare
 
 # debug switches
-SW_DEBUG = -g -glldb -fno-inline $(COMMON_SW)
+SW_DEBUG = -g3 -glldb -fno-inline $(COMMON_SW) -DCLANG_1200_0_32_27_PATCH
 # debug switches with address sanitizer and extra pedantic warning
-SW_DEBUG_ASAN = -g3 -glldb -fno-inline $(COMMON_SW) -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer -Wpedantic -Wextra -Wno-unused-parameter
+SW_DEBUG_ASAN = -g3 -glldb -fno-inline $(COMMON_SW) -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer -Wpedantic -Wextra -Wno-unused-parameter -Wno-enum-compare -Wno-deprecated-copy-with-user-provided-copy
 # production switches
 SW_RELEASE = -O3 $(COMMON_SW) -DNDEBUG -DCLANG_1200_0_32_27_PATCH
 
@@ -51,7 +51,7 @@ release: $(DIR)/$(NAME)
 # clean target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 clean::
-	rm -f $(DIR)/*.o $(DIR)/*~ $(DIR)/$(NAME)
+	rm -f $(DIR)/*.o $(DIR)/*~ $(NAME)
 
 # define & include the necessary modules- - - - - - - - - - - - - - - - - - -
 # if a module is not used in the current configuration, just comment out the
@@ -67,32 +67,56 @@ SMS++SDR = ../../SMS++
 include $(SMS++SDR)/lib/makefile-inc
 
 # StochasticBlock
-StcBlkSDR = ..
+StcBlkSDR = ../../StochasticBlock
 include $(StcBlkSDR)/makefile
+
+# CapacitatedFacilityLocationBlock
+CFLBkSDR = ../../CapacitatedFacilityLocationBlock
+include $(CFLBkSDR)/makefile-s
+
+# BinaryKnapsackBlock (needed by CapacitatedFacilityLocationBlock)
+BKPBkSDR = ../../BinaryKnapsackBlock
+include $(BKPBkSDR)/makefile
+
+# MCFBlock (needed by CapacitatedFacilityLocationBlock)  
+MCFBkSDR = ../../MCFBlock
+include $(MCFBkSDR)/makefile
+
+# BundleSolver
+BNDSLVSDR = ../../BundleSolver
+include $(BNDSLVSDR)/makefile-s
+
+# LagrangianDualSolver
+LgDSLVSDR = ../../LagrangianDualSolver
+include $(LgDSLVSDR)/makefile
+
+# MILPSolver - we need it for ScenarioReductionSolver
+MILPSSDR = ../../MILPSolver
+include $(MILPSSDR)/makefile-c
 
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
-# object files
-MOBJ =  $(SMS++OBJ) $(StcBlkOBJ)
+# object files - includes all necessary objects
+MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BNDSLVOBJ) $(LgDSLVOBJ) $(CFLBkOBJ) $(BKPBkOBJ) $(MCFLEOBJ)
 
-# libraries
-MLIB =  $(SMS++LIB) $(StcBlkLIB)
+# libraries - includes all necessary libraries
+MLIB =  $(BNDSLVLIB) $(LgDSLVLIB) $(CFLBkLIB) $(BKPBkLIB) $(SMS++LIB) $(MCFLELIB) $(MILPSLIB) $(StcBlkLIB)
 
-$(DIR)/$(NAME): $(MOBJ) $(DIR)/test_discrete.o
+# Final compilation target
+$(DIR)/$(NAME): $(MOBJ) $(DIR)/$(NAME).o
 	$(CC) -o $(DIR)/$(NAME) $^ $(MLIB) $(SW)
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
-# include directives
-MINC =  $(SMS++INC) $(StcBlkINC)
+# include directives - add MILPS_INC as an extra safety measure
+MINC =  $(SMS++INC) $(StcBlkINC) $(BNDSLVINC) $(LgDSLVINC) $(CFLBkINC) $(BKPBkINC) $(MCFBkINC) $(MCFLEINC) $(MILPSINC) $(MILPS_INC) -I../include -I../build
 
 # includes
-MH =    $(SMS++H) $(StcBlkH)
+MH =    $(SMS++H) $(StcBlkH) $(BNDSLVH) $(LgDSLVH) $(CFLBkH) $(BKPBkH) $(MCFBkH) $(MCFLEH) $(MILPSH)
 
 # compile command
-
-$(DIR)/test_discrete.o: $(DIR)/test_discrete.cpp $(MH)
-	$(CC) -c $*.cpp -o $@ $(MINC) $(SW)
+$(DIR)/$(NAME).o: $(DIR)/$(NAME).cpp $(MH)
+	$(CC) -c $(DIR)/$(NAME).cpp -o $@ $(MINC) $(SW)
 
 # distclean target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

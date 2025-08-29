@@ -73,7 +73,7 @@ include $(StcBlkSDR)/makefile
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
 # object files
-MOBJ =  $(SMS++OBJ) $(StcBlkOBJ)
+MOBJ =  $(SMS++OBJ) $(StcBlkOBJ) 
 
 # libraries
 MLIB =  $(SMS++LIB) $(StcBlkLIB)
