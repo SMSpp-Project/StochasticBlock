@@ -82,25 +82,18 @@ include $(BKPBkSDR)/makefile
 MCFBkSDR = ../../MCFBlock
 include $(MCFBkSDR)/makefile
 
-# BundleSolver
-BNDSLVSDR = ../../BundleSolver
-include $(BNDSLVSDR)/makefile-s
-
-# LagrangianDualSolver
-LgDSLVSDR = ../../LagrangianDualSolver
-include $(LgDSLVSDR)/makefile
-
-# MILPSolver - we need it for ScenarioReductionSolver
+# MILPSolver
 MILPSSDR = ../../MILPSolver
 include $(MILPSSDR)/makefile-c
 
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
 # object files - includes all necessary objects
-MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BNDSLVOBJ) $(LgDSLVOBJ) $(CFLBkOBJ) $(BKPBkOBJ) $(MCFLEOBJ)
+# MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BNDSLVOBJ) $(LgDSLVOBJ) $(CFLBkOBJ) $(BKPBkOBJ) $(MCFLEOBJ)
+MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BKPBkOBJ) $(MCFLEOBJ) $(CFLBkOBJ) 
 
 # libraries - includes all necessary libraries
-MLIB =  $(BNDSLVLIB) $(LgDSLVLIB) $(CFLBkLIB) $(BKPBkLIB) $(SMS++LIB) $(MCFLELIB) $(MILPSLIB) $(StcBlkLIB)
+MLIB = $(MILPSLIB) $(CFLBkLIB) $(BKPBkLIB) $(SMS++LIB) $(MCFLELIB) $(StcBlkLIB)
 
 # Final compilation target
 $(DIR)/$(NAME): $(MOBJ) $(DIR)/$(NAME).o
@@ -108,11 +101,11 @@ $(DIR)/$(NAME): $(MOBJ) $(DIR)/$(NAME).o
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
-# include directives - add MILPS_INC as an extra safety measure
-MINC =  $(SMS++INC) $(StcBlkINC) $(BNDSLVINC) $(LgDSLVINC) $(CFLBkINC) $(BKPBkINC) $(MCFBkINC) $(MCFLEINC) $(MILPSINC) $(MILPS_INC) -I../include -I../build
+# include directives
+MINC =  $(SMS++INC) $(MILPSINC) $(StcBlkINC) $(CFLBkINC) $(BKPBkINC) $(MCFBkINC) $(MCFLEINC) -I../include -I../build
 
 # includes
-MH =    $(SMS++H) $(StcBlkH) $(BNDSLVH) $(LgDSLVH) $(CFLBkH) $(BKPBkH) $(MCFBkH) $(MCFLEH) $(MILPSH)
+MH =    $(SMS++H) $(StcBlkH) $(MILPSH) $(CFLBkH) $(BKPBkH) $(MCFBkH) $(MCFLEH) 
 
 # compile command
 $(DIR)/$(NAME).o: $(DIR)/$(NAME).cpp $(MH)
