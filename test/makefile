@@ -70,26 +70,6 @@ include $(SMS++SDR)/lib/makefile-inc
 StcBlkSDR = ..
 include $(StcBlkSDR)/makefile
 
-# # CapacitatedFacilityLocationBlock
-# CFLBkSDR = ../../CapacitatedFacilityLocationBlock
-# include $(CFLBkSDR)/makefile-s
-
-# # BinaryKnapsackBlock (needed by CapacitatedFacilityLocationBlock)
-# BKPBkSDR = ../../BinaryKnapsackBlock
-# include $(BKPBkSDR)/makefile
-
-# # MCFBlock (needed by CapacitatedFacilityLocationBlock)  
-# MCFBkSDR = ../../MCFBlock
-# include $(MCFBkSDR)/makefile
-
-# # BundleSolver
-# BNDSLVSDR = ../../BundleSolver
-# include $(BNDSLVSDR)/makefile-s
-
-# # LagrangianDualSolver
-# LgDSLVSDR = ../../LagrangianDualSolver
-# include $(LgDSLVSDR)/makefile
-
 # MILPSolver - we need it for ScenarioReductionSolver
 MILPSSDR = ../../MILPSolver
 include $(MILPSSDR)/makefile-c
