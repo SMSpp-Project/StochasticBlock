@@ -58,6 +58,12 @@ void StochasticBlock::deserialize( const netCDF::NcGroup & group ) {
   SimpleDataMappingBase::deserialize( group , data_mappings , v_Block.front() );
  }
 
+ // Deserialize the ScenarioGenerator if present
+ auto sg_group = group.getGroup( "ScenarioGenerator" );
+ if( ! sg_group.isNull() ) {
+  scenario_generator.reset( ScenarioGenerator::new_ScenarioGenerator( sg_group ) );
+ }
+
  Block::deserialize( group );
 }
 
@@ -104,6 +110,12 @@ void StochasticBlock::serialize( netCDF::NcGroup & group ) const {
  }
 
  SimpleDataMappingBase::serialize( group , data_mappings , inner_block );
+
+ // Serialize the ScenarioGenerator if present
+ if( scenario_generator ) {
+  auto sg_group = group.addGroup( "ScenarioGenerator" );
+  scenario_generator->serialize( sg_group );
+ }
 }
 
 /*--------------------------------------------------------------------------*/
