@@ -1,54 +1,84 @@
-# DiscreteScenarioSet Tests
+# DiscreteScenarioSet Test Suite
 
-Test suite for the DiscreteScenarioSet class.
+Test suite for the `DiscreteScenarioSet` class, covering scenario management, reduction algorithms, and configuration patterns.
 
 ## Overview
 
-Tests scenario management and reduction functionality including:
-- Random and representative scenario pool selection
-- ScenarioReductionSolver algorithms (Dupacova, BestFit, FirstFit)
-- MILPSolver support (CPLEX, Gurobi, SCIP, HiGHS)
-- Configuration handling and error cases
+This test suite validates the functionality of `DiscreteScenarioSet`, which manages discrete probability distributions for stochastic optimization. The tests cover:
 
-## Running Tests
+- **Scenario Management**: Loading, storing, and accessing scenario data
+- **Pool Selection**: Random sampling and representative selection methods
+- **Scenario Reduction**: Optimization-based algorithms to find representative subsets
+- **Configuration**: Multiple configuration patterns and serialization
+- **Error Handling**: Edge cases and invalid parameter handling
 
+## Building the Tests
+
+### Using Make
 ```bash
-# Build the test suite
+cd test_discrete
 make
-
-# Run all tests
-./StochasticBlock_test_discretescenarioset
-
-# List all available tests
-./StochasticBlock_test_discretescenarioset -l
-
-# Run specific test by name
-./StochasticBlock_test_discretescenarioset -t "Scenario Reduction - MILP"
-
-# Run with verbose output
-./StochasticBlock_test_discretescenarioset -v
-
-# Show help
-./StochasticBlock_test_discretescenarioset -h
 ```
 
-## Available Tests
+### Using CMake
+```bash
+cd test_discrete
+mkdir build && cd build
+cmake ..
+make
+```
 
-- Basic Loading
-- Invalid k=0
-- Invalid k>nbScenarios  
-- Valid k values
-- Random Pool
-- Scenario Reduction - Dupacova
-- Scenario Reduction - BestFit
-- Scenario Reduction - MILP
-- Invalid Solver Config
-- Algorithm Comparison
+## Running the Tests
+
+### Basic Usage
+```bash
+# Run all tests
+./test_discretescenarioset
+
+# Run with verbose output (shows timing and details)
+./test_discretescenarioset -v
+
+# Run with minimal output
+./test_discretescenarioset -q
+```
+
+### Command Line Options
+- `-v, --verbose`: Enable verbose output with timing information
+- `-q, --quiet`: Minimal output (only failures)
+- `-h, --help`: Display help message
 
 ## Requirements
 
-- SMS++ framework
-- StochasticBlock module
-- CapacitatedFacilityLocationBlock module
-- netCDF library
-- Optional: MILPSolver with backend (CPLEX, Gurobi, SCIP, or HiGHS)
+### Required Dependencies
+- SMS++ core library
+- StochasticBlock
+- CapacitatedFacilityLocationBlock
+- netCDF-C++ library
+- Eigen3
+- Boost (multi_array)
+
+### Optional Dependencies
+For full scenario reduction testing:
+- MILPSolver module with at least one backend:
+  - CPLEX (commercial)
+  - Gurobi (commercial)
+  - SCIP (academic)
+  - HiGHS (open-source)
+
+### Debug Build
+```bash
+# Enable debug symbols and assertions
+make clean
+make SMS_DEBUG=1
+```
+
+## Contributing
+
+When adding new tests:
+1. Follow the existing test structure (Test N format)
+2. Clean up any temporary files created
+3. Update this README
+
+## License
+
+See the main StochasticBlock [LICENSE](../LICENSE) file.
