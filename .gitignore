@@ -38,7 +38,6 @@
 *.x86_64
 *.hex
 test/StochasticBlock_test
-test_discrete/cleanup.sh
 test_discrete/StochasticBlock_test_discrete
 test_discrete/test_discretescenarioset
 test_discrete/StochasticBlock_test_discretescenarioset
