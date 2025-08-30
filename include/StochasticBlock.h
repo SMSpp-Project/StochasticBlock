@@ -26,6 +26,7 @@
 
 #include "Block.h"
 #include "DataMapping.h"
+#include "ScenarioGenerator.h"
 
 #include <Eigen/Dense>
 
@@ -117,12 +118,12 @@ namespace SMSpp_di_unipi_it
  *    any sense. What this class provides is a means to set the value of the
  *    data of its inner Block.
  *
- * A StochasticBlock should have a probability distribution (or some kind of
- * partial stochastic process) that describes the uncertainty in it. However,
- * for the moment, it is not supported by this class and this feature will be
- * implemented later on. Typically, an object of this class would be used in
- * conjunction with a scenario generator and the set_data() method of this
- * object would be called to consider a particular scenario.
+ * A StochasticBlock can optionally have an associated ScenarioGenerator that
+ * provides scenarios (realizations of the stochastic data). The ScenarioGenerator
+ * can be set using set_scenario_generator() and manages the generation and
+ * iteration of scenarios. When a ScenarioGenerator is present, the typical
+ * usage pattern is to iterate through scenarios using the ScenarioGenerator's
+ * methods and apply each scenario to the inner Block using the set_data() method.
  */
 
 class StochasticBlock : public Block
@@ -276,6 +277,9 @@ public:
   *   SimpleDataMappingBase. Moreover, the inner Block of this StochasticBlock
   *   will serve as the reference Block for both the serialization and
   *   deserialization of each SimpleDataMappingBase.
+  *
+  * - The group "ScenarioGenerator", containing the serialized ScenarioGenerator
+  *   if one is associated with this StochasticBlock. This group is optional.
   */
 
  virtual void serialize( netCDF::NcGroup & group ) const override;
@@ -329,6 +333,27 @@ public:
 
 /*--------------------------------------------------------------------------*/
 
+ /// sets the data of this StochasticBlock from a Scenario
+ /** This function sets the value of the data of this
+  * StochasticBlock using a Scenario object (typically from a ScenarioGenerator).
+  *
+  * @param scenario The Scenario containing the values of the data to be set.
+  *
+  * @param issuePMod Decides if and how a "physical Modification" is issued,
+  *        as described in Observer::make_par().
+  *
+  * @param issueAMod Decides if and how an "abstract Modification" is issued,
+  *        as described in Observer::make_par().
+  */
+ void set_data( const ScenarioGenerator::Scenario & scenario ,
+                c_ModParam issuePMod = eNoBlck ,
+                c_ModParam issueAMod = eNoBlck ) {
+  std::vector< double > data( scenario.begin() , scenario.end() );
+  set_data( data , issuePMod , issueAMod );
+ }
+
+/*--------------------------------------------------------------------------*/
+
  /// adds a new SimpleDataMappingBase to this StochasticBlock
  /** This function adds a new SimpleDataMappingBase to the set of
   * SimpleDataMappingBase of this StochasticBlock.
@@ -337,6 +362,20 @@ public:
   */
  void add_data_mapping( std::unique_ptr< SimpleDataMappingBase > data_mapping ) {
   data_mappings.push_back( std::move( data_mapping ) );
+ }
+
+/*--------------------------------------------------------------------------*/
+
+ /// sets the ScenarioGenerator for this StochasticBlock
+ /** This function sets the ScenarioGenerator that provides scenarios for
+  * this StochasticBlock. The StochasticBlock takes ownership of the
+  * ScenarioGenerator.
+  *
+  * @param sg The ScenarioGenerator to be associated with this StochasticBlock.
+  *           Ownership is transferred to this StochasticBlock.
+  */
+ void set_scenario_generator( ScenarioGenerator * sg ) {
+  scenario_generator.reset( sg );
  }
 
 /**@} ----------------------------------------------------------------------*/
@@ -390,6 +429,19 @@ public:
   return( v_Block.empty() ? nullptr : v_Block.front() );
  }
 
+/*--------------------------------------------------------------------------*/
+
+ /// returns the ScenarioGenerator of this StochasticBlock
+ /** This function returns a pointer to the ScenarioGenerator associated
+  * with this StochasticBlock.
+  *
+  * @return A pointer to the ScenarioGenerator, or nullptr if none is set.
+  */
+
+ ScenarioGenerator * get_scenario_generator() const {
+  return( scenario_generator.get() );
+ }
+
 /**@} ----------------------------------------------------------------------*/
 /*--------------------- PROTECTED PART OF THE CLASS ------------------------*/
 /*--------------------------------------------------------------------------*/
@@ -416,6 +468,9 @@ private:
 /*--------------------------------------------------------------------------*/
 /*---------------------------- PRIVATE FIELDS ------------------------------*/
 /*--------------------------------------------------------------------------*/
+
+ /// The ScenarioGenerator that provides scenarios for this StochasticBlock
+ std::unique_ptr< ScenarioGenerator > scenario_generator;
 
  SMSpp_insert_in_factory_h;
 
