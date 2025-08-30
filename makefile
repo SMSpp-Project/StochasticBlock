@@ -58,6 +58,6 @@ $(StcBlkSDR)/obj/DiscreteScenarioSet.o: \
 	$(StcBlkSDR)/include/ScenarioGenerator.h \
 	$(StcBlkSDR)/include/DiscreteScenarioSet.h $(SMS++OBJ)
 	$(CC) -c $(StcBlkSDR)/src/DiscreteScenarioSet.cpp -o $@ \
-	$(StcBlkINC) $(SMS++INC) $(SW)
+	$(StcBlkINC) $(CFLBkINC) $(SMS++INC) $(SW)
 
 ########################## End of makefile ###################################
