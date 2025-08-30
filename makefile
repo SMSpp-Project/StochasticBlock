@@ -21,7 +21,6 @@
 #   Output: $(StcBlkOBJ)   = the final object(s) / library                   #
 #           $(StcBlkH)     = the .h files to include                         #
 #           $(StcBlkINC)   = the -I$( source directory )                     #
-#           $(StcBlkLIB)   = the external libraries + -L< libdirs >          #
 #                                                                            #
 #                              Antonio Frangioni                             #
 #                         Dipartimento di Informatica                        #
@@ -29,32 +28,18 @@
 #                                                                            #
 ##############################################################################
 
-# include dependencies needed by DiscreteScenarioSet - - - - - - - - - - - - -
-
-# CapacitatedFacilityLocationBlock
-CFLBkSDR = $(StcBlkSDR)/../CapacitatedFacilityLocationBlock
-include $(CFLBkSDR)/makefile-s
-
 # macros to be exported - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 StcBlkOBJ = $(StcBlkSDR)/obj/DiscreteScenarioSet.o \
-	$(StcBlkSDR)/obj/StochasticBlock.o \
-	$(CFLBkOBJ)
+	$(StcBlkSDR)/obj/StochasticBlock.o
 
-StcBlkLIB = $(CFLBkLIB)
+StcBlkLIB = 
 
-StcBlkINC = -I$(StcBlkSDR)/include -I$(StcBlkSDR)/../CapacitatedFacilityLocationBlock/include -I$(StcBlkSDR)/../BinaryKnapsackBlock/include -I$(StcBlkSDR)/../MCFBlock/include -I$(StcBlkSDR)/../MILPSolver/include
+StcBlkINC = -I$(StcBlkSDR)/include
 
 StcBlkH   = $(StcBlkSDR)/include/ScenarioGenerator.h \
 	$(StcBlkSDR)/include/DiscreteScenarioSet.h \
-	$(StcBlkSDR)/include/StochasticBlock.h \
-	$(StcBlkSDR)/../CapacitatedFacilityLocationBlock/include/CapacitatedFacilityLocationBlock.h \
-	$(StcBlkSDR)/../CapacitatedFacilityLocationBlock/include/ScenarioReductionSolver.h \
-	$(StcBlkSDR)/../BinaryKnapsackBlock/include/BinaryKnapsackBlock.h \
-	$(StcBlkSDR)/../BinaryKnapsackBlock/include/DPBinaryKnapsackSolver.h \
-	$(StcBlkSDR)/../MCFBlock/include/MCFBlock.h \
-	$(StcBlkSDR)/../MCFBlock/include/MCFSolver.h \
-	$(StcBlkSDR)/../MILPSolver/include/MILPSolver.h
+	$(StcBlkSDR)/include/StochasticBlock.h
 
 # clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -64,15 +49,15 @@ clean::
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
 $(StcBlkSDR)/obj/StochasticBlock.o: $(StcBlkSDR)/src/StochasticBlock.cpp \
-    $(StcBlkSDR)/include/StochasticBlock.h $(SMS++OBJ)
+	$(StcBlkSDR)/include/StochasticBlock.h $(SMS++OBJ)
 	$(CC) -c $(StcBlkSDR)/src/StochasticBlock.cpp -o $@ $(StcBlkINC) \
-	      $(SMS++INC) $(SW)
+	$(SMS++INC) $(SW)
 
 $(StcBlkSDR)/obj/DiscreteScenarioSet.o: \
-    $(StcBlkSDR)/src/DiscreteScenarioSet.cpp \
-    $(StcBlkSDR)/include/ScenarioGenerator.h \
-    $(StcBlkSDR)/include/DiscreteScenarioSet.h $(SMS++OBJ)
+	$(StcBlkSDR)/src/DiscreteScenarioSet.cpp \
+	$(StcBlkSDR)/include/ScenarioGenerator.h \
+	$(StcBlkSDR)/include/DiscreteScenarioSet.h $(SMS++OBJ)
 	$(CC) -c $(StcBlkSDR)/src/DiscreteScenarioSet.cpp -o $@ \
-	      $(StcBlkINC) $(SMS++INC) $(SW)
+	$(StcBlkINC) $(SMS++INC) $(SW)
 
 ########################## End of makefile ###################################
