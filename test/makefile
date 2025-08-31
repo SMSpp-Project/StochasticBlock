@@ -70,24 +70,29 @@ include $(SMS++SDR)/lib/makefile-inc
 StcBlkSDR = ..
 include $(StcBlkSDR)/makefile
 
+# CapacitatedFacilityLocationBlock (needed by DiscreteScenarioSet)
+# Using makefile-s which includes all CFL dependencies automatically
+CFLBkSDR = ../../CapacitatedFacilityLocationBlock
+include $(CFLBkSDR)/makefile-s
+
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
 # object files
-MOBJ =  $(SMS++OBJ) $(StcBlkOBJ) 
+MOBJ =  $(SMS++OBJ) $(StcBlkOBJ) $(CFLBkOBJ)
 
 # libraries
-MLIB =  $(SMS++LIB) $(StcBlkLIB)
+MLIB =  $(SMS++LIB) $(StcBlkLIB) $(CFLBkLIB)
 
 $(DIR)/$(NAME): $(MOBJ) $(DIR)/test.o
-	$(CC) -o $(DIR)/$(NAME) $(DIR)/test.o $(StcBlkOBJ) $(SMS++LIB) $(StcBlkLIB) $(SW)
+	$(CC) -o $(DIR)/$(NAME) $(DIR)/test.o $(StcBlkOBJ) $(CFLBkOBJ) $(SMS++OBJ) $(SMS++LIB) $(StcBlkLIB) $(CFLBkLIB) $(SW)
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
 # include directives
-MINC =  $(SMS++INC) $(StcBlkINC)
+MINC =  $(SMS++INC) $(StcBlkINC) $(CFLBkINC)
 
 # includes
-MH =    $(SMS++H) $(StcBlkH)
+MH =    $(SMS++H) $(StcBlkH) $(CFLBkH)
 
 # compile command
 

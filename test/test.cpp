@@ -331,7 +331,7 @@ void test( std::size_t int_size , std::size_t dbl_size ) {
 /*--------------------------------------------------------------------------*/
 
 // Control verbosity of test output
-constexpr bool VERBOSE_TESTS = false;  // Set to true for detailed output
+bool VERBOSE_TESTS = false;  // Can be set via command-line argument
 
 void test_scenario_generator() {
  if (VERBOSE_TESTS) std::cout << "Testing ScenarioGenerator integration..." << std::endl;
@@ -473,7 +473,26 @@ void test_scenario_generator() {
 /*---------------------------------- MAIN ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-int main() {
+int main(int argc, char* argv[]) {
+
+ // Parse command-line arguments
+ for (int i = 1; i < argc; ++i) {
+  std::string arg = argv[i];
+  if (arg == "--verbose" || arg == "-v") {
+   VERBOSE_TESTS = true;
+   std::cout << "Verbose mode enabled" << std::endl;
+  } else if (arg == "--help" || arg == "-h") {
+   std::cout << "Usage: " << argv[0] << " [options]" << std::endl;
+   std::cout << "Options:" << std::endl;
+   std::cout << "  -v, --verbose    Enable verbose output" << std::endl;
+   std::cout << "  -h, --help       Show this help message" << std::endl;
+   return 0;
+  } else {
+   std::cerr << "Unknown argument: " << arg << std::endl;
+   std::cerr << "Use --help for usage information" << std::endl;
+   return 1;
+  }
+ }
 
  std::uniform_int_distribution< int > size_dist( 0 , 20 );
 

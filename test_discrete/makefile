@@ -70,17 +70,9 @@ include $(SMS++SDR)/lib/makefile-inc
 StcBlkSDR = ../../StochasticBlock
 include $(StcBlkSDR)/makefile
 
-# CapacitatedFacilityLocationBlock
+# CapacitatedFacilityLocationBlock (using makefile-s for automatic dependencies)
 CFLBkSDR = ../../CapacitatedFacilityLocationBlock
 include $(CFLBkSDR)/makefile-s
-
-# BinaryKnapsackBlock (needed by CapacitatedFacilityLocationBlock)
-BKPBkSDR = ../../BinaryKnapsackBlock
-include $(BKPBkSDR)/makefile
-
-# MCFBlock (needed by CapacitatedFacilityLocationBlock)  
-MCFBkSDR = ../../MCFBlock
-include $(MCFBkSDR)/makefile
 
 # MILPSolver
 MILPSSDR = ../../MILPSolver
@@ -88,12 +80,11 @@ include $(MILPSSDR)/makefile-c
 
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
-# object files - includes all necessary objects
-# MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BNDSLVOBJ) $(LgDSLVOBJ) $(CFLBkOBJ) $(BKPBkOBJ) $(MCFLEOBJ)
-MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(BKPBkOBJ) $(MCFLEOBJ) $(CFLBkOBJ) 
+# object files
+MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(CFLBkOBJ) $(MILPSOBJ)
 
-# libraries - includes all necessary libraries
-MLIB = $(MILPSLIB) $(CFLBkLIB) $(BKPBkLIB) $(SMS++LIB) $(MCFLELIB) $(StcBlkLIB)
+# libraries 
+MLIB = $(SMS++LIB) $(StcBlkLIB) $(CFLBkLIB) $(MILPSLIB)
 
 # Final compilation target
 $(DIR)/$(NAME): $(MOBJ) $(DIR)/$(NAME).o
@@ -102,10 +93,10 @@ $(DIR)/$(NAME): $(MOBJ) $(DIR)/$(NAME).o
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
 # include directives
-MINC =  $(SMS++INC) $(MILPSINC) $(StcBlkINC) $(CFLBkINC) $(BKPBkINC) $(MCFBkINC) $(MCFLEINC) -I../include -I../build
+MINC =  $(SMS++INC) $(MILPSINC) $(StcBlkINC) $(CFLBkINC) -I../include -I../build
 
 # includes
-MH =    $(SMS++H) $(StcBlkH) $(MILPSH) $(CFLBkH) $(BKPBkH) $(MCFBkH) $(MCFLEH) 
+MH =    $(SMS++H) $(StcBlkH) $(MILPSH) $(CFLBkH) 
 
 # compile command
 $(DIR)/$(NAME).o: $(DIR)/$(NAME).cpp $(MH)
