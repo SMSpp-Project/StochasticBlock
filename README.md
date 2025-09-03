@@ -6,9 +6,10 @@ among other things) stochastic optimization models.
 The `StochasticBlock` class is meant to represent a `Block` whose data
 changes in a "scenario way", i.e., whole swathes of the data change all in
 one blow. This is typical (among other things) in stochastic optimization
-models, although `StochasticBlock` per se does not have any direct notion
-of stochasticity. Indeed, a `StochasticBlock` is characterized by the
-following:
+models. While `StochasticBlock` itself focuses on the mechanics of applying
+scenario data to modify its inner Block, it is designed to work seamlessly
+with `ScenarioGenerator` classes that handle probability distributions and
+scenario generation. A `StochasticBlock` is characterized by the following:
 
 - **Inner Block**: A single inner `Block` whose data changes; this can be any `:Block`
 
@@ -25,20 +26,21 @@ following:
 - **Scenario Application**: A `set_data()` method which takes a scenario (a vector) as 
   parameter and sets the data of the inner `Block` according to its set of `DataMapping`
 
-- **ScenarioGenerator Support**: Built-in integration with `ScenarioGenerator` classes 
-  (such as `DiscreteScenarioSet`) that provide, generate, or manage scenarios. The 
-  generator can be attached via `set_scenario_generator()` or, when present, is 
-  serialized/deserialized along with the block
+- **ScenarioGenerator Integration**: Designed to work alongside `ScenarioGenerator` classes 
+  (such as `DiscreteScenarioSet`) that manage probability distributions and provide scenarios.
+  The separation of concerns is deliberate: `ScenarioGenerator` handles the stochastic aspects
+  (probabilities, sampling, reduction), while `StochasticBlock` handles the application of
+  scenario data to the optimization model
 
 ## Usage Patterns
 
 ### Typical Workflow
 
 1. Create a `StochasticBlock` with an inner deterministic block
-2. Define data mappings to specify which data varies per scenario
-3. Optionally attach a `ScenarioGenerator` (e.g., `DiscreteScenarioSet`)
-4. Apply scenarios either manually or by iterating through the generator
-5. Solve or process the block for each scenario
+2. Define data mappings to specify which data varies per scenario  
+3. Attach a `ScenarioGenerator` (e.g., `DiscreteScenarioSet`) to provide scenario data
+4. Iterate through scenarios from the generator, applying each via `set_data()`
+5. Solve or process the block for each scenario realization
 
 ## Creating a StochasticBlock
 
@@ -66,12 +68,11 @@ stochastic_block->add_data_mapping(std::move(mapping1));
 std::vector<double> scenario_data = {/* ... */};
 stochastic_block->set_data(scenario_data);
 
-// Option 2: Use a ScenarioGenerator
+// Option 2: Use a ScenarioGenerator (kept separate from StochasticBlock)
 auto* scenario_gen = new DiscreteScenarioSet();
 // ... configure and load scenarios into scenario_gen ...
-stochastic_block->set_scenario_generator(scenario_gen);
 
-// Iterate through scenarios
+// Iterate through scenarios from the generator
 do {
     auto scenario = scenario_gen->get_current_scenario();
     stochastic_block->set_data(scenario);  // Direct Scenario object support
@@ -91,10 +92,6 @@ StochasticBlock Group
 │   ├── Attribute: type = "<BlockType>"          (e.g., "UCBlock", "MCFBlock")
 │   └── ... block-specific data ...
 │
-├── Group: ScenarioGenerator/                    [Optional]
-│   ├── Attribute: type = "<GeneratorType>"      (e.g., "DiscreteScenarioSet")
-│   └── ... generator-specific data ...
-│
 ├── Dimension: NumberDataMappings = N            [Optional]
 │
 ├── Group: DataMapping_0/                        [Optional, if NumberDataMappings > 0]
@@ -112,9 +109,9 @@ StochasticBlock Group
 
 **Key points:**
 - The inner `Block` group is optional - it can be provided separately via `set_inner_block()`
-- The `ScenarioGenerator` group is optional - it can be set via `set_scenario_generator()`
 - Data mappings are optional but typically needed for the block to be useful
 - Each data mapping tells the StochasticBlock which parts of the scenario vector correspond to which data in the inner block
+- ScenarioGenerators (like DiscreteScenarioSet) are kept separate and used alongside StochasticBlock
 
 ## DiscreteScenarioSet
 
