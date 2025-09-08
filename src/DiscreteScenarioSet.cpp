@@ -652,12 +652,12 @@ void DiscreteScenarioSet::serialize( netCDF::NcGroup & group ) const {
 
   // Serialize poolSize if available
   if( poolSize > 0 ) {
-   auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::ncInt );
+   auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
    poolSizeVar.putVar( &poolSize );
   }
 
   // Serialize ell from internal variable
-  auto ellVar = cfgGroup.addVar( "ell" , netCDF::ncFloat );
+  auto ellVar = cfgGroup.addVar( "ell" , netCDF::NcFloat() );
   ellVar.putVar( &ell );
 
   // Serialize BlockConfig if it exists

@@ -761,7 +761,7 @@ TestResult test_serialization_deserialization( ) {
     netCDF::NcFile dataFile( filename , netCDF::NcFile::write );
     auto cfgGroup = dataFile.addGroup( "ScenarioReductionConfig" );
     int poolSize = 5;
-    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::ncInt );
+    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
     poolSizeVar.putVar( &poolSize );
     dataFile.close();
    }
@@ -791,10 +791,10 @@ TestResult test_serialization_deserialization( ) {
     netCDF::NcFile dataFile( filename , netCDF::NcFile::write );
     auto cfgGroup = dataFile.addGroup( "ScenarioReductionConfig" );
     int poolSize = 7;
-    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::ncInt );
+    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
     poolSizeVar.putVar( &poolSize );
     float ell = 1.5f;
-    auto ellVar = cfgGroup.addVar( "ell" , netCDF::ncFloat );
+    auto ellVar = cfgGroup.addVar( "ell" , netCDF::NcFlo(at );
     ellVar.putVar( &ell );
     dataFile.close();
    }
@@ -824,7 +824,7 @@ TestResult test_serialization_deserialization( ) {
     netCDF::NcFile dataFile( filename , netCDF::NcFile::write );
     auto cfgGroup = dataFile.addGroup( "ScenarioReductionConfig" );
     int poolSize = 0;
-    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::ncInt );
+    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
     poolSizeVar.putVar( &poolSize );
     dataFile.close();
    }
@@ -851,10 +851,10 @@ TestResult test_serialization_deserialization( ) {
     netCDF::NcFile dataFile( filename1 , netCDF::NcFile::write );
     auto cfgGroup = dataFile.addGroup( "ScenarioReductionConfig" );
     int poolSize = 8;
-    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::ncInt );
+    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
     poolSizeVar.putVar( &poolSize );
     float ell = 2.5f;
-    auto ellVar = cfgGroup.addVar( "ell" , netCDF::ncFloat );
+    auto ellVar = cfgGroup.addVar( "ell" , netCDF::NcFlo(at );
     ellVar.putVar( &ell );
     dataFile.close();
    }
@@ -905,7 +905,7 @@ TestResult test_serialization_deserialization( ) {
 
     // Add poolSize variable (should have priority)
     int poolSize = 7;
-    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::ncInt );
+    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
     poolSizeVar.putVar( &poolSize );
 
     // Add BlockConfig with different SimpleConfiguration<int> value
@@ -913,7 +913,7 @@ TestResult test_serialization_deserialization( ) {
     auto extraGroup = blockGroup.addGroup( "f_extra_Configuration" );
     extraGroup.putAtt( "type" , "SimpleConfiguration<int>" );
     int block_poolSize = 5; // Different value - should be overridden
-    auto blockPoolSizeVar = extraGroup.addVar( "value" , netCDF::ncInt );
+    auto blockPoolSizeVar = extraGroup.addVar( "value" , netCDF::NcInt() );
     blockPoolSizeVar.putVar( &block_poolSize );
 
     dataFile.close();
@@ -1097,7 +1097,7 @@ TestResult test_serialization_deserialization( ) {
 
     auto cfgGroup = dataFile.addGroup( "ScenarioReductionConfig" );
     int poolSize = 15; // Invalid: poolSize > number of scenarios (10)
-    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::ncInt );
+    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
     poolSizeVar.putVar( &poolSize );
 
     dataFile.close();
