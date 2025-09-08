@@ -52,7 +52,7 @@ void StochasticBlock::deserialize( const netCDF::NcGroup & group ) {
  data_mappings.clear();
  Index num_data_mappings;
  if( deserialize_dim( group , "NumberDataMappings" , num_data_mappings , true )
-     && ( num_data_mappings > 0 ) ) {
+  && ( num_data_mappings > 0 ) ) {
   data_mappings.reserve( num_data_mappings );
   assert( v_Block.size() == 1 && v_Block.front() );
   SimpleDataMappingBase::deserialize( group , data_mappings , v_Block.front() );
@@ -112,7 +112,7 @@ void StochasticBlock::serialize_inner_block( netCDF::NcGroup & group ) const {
  if( v_Block.empty() || ! v_Block.front() )
   throw std::logic_error(
    "StochasticBlock::serialize_inner_block: no inner block to serialize." );
- 
+
  v_Block.front()->serialize( group );
 }
 

@@ -44,10 +44,9 @@ std::mt19937 random_engine;
 /*--------------------------------------------------------------------------*/
 
 class DummyBlock : public Block {
-
 public:
-
- DummyBlock( Block * f_block = nullptr ) : Block( f_block ) {}
+ DummyBlock( Block * f_block = nullptr ) : Block( f_block ) {
+ }
 
  DummyBlock( std::size_t int_size , std::size_t dbl_size ) {
   int_data.resize( int_size );
@@ -59,13 +58,13 @@ public:
 
  template< class T >
  typename std::enable_if< std::is_same_v< T , int > ,
-                          std::vector< T > & >::type get_data() {
+                          std::vector< T > & >::type get_data( ) {
   return( int_data );
  }
 
  template< class T >
  typename std::enable_if< std::is_same_v< T , double > ,
-                          std::vector< T > & >::type get_data() {
+                          std::vector< T > & >::type get_data( ) {
   return( dbl_data );
  }
 
@@ -84,7 +83,7 @@ public:
 
  template< class T >
  void set_data( typename std::vector< T >::const_iterator values ,
-                Range rng = Range( 0, Inf< Index >() ) ,
+                Range rng = Range( 0 , Inf< Index >() ) ,
                 c_ModParam issuePMod = eNoBlck ,
                 c_ModParam issueAMod = eNoBlck ) {
   auto & data = get_data< T >();
@@ -96,23 +95,23 @@ public:
   }
  }
 
- static void static_initialization() {
+ static void static_initialization( ) {
   register_method< DummyBlock , MF_int_it , Subset && , const bool >
-   ( "DummyBlock::set_data" , & DummyBlock::set_data< int > );
+   ( "DummyBlock::set_data" , &DummyBlock::set_data< int > );
 
   register_method< DummyBlock , MF_int_it , Range >
-   ( "DummyBlock::set_data" , & DummyBlock::set_data< int > );
+   ( "DummyBlock::set_data" , &DummyBlock::set_data< int > );
 
   register_method< DummyBlock , MF_dbl_it , Subset && , const bool >
-   ( "DummyBlock::set_data" , & DummyBlock::set_data< double > );
+   ( "DummyBlock::set_data" , &DummyBlock::set_data< double > );
 
   register_method< DummyBlock , MF_dbl_it , Range >
-   ( "DummyBlock::set_data" , & DummyBlock::set_data< double > );
+   ( "DummyBlock::set_data" , &DummyBlock::set_data< double > );
  }
 
 protected:
-
- void load( std::istream & input , char frmt ) override {}
+ void load( std::istream & input , char frmt ) override {
+ }
 
 private:
  std::vector< int > int_data;
@@ -129,12 +128,12 @@ SMSpp_insert_in_factory_cpp_1( DummyBlock );
 template< class T >
 struct Iter;
 
-template<>
+template< >
 struct Iter< int > {
  using type = Block::MF_int_it;
 };
 
-template<>
+template< >
 struct Iter< double > {
  using type = Block::MF_dbl_it;
 };
@@ -144,7 +143,8 @@ struct FunctionType;
 
 template< class T >
 struct FunctionType< Subset , T > {
- using type = Block::FunctionType< typename Iter< T >::type , Subset && , bool >;
+ using type = Block::FunctionType< typename Iter< T >::type , Subset && , bool >
+ ;
 };
 
 template< class T >
@@ -153,7 +153,7 @@ struct FunctionType< Range , T > {
 };
 
 template< class S , class T >
-auto get_method() {
+auto get_method( ) {
  return( Block::get_method< typename FunctionType< S , T >::type >
   ( "DummyBlock::set_data" ) );
 }
@@ -163,7 +163,7 @@ auto get_method() {
 template< class T >
 T build( int size , int total_size );
 
-template<>
+template< >
 Subset build( int size , int total_size ) {
  assert( size <= total_size );
  Subset set( total_size );
@@ -174,7 +174,7 @@ Subset build( int size , int total_size ) {
  return( set );
 }
 
-template<>
+template< >
 Range build( int size , int total_size ) {
  assert( size <= total_size );
  std::uniform_int_distribution< int > begin_dist( 0 , total_size - size );
@@ -187,14 +187,14 @@ Range build( int size , int total_size ) {
 template< class T >
 T build_sequential( int size , int offset = 0 );
 
-template<>
+template< >
 Subset build_sequential( int size , int offset ) {
  Subset set( size );
  std::iota( set.begin() , set.end() , offset );
  return( set );
 }
 
-template<>
+template< >
 Range build_sequential( int size , int offset ) {
  return( Range( offset , size + offset ) );
 }
@@ -216,7 +216,7 @@ void check( Subset set_to , const std::vector< double > & data ,
    ++j;
   }
   else
-   assert( std::size_t( block_data[ i ] ) == i  );
+   assert( std::size_t( block_data[ i ] ) == i );
  }
  assert( j == set_to.size() );
 }
@@ -224,7 +224,6 @@ void check( Subset set_to , const std::vector< double > & data ,
 template< class T >
 void check( Range set_to , const std::vector< double > & data ,
             const std::vector< T > & block_data ) {
-
  for( std::size_t i = 0 ; i < set_to.first ; ++i ) {
   assert( std::size_t( block_data[ i ] ) == i );
  }
@@ -244,7 +243,6 @@ void check( Range set_to , const std::vector< double > & data ,
 
 template< class SetFrom , class SetTo >
 void test( std::size_t int_size , std::size_t dbl_size ) {
-
  auto inner_block = new DummyBlock( int_size , dbl_size );
  StochasticBlock stochastic_block( nullptr , inner_block );
 
@@ -258,18 +256,18 @@ void test( std::size_t int_size , std::size_t dbl_size ) {
  SetTo set_to_int = build< SetTo >( scenario_int_size , int_size );
 
  stochastic_block.add_data_mapping
-  ( std::make_unique< SimpleDataMapping< SetFrom , SetTo , int > >
-    ( get_method< SetTo , int >() , inner_block ,
-      set_from_int , set_to_int ) );
+ ( std::make_unique< SimpleDataMapping< SetFrom , SetTo , int > >
+ ( get_method< SetTo , int >() , inner_block ,
+   set_from_int , set_to_int ) );
 
  SetFrom set_from_dbl = build_sequential< SetFrom >
   ( scenario_dbl_size , scenario_int_size );
  SetTo set_to_dbl = build< SetTo >( scenario_dbl_size , dbl_size );
 
  stochastic_block.add_data_mapping
-  ( std::make_unique< SimpleDataMapping< SetFrom , SetTo , double > >
-    ( get_method< SetTo , double >() , inner_block ,
-      set_from_dbl , set_to_dbl ) );
+ ( std::make_unique< SimpleDataMapping< SetFrom , SetTo , double > >
+ ( get_method< SetTo , double >() , inner_block ,
+   set_from_dbl , set_to_dbl ) );
 
  std::vector< double > int_data( scenario_int_size );
  std::vector< double > dbl_data( scenario_dbl_size );
@@ -296,27 +294,28 @@ void test( std::size_t int_size , std::size_t dbl_size ) {
 /*--------------------------------------------------------------------------*/
 
 // Control verbosity of test output
-bool VERBOSE_TESTS = false;  // Can be set via command-line argument
+bool VERBOSE_TESTS = false; // Can be set via command-line argument
 
 /*--------------------------------------------------------------------------*/
 /*---------------------------------- MAIN ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-int main(int argc, char* argv[]) {
-
+int main( int argc , char * argv[ ] ) {
  // Parse command-line arguments
- for (int i = 1; i < argc; ++i) {
-  std::string arg = argv[i];
-  if (arg == "--verbose" || arg == "-v") {
+ for( int i = 1 ; i < argc ; ++i ) {
+  std::string arg = argv[ i ];
+  if( arg == "--verbose" || arg == "-v" ) {
    VERBOSE_TESTS = true;
    std::cout << "Verbose mode enabled" << std::endl;
-  } else if (arg == "--help" || arg == "-h") {
-   std::cout << "Usage: " << argv[0] << " [options]" << std::endl;
+  }
+  else if( arg == "--help" || arg == "-h" ) {
+   std::cout << "Usage: " << argv[ 0 ] << " [options]" << std::endl;
    std::cout << "Options:" << std::endl;
    std::cout << "  -v, --verbose    Enable verbose output" << std::endl;
    std::cout << "  -h, --help       Show this help message" << std::endl;
    return 0;
-  } else {
+  }
+  else {
    std::cerr << "Unknown argument: " << arg << std::endl;
    std::cerr << "Use --help for usage information" << std::endl;
    return 1;
@@ -338,8 +337,8 @@ int main(int argc, char* argv[]) {
   test< Range , Range >( size_dist( random_engine ) ,
                          size_dist( random_engine ) );
  }
- 
- if (VERBOSE_TESTS) {
+
+ if( VERBOSE_TESTS ) {
   std::cout << "All tests passed successfully!" << std::endl;
  }
 }
