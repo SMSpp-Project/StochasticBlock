@@ -794,7 +794,7 @@ TestResult test_serialization_deserialization( ) {
     auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
     poolSizeVar.putVar( &poolSize );
     float ell = 1.5f;
-    auto ellVar = cfgGroup.addVar( "ell" , netCDF::NcFlo(at );
+    auto ellVar = cfgGroup.addVar( "ell" , netCDF::NcFloat() );
     ellVar.putVar( &ell );
     dataFile.close();
    }
@@ -854,7 +854,7 @@ TestResult test_serialization_deserialization( ) {
     auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
     poolSizeVar.putVar( &poolSize );
     float ell = 2.5f;
-    auto ellVar = cfgGroup.addVar( "ell" , netCDF::NcFlo(at );
+    auto ellVar = cfgGroup.addVar( "ell" , netCDF::NcFloat() );
     ellVar.putVar( &ell );
     dataFile.close();
    }
