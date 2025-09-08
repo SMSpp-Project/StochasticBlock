@@ -92,8 +92,8 @@ target_include_directories(
 # library, INTERFACE means they will be linked only to the targets that depend
 # on this library.
 target_link_libraries(${modName} PUBLIC 
-                                 ${modNamespace}::SMS++
-                                 ${modNamespace}::CapacitatedFacilityLocationBlock)
+                      ${modNamespace}::SMS++
+                      ${modNamespace}::CapacitatedFacilityLocationBlock)
 
 # This alias is defined so that executables in this same project can use
 # the library with this notation.
