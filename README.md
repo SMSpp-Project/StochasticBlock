@@ -37,8 +37,8 @@ scenario generation. A `StochasticBlock` is characterized by the following:
 ### Typical Workflow
 
 1. Create a `StochasticBlock` with an inner deterministic block
-2. Define data mappings to specify which data varies per scenario  
-3. Attach a `ScenarioGenerator` (e.g., `DiscreteScenarioSet`) to provide scenario data
+2. Define data mappings to specify which data varies per scenario
+3. Create a `ScenarioGenerator` (e.g., `DiscreteScenarioSet`) to provide scenario data
 4. Iterate through scenarios from the generator, applying each via `set_data()`
 5. Solve or process the block for each scenario realization
 
