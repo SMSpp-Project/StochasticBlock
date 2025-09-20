@@ -804,7 +804,10 @@ void DiscreteScenarioSet::init_representative_pool(
   update_pool_weights();
  }
 
- // Reset current index (poolSize remains as configured)
+ // Update poolSize to reflect actual number of selected scenarios
+ poolSize = scenarioIndexes.size();
+
+ // Reset current index
  currentScenarioIndex = 0;
 
  // Mark the pool as initialized if we have scenarios
