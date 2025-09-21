@@ -32,8 +32,8 @@ else ()
 endif ()
 
 # ----- StochasticBlock_test_discrete --------------------------------------- #
-add_executable(test_discretescenarioset test_discretescenarioset.cpp)
-target_link_libraries(test_discretescenarioset PRIVATE
+add_executable(test_discrete test_discrete.cpp)
+target_link_libraries(test_discrete PRIVATE
                       SMS++::StochasticBlock)
 
 add_test(NAME test_discrete

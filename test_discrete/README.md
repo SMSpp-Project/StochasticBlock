@@ -33,13 +33,13 @@ make
 ### Basic Usage
 ```bash
 # Run all tests
-./test_discretescenarioset
+./test_discrete
 
 # Run with verbose output (shows timing and details)
-./test_discretescenarioset -v
+./test_discrete -v
 
 # Run with minimal output
-./test_discretescenarioset -q
+./test_discrete -q
 ```
 
 ### Command Line Options

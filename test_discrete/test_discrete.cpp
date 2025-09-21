@@ -1,9 +1,9 @@
 /*--------------------------------------------------------------------------*/
-/*--------------------- File test_discretescenarioset.cpp ------------------*/
+/*-------------------------- File test_discrete.cpp ------------------------*/
 /*--------------------------------------------------------------------------*/
 /** @file
  * Test suite for DiscreteScenarioSet class. Mostly checking that the methods
- * can run without errors and simple sanity/debugging checks on their behaviour.
+ * can run without errors and simple sanity/debugging checks on their behavior.
  * 
  * Test 1 - Basic Functionality (Comprehensive):
  * - Part 1: Scenario loading and deserialization

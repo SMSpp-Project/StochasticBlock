@@ -11,7 +11,7 @@
 ##############################################################################
 
 # module name - must match the binary name and source file
-NAME = test_discretescenarioset
+NAME = test_discrete
 
 # basic directory
 DIR = .
