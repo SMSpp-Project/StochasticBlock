@@ -630,6 +630,40 @@ class ScenarioGenerator
 
  [[nodiscard]] virtual bool next_scenario( void ) = 0;
 
+/*--------------------------------------------------------------------------*/
+ /// reset the pool iteration to the beginning
+ /** Resets the internal iteration state to the beginning of the current pool
+  * without re-initializing or changing the pool itself. This allows iterating
+  * through the same pool multiple times without the overhead of
+  * re-initialization.
+  *
+  * This method should only be called if a pool has been initialized (via
+  * init_random_pool() or init_representative_pool()). If no pool has been
+  * initialized, this method should throw an exception.
+  *
+  * After calling reset_pool(), the next call to get_current_scenario() will
+  * return the first scenario in the pool, and next_scenario() will iterate
+  * from the beginning.
+  *
+  * @throws std::runtime_error If no pool has been initialized */
+
+ virtual void reset_pool( void ) = 0;
+
+/*--------------------------------------------------------------------------*/
+ /// check if a pool has been initialized
+ /** Returns true if either init_random_pool() or init_representative_pool()
+  * has been called and the pool is ready for iteration. Returns false if no
+  * pool has been initialized yet.
+  *
+  * This method is useful to check whether reset_pool() can be called instead
+  * of initializing a new pool, which can be more efficient when the same pool
+  * needs to be iterated multiple times.
+  *
+  * @return true if a pool is initialized and ready for iteration, false
+  *         otherwise */
+
+ [[nodiscard]] virtual bool is_pool_initialized( void ) const = 0;
+
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PROTECTED PART OF THE CLASS ------------------------*/
 /*--------------------------------------------------------------------------*/

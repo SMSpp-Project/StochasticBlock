@@ -164,42 +164,28 @@ public:
   * - "poolWeights": 1D variable of dimension [NumberScenarios] containing the
   *   probability weights of each scenario. If not present, uniform weights
   *   are assumed. The weights must sum to 1.0 (with tolerance of 1e-6).
-  * 
-  * Optional subgroup:
   *
-  * - "ScenarioReductionConfig": a subgroup containing scenario reduction
-  *   Configuration, which may include:
-  *
-  *   = "poolSize": attribute (scalar) specifying the target pool size for 
-  *                 scenario reduction
-  *
-  *   - "ell": attribute (scalar) specifying the power parameter for the 
-  *            ell-Wasserstein distance (default: 2.0)
-  *
-  *   - "BlockConfig": subgroup containing serialized BlockConfig for the
-  *                    CapacitatedFacilityLocationBlock
-  *
-  *   - "BlockSolverConfig": subgroup containing serialized BlockSolverConfig 
-  *                          for solving the scenario reduction problem
-  *                          represented by the
-  *                          CapacitatedFacilityLocationBlock
-  * 
   * @param group The netCDF group from which to read the data
   * @throws std::invalid_argument If required dimensions or variables are
   *              missing
   * @throws std::runtime_error If data cannot be read from the netCDF file
-  * @note This method clears any existing data before loading new data. */
+  * @note This method clears any existing data before loading new data.
+  * @note ScenarioReductionConfig is NOT loaded from the netCDF file. If
+  *       scenario reduction functionality is needed after deserialization,
+  *       the configuration must be set separately using set_config(). */
 
  void deserialize( const netCDF::NcGroup & group ) override;
 
 /*--------------------------------------------------------------------------*/
  /// Serialize the DiscreteScenarioSet to a netCDF group
  /** Write the discrete scenario set to a netCDF::NcGroup with the format
-  * described by deserialize(). The optional "ScenarioReductionConfig" is
-  * only created if the scenario reduction Configuration exists.
+  * described by deserialize().
   *
   * @param group The netCDF group to which to write the data
-  * @note All scenarios are written, not just the selected pool */
+  * @note All scenarios are written, not just the selected pool
+  * @note ScenarioReductionConfig is NOT serialized. If scenario reduction
+  *       configuration is needed after deserialization, it must be set
+  *       separately using set_config() */
 
  void serialize( netCDF::NcGroup& group ) const override;
 
@@ -441,8 +427,22 @@ public:
  /// Check if a scenario pool has been selected
  /** @return true if init_random_pool() or init_representative_pool() has been called */
 
- [[nodiscard]] bool is_pool_initialized( void ) const {
+ [[nodiscard]] bool is_pool_initialized( void ) const override {
   return( is_initialized );
+  }
+
+/*--------------------------------------------------------------------------*/
+ /// Reset the pool iteration to the beginning
+ /** Resets the current scenario index to 0, allowing iteration through the
+  * same pool from the beginning without re-initializing.
+  *
+  * @throws std::runtime_error If no pool has been initialized */
+
+ void reset_pool( void ) override {
+  if( ! is_initialized )
+   throw( std::runtime_error( "reset_pool: pool not initialized" ) );
+
+  currentScenarioIndex = 0;
   }
 
 /*--------------------------------------------------------------------------*/

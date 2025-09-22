@@ -709,13 +709,14 @@ REGISTER_TEST( "Scenario Reduction Algorithms" ,
 // Test 4: Serialization and deserialization
 TestResult test_serialization_deserialization( ) {
  try {
-  // Part 1: Basic serialization with config
+  // Part 1: Verify config is NOT serialized
   {
    auto dss1 = load_test_scenarios( 10 , 5 );
    auto * block_config = create_block_config( 3 , 2.0 );
    auto * solver_config = create_solver_config( "ScenarioReductionSolver" ,
                                                 "Dupacova" );
    dss1->set_config( block_config , solver_config );
+   dss1->init_representative_pool( 3 );
 
    string nc_filename = "test_dss_with_config.nc4";
    {
@@ -731,207 +732,50 @@ TestResult test_serialization_deserialization( ) {
     file.close();
    }
 
+   // Config should NOT be restored - poolSize should be 0
+   if( dss2->get_poolSize() != 0 ) {
+    remove( nc_filename.c_str() );
+    return { false , "poolSize should be 0 after deserialization (config not serialized)" };
+   }
+
+   // Config must be set manually after deserialization
+   auto * block_config2 = create_block_config( 3 , 2.0 );
+   auto * solver_config2 = create_solver_config( "ScenarioReductionSolver" ,
+                                                 "Dupacova" );
+   dss2->set_config( block_config2 , solver_config2 );
+   dss2->init_representative_pool( 3 );
+
    if( dss2->get_poolSize() != 3 ) {
     remove( nc_filename.c_str() );
-    return { false , "poolSize not properly restored" };
+    return { false , "poolSize not properly set after manual config" };
    }
 
    remove( nc_filename.c_str() );
   }
 
-  // Part 2: Deserialization with various configurations
+  // Part 2: Test basic serialization without config
   {
-   // Test no config
    string filename = create_test_scenario_file( 20 , 5 , "_no_config" );
    auto dss = make_unique< DiscreteScenarioSet >();
    netCDF::NcFile dataFile( filename , netCDF::NcFile::read );
    dss->deserialize( dataFile );
    dataFile.close();
 
+   // No config present, poolSize should be 0
    if( dss->get_poolSize() != 0 ) {
     remove( filename.c_str() );
     return { false , "poolSize should be 0 when no config is present" };
    }
 
-   remove( filename.c_str() );
-
-   // Test only poolSize provided
-   filename = create_test_scenario_file( 20 , 5 , "_only_k" );
-   {
-    netCDF::NcFile dataFile( filename , netCDF::NcFile::write );
-    auto cfgGroup = dataFile.addGroup( "ScenarioReductionConfig" );
-    int poolSize = 5;
-    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
-    poolSizeVar.putVar( &poolSize );
-    dataFile.close();
-   }
-
-   dss = make_unique< DiscreteScenarioSet >();
-   dataFile.open( filename , netCDF::NcFile::read );
-   dss->deserialize( dataFile );
-   dataFile.close();
-
-   if( dss->get_poolSize() != 5 ) {
+   // Verify we can still use the scenarios after deserialization
+   if( dss->get_nbScenarios() != 20 ) {
     remove( filename.c_str() );
-    return { false , "Should have loaded poolSize=5 from file" };
+    return { false , "Should have 20 scenarios loaded" };
    }
 
-   dss->init_representative_pool( 5 );
-
-   if( dss->get_poolSize() != 5 ) {
+   if( dss->get_scenarioSize() != 5 ) {
     remove( filename.c_str() );
-    return { false , "Should have 5 scenarios after init_representative_pool" };
-   }
-
-   remove( filename.c_str() );
-
-   // Test poolSize + ell provided
-   filename = create_test_scenario_file( 20 , 5 , "_k_and_ell" );
-   {
-    netCDF::NcFile dataFile( filename , netCDF::NcFile::write );
-    auto cfgGroup = dataFile.addGroup( "ScenarioReductionConfig" );
-    int poolSize = 7;
-    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
-    poolSizeVar.putVar( &poolSize );
-    float ell = 1.5f;
-    auto ellVar = cfgGroup.addVar( "ell" , netCDF::NcFloat() );
-    ellVar.putVar( &ell );
-    dataFile.close();
-   }
-
-   dss = make_unique< DiscreteScenarioSet >();
-   dataFile.open( filename , netCDF::NcFile::read );
-   dss->deserialize( dataFile );
-   dataFile.close();
-
-   if( dss->get_poolSize() != 7 ) {
-    remove( filename.c_str() );
-    return { false , "Should have loaded poolSize=7 from file" };
-   }
-
-   dss->init_representative_pool( 7 );
-
-   if( dss->get_poolSize() != 7 ) {
-    remove( filename.c_str() );
-    return { false , "Should have 7 scenarios after init_representative_pool" };
-   }
-
-   remove( filename.c_str() );
-
-   // Test invalid poolSize values
-   filename = create_test_scenario_file( 20 , 5 , "_k_zero" );
-   {
-    netCDF::NcFile dataFile( filename , netCDF::NcFile::write );
-    auto cfgGroup = dataFile.addGroup( "ScenarioReductionConfig" );
-    int poolSize = 0;
-    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
-    poolSizeVar.putVar( &poolSize );
-    dataFile.close();
-   }
-
-   dss = make_unique< DiscreteScenarioSet >();
-   dataFile.open( filename , netCDF::NcFile::read );
-   dss->deserialize( dataFile );
-   dataFile.close();
-
-   if( dss->get_poolSize() != 0 ) {
-    remove( filename.c_str() );
-    return { false , "No reduction should occur with poolSize=0" };
-   }
-
-   remove( filename.c_str() );
-  }
-
-  // Part 3: Serialization round-trip
-  {
-   string filename1 = create_test_scenario_file( 20 , 5 , "_roundtrip1" );
-   string filename2 = "test_roundtrip2.nc4";
-
-   {
-    netCDF::NcFile dataFile( filename1 , netCDF::NcFile::write );
-    auto cfgGroup = dataFile.addGroup( "ScenarioReductionConfig" );
-    int poolSize = 8;
-    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
-    poolSizeVar.putVar( &poolSize );
-    float ell = 2.5f;
-    auto ellVar = cfgGroup.addVar( "ell" , netCDF::NcFloat() );
-    ellVar.putVar( &ell );
-    dataFile.close();
-   }
-
-   auto dss1 = make_unique< DiscreteScenarioSet >();
-   netCDF::NcFile dataFile1( filename1 , netCDF::NcFile::read );
-   dss1->deserialize( dataFile1 );
-   dataFile1.close();
-
-   netCDF::NcFile dataFile2( filename2 , netCDF::NcFile::replace );
-   dss1->serialize( dataFile2 );
-   dataFile2.close();
-
-   auto dss2 = make_unique< DiscreteScenarioSet >();
-   netCDF::NcFile dataFile3( filename2 , netCDF::NcFile::read );
-   dss2->deserialize( dataFile3 );
-   dataFile3.close();
-
-   if( dss2->get_poolSize() != 8 ) {
-    remove( filename1.c_str() );
-    remove( filename2.c_str() );
-    return {
-     false , "Round-trip serialization failed - poolSize value not preserved"
-    };
-   }
-
-   dss2->init_representative_pool( 8 );
-
-   if( dss2->get_poolSize() != 8 ) {
-    remove( filename1.c_str() );
-    remove( filename2.c_str() );
-    return {
-     false , "Round-trip serialization failed - scenario selection failed"
-    };
-   }
-
-   remove( filename1.c_str() );
-   remove( filename2.c_str() );
-  }
-
-  // Part 4: poolSize variable priority over BlockConfig SimpleConfiguration<int>
-  {
-   string filename = create_test_scenario_file( 20 , 5 , "_k_priority" );
-   {
-    netCDF::NcFile dataFile( filename , netCDF::NcFile::write );
-
-    auto cfgGroup = dataFile.addGroup( "ScenarioReductionConfig" );
-
-    // Add poolSize variable (should have priority)
-    int poolSize = 7;
-    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
-    poolSizeVar.putVar( &poolSize );
-
-    // Add BlockConfig with different SimpleConfiguration<int> value
-    auto blockGroup = cfgGroup.addGroup( "BlockConfig" );
-    auto extraGroup = blockGroup.addGroup( "f_extra_Configuration" );
-    extraGroup.putAtt( "type" , "SimpleConfiguration<int>" );
-    int block_poolSize = 5; // Different value - should be overridden
-    auto blockPoolSizeVar = extraGroup.addVar( "value" , netCDF::NcInt() );
-    blockPoolSizeVar.putVar( &block_poolSize );
-
-    dataFile.close();
-   }
-
-   auto dss = make_unique< DiscreteScenarioSet >();
-   netCDF::NcFile dataFile( filename , netCDF::NcFile::read );
-   dss->deserialize( dataFile );
-   dataFile.close();
-
-   // poolSize variable should have priority (7, not 5)
-   if( dss->get_poolSize() != 7 ) {
-    remove( filename.c_str() );
-    return {
-     false ,
-     "poolSize variable should have priority (expected 7, got " + to_string(
-      dss->get_poolSize() ) + ")"
-    };
+    return { false , "Scenario size should be 5" };
    }
 
    remove( filename.c_str() );
@@ -1089,57 +933,6 @@ TestResult test_serialization_deserialization( ) {
    remove( nc_filename.c_str() );
   }
 
-  // Part 6: Deserialization with invalid poolSize (error checking happens at init time)
-  {
-   string filename = create_test_scenario_file( 10 , 2 , "_invalid_poolSize" );
-   {
-    netCDF::NcFile dataFile( filename , netCDF::NcFile::write );
-
-    auto cfgGroup = dataFile.addGroup( "ScenarioReductionConfig" );
-    int poolSize = 15; // Invalid: poolSize > number of scenarios (10)
-    auto poolSizeVar = cfgGroup.addVar( "poolSize" , netCDF::NcInt() );
-    poolSizeVar.putVar( &poolSize );
-
-    dataFile.close();
-   }
-
-   auto dss = make_unique< DiscreteScenarioSet >();
-   netCDF::NcFile dataFile( filename , netCDF::NcFile::read );
-
-   try {
-    dss->deserialize( dataFile );
-    dataFile.close();
-
-    // Should have loaded invalid poolSize
-    if( dss->get_poolSize() != 15 ) {
-     remove( filename.c_str() );
-     return {
-      false ,
-      "Should load invalid poolSize value (got " + to_string(
-       dss->get_poolSize() ) + ")"
-     };
-    }
-
-    // But init_representative_pool should fail
-    try {
-     dss->init_representative_pool( 15 );
-     remove( filename.c_str() );
-     return {
-      false ,
-      "Should throw exception for invalid poolSize in init_representative_pool"
-     };
-    }
-    catch( const invalid_argument & e ) {
-     // Expected behavior
-    }
-   }
-   catch( const runtime_error & e ) {
-    // If deserialization fails, that's also acceptable
-    dataFile.close();
-   }
-
-   remove( filename.c_str() );
-  }
 
 
   return { true , "NetCDF serialization and deserialization tests passed" };
