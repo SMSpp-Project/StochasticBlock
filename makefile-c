@@ -1,0 +1,58 @@
+##############################################################################
+################################ makefile-c ##################################
+##############################################################################
+#                                                                            #
+#   complete makefile of StochasticBlock                                     #
+#                                                                            #
+#   The makefile defines internally all external libraries (comprised the    #
+#   SMS++ one) required by StochasticBlock. Accordingly, all necessary OBJ,  #
+#   H, -I directives, external libraries + -L< libdirs > are added to the    #
+#   corresponding StcB* macros.                                              #
+#                                                                            #
+#   Input:  $(CC)        = compiler command                                  #
+#           $(SW)        = compiler options                                  #
+#           $(StcBlkSDR) = the directory where StochasticBlock source is     #
+#                                                                            #
+#   Output: $(StcBlkOBJ) = the final object(s) / library                     #
+#           $(StcBlkLIB) = external libraries + -L< libdirs >                #
+#           $(StcBlkH)   = the .h files to include for StochasticBlock       #
+#           $(StcBlkINC) = the -I$( StochasticBlock directory )              #
+#                                                                            #
+#                              Antonio Frangioni                             #
+#                         Dipartimento di Informatica                        #
+#                             Universita' di Pisa                            #
+#                                                                            #
+##############################################################################
+
+# define & include the necessary modules- - - - - - - - - - - - - - - - - - -
+# if a module is not used in the current configuration, just comment out the
+# corresponding include line
+# each module outputs some macros to be used here:
+# *OBJ is the final object/library
+# *H   is the list of all include files
+# *INC is the -I< include directories >
+
+# define input macros for SMS++ complete makefile, then include it
+SMS++SDR = $(StcBlkSDR)/../SMS++
+include $(SMS++SDR)/lib/makefile-c
+
+# define input macros for CapacitatedFacilityLocationBlock makefile +
+# dependencies (excluding core SMS++), then include it
+CFLBkSDR = $(StcBlkSDR)/../CapacitatedFacilityLocationBlock
+include $(CFLBkSDR)/makefile-s
+
+# include the makefile requiring all external modules in input
+include $(StcBlkSDR)/makefile
+
+# macros to be exported - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# append external -I directives to StcBlkBINC, StcBlkBOBJ and StcBlkBH as
+# defined by the makefile, thus the := assignment has to be used
+StcBlkOBJ := $(StcBlkOBJ) $(CFLBkOBJ) $(SMS++OBJ)
+StcBlkH := $(StcBlkH) $(CFLBkH) $(SMS++H)
+StcBlkINC := $(SMS++INC) $(CFLBkINC) $(StcBlkINC)
+
+# external libraries for StochasticBlock
+StcBlkLIB = $(SMS++LIB) $(CFLBkLIB)
+
+########################### End of makefile-c ################################

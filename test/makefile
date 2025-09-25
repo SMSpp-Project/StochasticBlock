@@ -62,32 +62,28 @@ clean::
 # *H   is the list of all include files
 # *INC is the -I< include directories >
 
-# define input macros for SMS++ complete makefile, then include it
-SMS++SDR = ../../SMS++
-include $(SMS++SDR)/lib/makefile-inc
-
-# StochasticBlock
+# StochasticBlock complete + core SMS++
 StcBlkSDR = ..
-include $(StcBlkSDR)/makefile
+include $(StcBlkSDR)/makefile-c
 
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
 # object files - only StochasticBlock.o, not DiscreteScenarioSet.o
-MOBJ =  $(SMS++OBJ) $(StcBlkSDR)/obj/StochasticBlock.o
+MOBJ =  $(StcBlkOBJ)
 
 # libraries
-MLIB =  $(SMS++LIB) $(StcBlkLIB)
+MLIB =   $(StcBlkLIB)
 
 $(DIR)/$(NAME): $(MOBJ) $(DIR)/test.o
-	$(CC) -o $(DIR)/$(NAME) $(DIR)/test.o $(StcBlkSDR)/obj/StochasticBlock.o $(SMS++OBJ) $(SMS++LIB) $(StcBlkLIB) $(SW)
+	$(CC) -o $(DIR)/$(NAME) $(DIR)/test.o $(MOBJ) $(StcBlkLIB) $(SW)
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
 # include directives
-MINC =  $(SMS++INC) $(StcBlkINC)
+MINC =  $(StcBlkINC)
 
-# includes - only StochasticBlock.h, not the full StcBlkH
-MH =    $(SMS++H) $(StcBlkSDR)/include/StochasticBlock.h
+# includes - only StochasticBlock.h, not the full StcBlklkH
+MH =    $(StcBlkH)
 
 # compile command
 
