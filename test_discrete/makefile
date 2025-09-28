@@ -62,29 +62,21 @@ clean::
 # *H   is the list of all include files
 # *INC is the -I< include directories >
 
-# define input macros for SMS++ complete makefile, then include it
-SMS++SDR = ../../SMS++
-include $(SMS++SDR)/lib/makefile-inc
+# StochasticBlock complete + core SMS++
+StcBlkSDR = ..
+include $(StcBlkSDR)/makefile-c
 
-# StochasticBlock
-StcBlkSDR = ../../StochasticBlock
-include $(StcBlkSDR)/makefile
-
-# CapacitatedFacilityLocationBlock (using makefile-s for automatic dependencies)
-CFLBkSDR = ../../CapacitatedFacilityLocationBlock
-include $(CFLBkSDR)/makefile-s
-
-# MILPSolver
+# MILPSolver (without core SMS++)
 MILPSSDR = ../../MILPSolver
-include $(MILPSSDR)/makefile-c
+include $(MILPSSDR)/makefile-s
 
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
 # object files
-MOBJ = $(SMS++OBJ) $(StcBlkOBJ) $(CFLBkOBJ) $(MILPSOBJ)
+MOBJ = $(StcBlkOBJ) $(MILPSOBJ)
 
 # libraries 
-MLIB = $(SMS++LIB) $(StcBlkLIB) $(CFLBkLIB) $(MILPSLIB)
+MLIB = $(StcBlkLIB) $(MILPSLIB)
 
 # Final compilation target
 $(DIR)/$(NAME): $(MOBJ) $(DIR)/$(NAME).o
@@ -93,10 +85,11 @@ $(DIR)/$(NAME): $(MOBJ) $(DIR)/$(NAME).o
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
 # include directives
-MINC =  $(SMS++INC) $(MILPSINC) $(StcBlkINC) $(CFLBkINC) -I../include -I../build
+MINC =  $(MILPSINC) $(StcBlkINC)
+# ??? -I../include -I../build
 
 # includes
-MH =    $(SMS++H) $(StcBlkH) $(MILPSH) $(CFLBkH) 
+MH =    $(StcBlkH) $(MILPSH)
 
 # compile command
 $(DIR)/$(NAME).o: $(DIR)/$(NAME).cpp $(MH)
