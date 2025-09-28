@@ -110,8 +110,8 @@ void StochasticBlock::serialize( netCDF::NcGroup & group ) const {
 
 void StochasticBlock::serialize_inner_block( netCDF::NcGroup & group ) const {
  if( v_Block.empty() || ! v_Block.front() )
-  throw std::logic_error(
-   "StochasticBlock::serialize_inner_block: no inner block to serialize." );
+  throw( std::logic_error(
+   "StochasticBlock::serialize_inner_block: no inner block to serialize." ) );
 
  v_Block.front()->serialize( group );
 }

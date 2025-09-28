@@ -60,9 +60,9 @@ static void validate_poolSize_value( DiscreteScenarioSet::ScenarioIndex size ,
                                      DiscreteScenarioSet::ScenarioIndex
                                      max_scenarios ) {
  if( size == 0 || size > max_scenarios ) {
-  throw std::invalid_argument(
+  throw( std::invalid_argument(
    "Invalid pool size parameter: must be between 1 and " +
-   std::to_string( max_scenarios ) );
+   std::to_string( max_scenarios ) ) );
  }
 }
 
@@ -173,8 +173,8 @@ static void extract_scenarios_and_assignments_from_cfl_block(
   // Get the y variable for facility i
   const auto * y_var = cflBlock->get_y( i );
   if( ! y_var ) {
-   throw std::runtime_error(
-    "Failed to get y variable for facility " + std::to_string( i ) );
+   throw( std::runtime_error(
+    "Failed to get y variable for facility " + std::to_string( i ) ) );
   }
 
   // Get value from the variable directly
@@ -219,9 +219,9 @@ static void extract_scenarios_and_assignments_from_cfl_block(
 
   if( ! found_assignment ) {
    // This shouldn't happen if the solver correctly sets x variables
-   throw std::runtime_error(
+   throw( std::runtime_error(
     "No assignment found for scenario " + std::to_string( customer ) +
-    ". The solver may not have set x variables correctly." );
+    ". The solver may not have set x variables correctly." ) );
   }
 
   scenario_assignments[ customer ] = assigned_facility;
@@ -247,8 +247,8 @@ static void extract_scenarios_and_assignments_from_cfl_block(
 
  // If no scenarios were selected, throw an error
  if( scenarioIndexes.empty() ) {
-  throw std::runtime_error(
-   "No scenarios selected by the reduction algorithm" );
+  throw( std::runtime_error(
+   "No scenarios selected by the reduction algorithm" ) );
  }
 }
 
@@ -260,8 +260,8 @@ static void extract_scenarios_and_assignments_from_cfl_block(
 std::span< const DiscreteScenarioSet::ScenarioIndex >
 DiscreteScenarioSet::get_selected_scenarios( ) const {
  if( ! is_initialized ) {
-  throw std::runtime_error(
-   "Pool has not been initialized. Call init_random_pool() or init_representative_pool() first." );
+  throw( std::runtime_error(
+   "Pool has not been initialized. Call init_random_pool() or init_representative_pool() first." ) );
  }
  return scenarioIndexes; // Implicit conversion to span
 }
@@ -382,15 +382,15 @@ void DiscreteScenarioSet::set_config( Configuration * config ) {
    if( block_config && solver_config ) {
     // Extract poolSize from the BlockConfig's extra configuration
     if( ! block_config->f_extra_Configuration ) {
-     throw std::runtime_error(
-      "No extra configuration found containing poolSize parameter" );
+     throw( std::runtime_error(
+      "No extra configuration found containing poolSize parameter" ) );
     }
 
     auto * simple_config = dynamic_cast< SimpleConfiguration< int > * >(
      block_config->f_extra_Configuration );
     if( ! simple_config ) {
-     throw std::runtime_error(
-      "Extra configuration is not a SimpleConfiguration<int>" );
+     throw( std::runtime_error(
+      "Extra configuration is not a SimpleConfiguration<int>" ) );
     }
 
     ScenarioIndex pool_size = simple_config->f_value;
@@ -407,14 +407,14 @@ void DiscreteScenarioSet::set_config( Configuration * config ) {
 
 
  // If we reach here, the configuration type is not supported
- throw std::invalid_argument(
+ throw( std::invalid_argument(
   "Unsupported configuration type for DiscreteScenarioSet::set_config(). "
   "Supported patterns are:\n"
   "1. SimpleConfiguration<int> - baseline method (top poolSize scenarios by weight)\n"
   "2. SimpleConfiguration<pair<int, Configuration*>> - advanced with generated BlockConfig\n"
   "3. SimpleConfiguration<pair<Configuration*, Configuration*>> - full advanced configuration\n"
   "Note: The ell parameter should be set via set_ell() method or netCDF deserialization."
- );
+ ) );
 }
 
 
@@ -447,10 +447,10 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group ) {
  ::deserialize_dim( group , "ScenarioSize" , scenarioSize , false );
 
  if( nbScenarios == 0 ) {
-  throw std::invalid_argument( "NumberScenarios must be positive" );
+  throw( std::invalid_argument( "NumberScenarios must be positive" ) );
  }
  if( scenarioSize == 0 ) {
-  throw std::invalid_argument( "ScenarioSize must be positive" );
+  throw( std::invalid_argument( "ScenarioSize must be positive" ) );
  }
 
  // Deserialize mandatory scenarios data
@@ -471,16 +471,16 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group ) {
  }
  else if( setWeights.size() != nbScenarios ) {
   // Probabilities were loaded but have wrong size - this is an error
-  throw std::invalid_argument(
+  throw( std::invalid_argument(
    "poolWeights size (" + std::to_string( setWeights.size() ) +
-   ") does not match NumberScenarios (" + std::to_string( nbScenarios ) + ")" );
+   ") does not match NumberScenarios (" + std::to_string( nbScenarios ) + ")" ) );
  }
 
  // Validate probabilities sum to approximately 1.0
  double sum = std::accumulate( setWeights.begin() , setWeights.end() , 0.0 );
  if( std::abs( sum - 1.0 ) > 1e-6 ) {
-  throw std::invalid_argument(
-   "Scenario probabilities must sum to 1.0, got: " + std::to_string( sum ) );
+  throw( std::invalid_argument(
+   "Scenario probabilities must sum to 1.0, got: " + std::to_string( sum ) ) );
  }
 
  // Deserialize scenario reduction configuration (optional)
@@ -526,7 +526,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group ) {
      block_cfg = dynamic_cast< BlockConfig * >( cfg );
      if( ! block_cfg ) {
       delete cfg;
-      throw std::runtime_error( "BlockConfig deserialization failed" );
+      throw( std::runtime_error( "BlockConfig deserialization failed" ) );
      }
     }
    }
@@ -544,7 +544,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group ) {
      solver_cfg = dynamic_cast< BlockSolverConfig * >( cfg );
      if( ! solver_cfg ) {
       delete cfg;
-      throw std::runtime_error( "BlockSolverConfig deserialization failed" );
+      throw( std::runtime_error( "BlockSolverConfig deserialization failed" ) );
      }
     }
    }
@@ -578,8 +578,8 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group ) {
      }
      else {
       // No poolSize variable and extra_config is not SimpleConfiguration<int>
-      throw std::runtime_error(
-       "poolSize not found: neither as variable nor in BlockConfig's extra_Configuration" );
+      throw( std::runtime_error(
+       "poolSize not found: neither as variable nor in BlockConfig's extra_Configuration" ) );
      }
     }
     else if( has_poolSize_variable ) {
@@ -589,21 +589,21 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group ) {
     }
     else {
      // No poolSize variable and no extra_Configuration
-     throw std::runtime_error(
-      "poolSize not found: neither as variable nor in BlockConfig" );
+     throw( std::runtime_error(
+      "poolSize not found: neither as variable nor in BlockConfig" ) );
     }
    }
    else if( has_poolSize_variable ) {
     // No BlockConfig provided but poolSize was given, create default one with poolSize
     block_cfg = generate_default_cfl_config( pool_size );
     if( ! block_cfg ) {
-     throw std::runtime_error( "Failed to generate default BlockConfig" );
+     throw( std::runtime_error( "Failed to generate default BlockConfig" ) );
     }
    }
    else {
     // No BlockConfig and no poolSize variable
-    throw std::runtime_error(
-     "poolSize not found: must be provided either as variable or in BlockConfig" );
+    throw( std::runtime_error(
+     "poolSize not found: must be provided either as variable or in BlockConfig" ) );
    }
 
    // Store the configuration
@@ -615,8 +615,8 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group ) {
     // Clean up allocated configs on error
     if( block_cfg ) delete block_cfg;
     if( solver_cfg ) delete solver_cfg;
-    throw std::runtime_error(
-     std::string( "Failed to set scenario reduction config: " ) + e.what() );
+    throw( std::runtime_error(
+     std::string( "Failed to set scenario reduction config: " ) + e.what() ) );
    }
   }
  }
@@ -762,13 +762,13 @@ void DiscreteScenarioSet::init_representative_pool(
 
   // Get the registered solver and solve
   if( cflBlock->get_registered_solvers().empty() ) {
-   throw std::runtime_error(
-    "No solver registered after BlockSolverConfig::apply" );
+   throw( std::runtime_error(
+    "No solver registered after BlockSolverConfig::apply" ) );
   }
 
   auto * solver = cflBlock->get_registered_solvers().front();
   if( ! solver ) {
-   throw std::runtime_error( "Failed to get solver from block" );
+   throw( std::runtime_error( "Failed to get solver from block" ) );
   }
 
 #ifndef NDEBUG
@@ -779,8 +779,8 @@ void DiscreteScenarioSet::init_representative_pool(
   // Solve the problem
   int status = solver->compute();
   if( status != Solver::kOK ) {
-   throw std::runtime_error(
-    "Solver failed with status: " + std::to_string( status ) );
+   throw( std::runtime_error(
+    "Solver failed with status: " + std::to_string( status ) ) );
   }
 
   // Ensure solver solution is written to CFL Block variables
@@ -977,8 +977,8 @@ void DiscreteScenarioSet::update_pool_weights( ) {
 void DiscreteScenarioSet::update_pool_weights_with_assignments(
  const std::vector< ScenarioIndex > & scenario_assignments ) {
  if( scenario_assignments.size() != nbScenarios ) {
-  throw std::invalid_argument(
-   "scenario_assignments size must equal nbScenarios" );
+  throw( std::invalid_argument(
+   "scenario_assignments size must equal nbScenarios" ) );
  }
 
  // Create a map from representative index to its position in scenarioIndexes
@@ -1002,9 +1002,9 @@ void DiscreteScenarioSet::update_pool_weights_with_assignments(
   }
   else {
    // This shouldn't happen if assignments are correct
-   throw std::runtime_error( "Scenario " + std::to_string( i ) +
+   throw( std::runtime_error( "Scenario " + std::to_string( i ) +
     " assigned to non-selected representative " +
-    std::to_string( assigned_repr ) );
+    std::to_string( assigned_repr ) ) );
   }
  }
 
