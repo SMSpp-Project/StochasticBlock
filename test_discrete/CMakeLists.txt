@@ -36,8 +36,11 @@ add_executable(test_discrete test_discrete.cpp)
 target_link_libraries(test_discrete PRIVATE
                       SMS++::StochasticBlock)
 
+if (TARGET SMS++::MILPSolver)
+    target_link_libraries(test_discrete PRIVATE SMS++::MILPSolver)
+endif ()
+
 add_test(NAME test_discrete
-         COMMAND test_discrete
-         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+         COMMAND test_discrete)
 
 # --------------------------------------------------------------------------- #
