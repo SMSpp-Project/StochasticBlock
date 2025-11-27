@@ -32,7 +32,7 @@
 
 #ifndef __DiscreteScenarioSet
 #define __DiscreteScenarioSet
-/* self-identification: #endif at the end of the file */
+                      /* self-identification: #endif at the end of the file */
 
 /*--------------------------------------------------------------------------*/
 /*------------------------------ INCLUDES ----------------------------------*/
