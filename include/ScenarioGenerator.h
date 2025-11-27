@@ -628,7 +628,7 @@ class ScenarioGenerator
   * scenarios seen has potentially been invalidated and should no longer be
   * used. */
 
- [[nodiscard]] virtual bool next_scenario( void ) = 0;
+ virtual bool next_scenario( void ) = 0;
 
 /*--------------------------------------------------------------------------*/
  /// reset the pool iteration to the beginning

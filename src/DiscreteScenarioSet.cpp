@@ -814,7 +814,7 @@ void DiscreteScenarioSet::init_representative_pool(
 }
 
 
-[[nodiscard]] bool DiscreteScenarioSet::next_scenario( void )
+bool DiscreteScenarioSet::next_scenario( void )
 {
  // If no pool is initialized or empty, there are no scenarios to move to
  if ( !is_initialized || scenarioIndexes.empty() ) {
