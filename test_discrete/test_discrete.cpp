@@ -495,7 +495,7 @@ TestResult test_basic_functionality( ) {
                                        } );
 
     // Add non-uniform weights
-    auto weights_var = group.addVar( "poolWeights" , netCDF::NcDouble() ,
+    auto weights_var = group.addVar( "PoolWeights" , netCDF::NcDouble() ,
                                      group.getDim( "NumberScenarios" ) );
 
     double scenario_data[ 5 ][ 2 ] = {

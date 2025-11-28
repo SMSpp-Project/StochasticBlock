@@ -484,7 +484,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
 
  // Deserialize probabilities (optional, default to uniform)
  bool probsLoaded =
-     ::deserialize( group, "poolWeights", nbScenarios, setWeights );
+     ::deserialize( group, "PoolWeights", nbScenarios, setWeights );
 
  if ( !probsLoaded ) {
   // No probabilities in file, create uniform weights
@@ -492,7 +492,7 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
  } else if ( setWeights.size() != nbScenarios ) {
   // Probabilities were loaded but have wrong size - this is an error
   throw std::invalid_argument(
-   "poolWeights size (" + std::to_string( setWeights.size() ) +
+   "PoolWeights size (" + std::to_string( setWeights.size() ) +
    ") does not match NumberScenarios (" + std::to_string( nbScenarios ) + ")" );
  }
 
@@ -663,7 +663,7 @@ void DiscreteScenarioSet::serialize( netCDF::NcGroup & group ) const
 
  // Serialize probabilities
  auto probsVar =
-     group.addVar( "poolWeights", netCDF::NcDouble(), nbScenariosDim );
+     group.addVar( "PoolWeights", netCDF::NcDouble(), nbScenariosDim );
  probsVar.putVar( setWeights.data() );
 
  // ScenarioReductionConfig is NOT serialized

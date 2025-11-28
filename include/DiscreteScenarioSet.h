@@ -157,7 +157,7 @@ namespace SMSpp_di_unipi_it {
   *
   * Optional variables:
   *
-  * - "poolWeights": 1D variable of dimension [NumberScenarios] containing the
+  * - "PoolWeights": 1D variable of dimension [NumberScenarios] containing the
   *   probability weights of each scenario. If not present, uniform weights
   *   are assumed. The weights must sum to 1.0 (with tolerance of 1e-6).
   *
@@ -668,13 +668,13 @@ namespace SMSpp_di_unipi_it {
 
  /*--------------------------------------------------------------------------*/
  /// Update pool weights after scenario selection (for random pool)
- /** Computes \c sumPoolWeights and populates \c poolWeights based on
+ /** Computes \c sumPoolWeights and populates \c PoolWeights based on
   * the selected scenarios in \c scenarioIndexes after \c init_random_pool().
   *
   * This method:
   * 1. Calculates the sum of weights for all selected scenarios
   *    (\c sumPoolWeights)
-  * 2. Populates the \c poolWeights container with normalized probabilities
+  * 2. Populates the \c PoolWeights container with normalized probabilities
   *    computed as: <tt>setWeights[scenario_i] / sumPoolWeights</tt>
   * 3. Falls back to uniform distribution if \c sumPoolWeights is zero.
   *
