@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- makefile-s and -c
+
+- comprehensive test suite for DiscreteScenarioSet scenario reduction
+
+- ScenarioReductionConfig class following SMS++ Configuration pattern
+
+- [big] implemented scenario reduction functionality in
+  DiscreteScenarioSet using CapacitatedFacilityLocationBlock
+
+- unit tests of DiscreteScenarioSet
+
+- [huge] DiscreteScenarioSet implementation of ScenarioGenerator
+
+- [huge] new general ScenarioGenerator interface
+
+### Changed
+
+- optimized compute\_transport\_cost\_matrix (only computes upper
+  triangle coefficients)
+
+- better way to do sampling without replacement using
+  std::discrete\_distribution which does sampling with replacement
+  and keeping new indices in an unordered set
+
+- wrapped debug couts with NDEBUG flag, refactoring tests
+
+- StochasticBlock now depends on CapacitatedFacilityLocationBlock to
+  implement scenario reduction capabilities
+
+- adapted to new standard organization of makefiles
+
+### Fixed
+
+- BlockConfig ownership issue in set\_scenario\_reduction\_config
+
+- compute\_scenario\_distance to properly compute ell Wasserstein
+  of the euclidean norm by default.
+
+- makefiles
+
+## [0.5.0] - 2024-02-29
+
+### Added
+
 ### Changed
 
 ### Fixed
@@ -27,7 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Default argument for "issueAMod" parameter in set_data() becomes eNoBlck.
+- Default argument for "issueAMod" parameter in set_data() becomes eNoBlck
+
 - Update load() and print() interfaces.
 
 ## [0.4.1] - 2021-12-08
@@ -64,7 +109,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - First test release.
 
-[Unreleased]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.3...develop
+[Unreleased]: https://gitlab.com/smspp/stochasticblock/-/compare/0.5.0...develop
+[0.5.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.3...0.5.0
 [0.4.3]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.2...0.4.3
 [0.4.2]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.1...0.4.2
 [0.4.1]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.0...0.4.1
