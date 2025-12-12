@@ -18,24 +18,22 @@
 
 #ifndef __StochasticBlock
 #define __StochasticBlock
-                      /* self-identification: #endif at the end of the file */
+/* self-identification: #endif at the end of the file */
 
 /*--------------------------------------------------------------------------*/
 /*------------------------------ INCLUDES ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
 #include "Block.h"
-#include "DataMapping.h"
 
-#include <Eigen/Dense>
+#include "DataMapping.h"
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
 /// namespace for the Structured Modeling System++ (SMS++)
-namespace SMSpp_di_unipi_it
-{
+namespace SMSpp_di_unipi_it {
 
 /*--------------------------------------------------------------------------*/
 /*------------------------------- CLASSES ----------------------------------*/
@@ -92,9 +90,9 @@ namespace SMSpp_di_unipi_it
  *    demand and the second set identifies what part of the demand of B is
  *    stochastic. In this example, the first set would be S1 = {0, 1, 2}, which
  *    states that the values for the demand are present at positions 0, 1, and
- *    2 of the scenario vector, and the second set would be S2 = {0, 3, 8}, which
- *    states that the demands that are stochastic are those at positions 0, 3,
- *    and 8. We also need a way of modifying this data in B. For this, it
+ *    2 of the scenario vector, and the second set would be S2 = {0, 3, 8},
+ * which states that the demands that are stochastic are those at positions 0,
+ * 3, and 8. We also need a way of modifying this data in B. For this, it
  *    suffices a method in B that can be used to update its demand (see
  *    SimpleDataMapping), let us say one called set_demand( S2 , vector ).
  *
@@ -117,29 +115,27 @@ namespace SMSpp_di_unipi_it
  *    any sense. What this class provides is a means to set the value of the
  *    data of its inner Block.
  *
- * A StochasticBlock should have a probability distribution (or some kind of
- * partial stochastic process) that describes the uncertainty in it. However,
- * for the moment, it is not supported by this class and this feature will be
- * implemented later on. Typically, an object of this class would be used in
- * conjunction with a scenario generator and the set_data() method of this
- * object would be called to consider a particular scenario.
+ * A StochasticBlock can work alongside a ScenarioGenerator (or any
+ * scenario generation mechanism) that provides scenario data representing
+ * different realizations of the uncertain parameters. The ScenarioGenerator
+ * manages the probability distribution and generates scenarios, while the
+ * StochasticBlock applies these scenarios to its inner Block through the
+ * set_data() method.
  */
 
-class StochasticBlock : public Block
-{
-/*--------------------------------------------------------------------------*/
-/*----------------------- PUBLIC PART OF THE CLASS -------------------------*/
-/*--------------------------------------------------------------------------*/
+ class StochasticBlock : public Block {
+ /*--------------------------------------------------------------------------*/
+ /*----------------------- PUBLIC PART OF THE CLASS -------------------------*/
+ /*--------------------------------------------------------------------------*/
 
-public:
+ public:
+ /*--------------------------------------------------------------------------*/
+ /*------------- CONSTRUCTING AND DESTRUCTING StochasticBlock ---------------*/
+ /*--------------------------------------------------------------------------*/
+ /** @name Constructing and destructing StochasticBlock
+  *  @{ */
 
-/*--------------------------------------------------------------------------*/
-/*------------- CONSTRUCTING AND DESTRUCTING StochasticBlock ---------------*/
-/*--------------------------------------------------------------------------*/
-/** @name Constructing and destructing StochasticBlock
- *  @{ */
-
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
  /// constructor
  /** Constructs a StochasticBlock having the given \p father Block and \p
   * inner_block inner Block. Both input parameters have a default nullptr
@@ -149,18 +145,19 @@ public:
   *
   * @param inner_block A pointer to the Block that is becoming stochastic.
   */
- StochasticBlock( Block * father = nullptr ,
-                  Block * inner_block = nullptr ) : Block( father ) {
-  if( inner_block )
+ StochasticBlock( Block * father = nullptr , Block * inner_block = nullptr )
+  : Block( father ) {
+  if ( inner_block )
    v_Block.push_back( inner_block );
  }
 
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
  /// load the StochasticBlock out of an istream - not implemented yet
 
- void load( std::istream & input , char frmt = 0 ) override {}
+ void load( std::istream & input , char frmt = 0 ) override {
+ }
 
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
  /// de-serialize a StochasticBlock out of netCDF::NcGroup
  /** The method takes a netCDF::NcGroup supposedly containing all the
   * information required to de-serialize the StochasticBlock, in the format
@@ -172,7 +169,7 @@ public:
 
  void deserialize( const netCDF::NcGroup & group ) override;
 
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
  /// destructor of StochasticBlock
  /** Destructor of StochasticBlock. It destroys the inner Block (if any),
   * releasing its memory. If the inner Block should not be destroyed then,
@@ -181,19 +178,19 @@ public:
   * passing \c nullptr as a pointer to the new inner Block and \c false to the
   * \c destroy_previous_block parameter. */
 
- virtual ~StochasticBlock() {
-  if( ! v_Block.empty() ) {
-   assert( v_Block.size() == 1 );
-   delete v_Block.front();
+ virtual ~StochasticBlock( ) {
+  if ( !v_Block.empty( ) ) {
+   assert( v_Block.size( ) == 1 );
+   delete v_Block.front( );
   }
-  v_Block.clear();
+  v_Block.clear( );
  }
 
-/**@} ----------------------------------------------------------------------*/
-/*-------------------------- OTHER INITIALIZATIONS -------------------------*/
-/*--------------------------------------------------------------------------*/
-/** @name Other initializations
- *  @{ */
+ /**@} ----------------------------------------------------------------------*/
+ /*-------------------------- OTHER INITIALIZATIONS -------------------------*/
+ /*--------------------------------------------------------------------------*/
+ /** @name Other initializations
+  *  @{ */
 
  /// set the (only) sub-Block of this StochasticBlock
  /** This method sets the only sub-Block of this StochasticBlock.
@@ -206,26 +203,26 @@ public:
   *        its allocated memory is released.
   */
  void set_inner_block( Block * block , bool destroy_previous_block = true ) {
-  if( ( ! v_Block.empty() ) && ( block == v_Block.front() ) &&
-      ( ! destroy_previous_block ) )
-   return; // the given Block is already here; silently return
+  if ( ( !v_Block.empty( ) ) && ( block == v_Block.front( ) ) &&
+          ( !destroy_previous_block ) )
+   return;  // the given Block is already here; silently return
 
-  if( destroy_previous_block && ( ! v_Block.empty() ) ) {
-   assert( v_Block.size() == 1 );
-   delete v_Block.front();
+  if ( destroy_previous_block && ( !v_Block.empty( ) ) ) {
+   assert( v_Block.size( ) == 1 );
+   delete v_Block.front( );
   }
 
-  v_Block.clear();
+  v_Block.clear( );
   v_Block.push_back( block );
 
-  if( block )
+  if ( block )
    block->set_f_Block( this );
 
- if( anyone_there() )
-  add_Modification( std::make_shared< NBModification >( this ) );
+  if ( anyone_there( ) )
+   add_Modification( std::make_shared< NBModification >( this ) );
  }
 
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
 
  /// set the vector of pointers to SimpleDataMappingBase
  /** This method sets the vector of pointers to SimpleDataMappingBase of this
@@ -238,30 +235,30 @@ public:
   *        which means that the previous inner Block (if any) is destroyed and
   *        its allocated memory is released.
   */
- void set_data_mappings( std::vector< std::unique_ptr< SimpleDataMappingBase > >
-                         && data_mappings ) {
+ void set_data_mappings(
+  std::vector< std::unique_ptr< SimpleDataMappingBase > > && data_mappings ) {
   this->data_mappings = std::move( data_mappings );
  }
 
-/** @} ---------------------------------------------------------------------*/
-/*-------------------- Methods for handling Modification -------------------*/
-/*--------------------------------------------------------------------------*/
-/** @name Methods for handling Modification
- *  @{ */
+ /** @} ---------------------------------------------------------------------*/
+ /*-------------------- Methods for handling Modification -------------------*/
+ /*--------------------------------------------------------------------------*/
+ /** @name Methods for handling Modification
+  *  @{ */
 
  void add_Modification( sp_Mod mod , Observer::ChnlName chnl = 0 ) override;
 
-/** @} ---------------------------------------------------------------------*/
-/*------------ METHODS FOR Saving THE DATA OF THE StochasticBlock ----------*/
-/*--------------------------------------------------------------------------*/
-/** @name Saving the data of the StochasticBlock
- *  @{ */
+ /** @} ---------------------------------------------------------------------*/
+ /*------------ METHODS FOR Saving THE DATA OF THE StochasticBlock ----------*/
+ /*--------------------------------------------------------------------------*/
+ /** @name Saving the data of the StochasticBlock
+  *  @{ */
 
  /// prints the StochasticBlock onto an ostream
 
  void print( std::ostream & output , char vlvl = 0 ) const override;
 
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
  /// serialize a StochasticBlock into a netCDF::NcGroup
  /** Serialize a StochasticBlock into a netCDF::NcGroup, with the following
   * format:
@@ -280,13 +277,13 @@ public:
 
  virtual void serialize( netCDF::NcGroup & group ) const override;
 
-/**@} ----------------------------------------------------------------------*/
-/*-------------- METHODS FOR MODIFYING THE StochasticBlock -----------------*/
-/*--------------------------------------------------------------------------*/
-/** @name Methods for modifying the StochasticBlock
+ /**@} ----------------------------------------------------------------------*/
+ /*-------------- METHODS FOR MODIFYING THE StochasticBlock -----------------*/
+ /*--------------------------------------------------------------------------*/
+ /** @name Methods for modifying the StochasticBlock
   *  @{ */
 
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
  /// sets the (possibly stochastic) data of this StochasticBlock
  /** This function sets the value of the (possibly stochastic) data of this
   * StochasticBlock.
@@ -300,13 +297,13 @@ public:
   *        as described in Observer::make_par().
   */
  void set_data( const std::vector< double > & data ,
-                c_ModParam issuePMod = eNoBlck ,
-                c_ModParam issueAMod = eNoBlck ) {
-  for( size_t i = 0 ; i < data_mappings.size() ; ++i )
-   data_mappings[ i ]->set_data( data.begin() , issuePMod , issueAMod );
+         c_ModParam issuePMod = eNoBlck ,
+         c_ModParam issueAMod = eNoBlck ) {
+  for ( size_t i = 0; i < data_mappings.size( ); ++i )
+   data_mappings[ i ]->set_data( data.begin( ) , issuePMod , issueAMod );
  }
 
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
 
  /// sets the (possibly stochastic) data of this StochasticBlock
  /** This function sets the value of the (possibly stochastic) data of this
@@ -320,14 +317,14 @@ public:
   * @param issueAMod Decides if and how an "abstract Modification" is issued,
   *        as described in Observer::make_par().
   */
- template< class Iterator >
+ template < class Iterator >
  void set_data( Iterator data , c_ModParam issuePMod = eNoBlck ,
-                c_ModParam issueAMod = eNoBlck ) {
-  for( size_t i = 0 ; i < data_mappings.size() ; ++i )
+         c_ModParam issueAMod = eNoBlck ) {
+  for ( size_t i = 0; i < data_mappings.size( ); ++i )
    data_mappings[ i ]->set_data( data , issuePMod , issueAMod );
  }
 
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
 
  /// adds a new SimpleDataMappingBase to this StochasticBlock
  /** This function adds a new SimpleDataMappingBase to the set of
@@ -335,17 +332,18 @@ public:
   *
   * @param data_mapping The SimpleDataMappingBase to be added.
   */
- void add_data_mapping( std::unique_ptr< SimpleDataMappingBase > data_mapping ) {
+ void add_data_mapping(
+  std::unique_ptr< SimpleDataMappingBase > data_mapping ) {
   data_mappings.push_back( std::move( data_mapping ) );
  }
 
-/**@} ----------------------------------------------------------------------*/
-/*---------- METHODS FOR READING THE DATA OF THE StochasticBlock -----------*/
-/*--------------------------------------------------------------------------*/
-/** @name Reading the data of the StochasticBlock
-    @{ */
+ /**@} ----------------------------------------------------------------------*/
+ /*---------- METHODS FOR READING THE DATA OF THE StochasticBlock -----------*/
+ /*--------------------------------------------------------------------------*/
+ /** @name Reading the data of the StochasticBlock
+     @{ */
 
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
 
  /// returns the sense of the Objective of this StochasticBlock
  /** This function returns the sense of the Objective of this StochasticBlock,
@@ -353,16 +351,16 @@ public:
   * this StochasticBlock has no inner Block, this function returns
   * Objective::eUndef.
   *
-  * @return the sense of the Objective of the inner Block of this
+  * @return The sense of the Objective of the inner Block of this
   *         StochasticBlock. */
 
- int get_objective_sense() const override {
-  if( auto inner_block = get_inner_block() )
-   return inner_block->get_objective_sense();
-  return Objective::eUndef;
+ int get_objective_sense( ) const override {
+  if ( auto inner_block = get_inner_block( ) )
+   return ( inner_block->get_objective_sense( ) );
+  return ( Objective::eUndef );
  }
 
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
 
  /// returns the vector of pointers to SimpleDataMappingBase
  /** This function returns the vector of pointers to SimpleDataMappingBase
@@ -373,11 +371,11 @@ public:
   */
 
  const std::vector< std::unique_ptr< SimpleDataMappingBase > > &
- get_data_mappings() const {
-  return data_mappings;
+ get_data_mappings( ) const {
+  return ( data_mappings );
  }
 
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
 
  /// returns a pointer to the inner Block
  /** This function returns a pointer to the inner Block of this
@@ -386,51 +384,64 @@ public:
   * @return A pointer to the inner Block of this StochasticBlock.
   */
 
- Block * get_inner_block() const {
-  return v_Block.empty() ? nullptr : v_Block.front();
+ Block * get_inner_block( ) const {
+  return ( v_Block.empty( ) ? nullptr : v_Block.front( ) );
  }
 
-/**@} ----------------------------------------------------------------------*/
-/*--------------------- PROTECTED PART OF THE CLASS ------------------------*/
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
 
-protected:
+ /// serialize only the inner Block into a netCDF::NcGroup
+ /** Serialize only the inner Block of this StochasticBlock into a
+  * netCDF::NcGroup. This is useful for creating copies of the inner Block
+  * through deserialization without expected the inner Block to have the
+  * get_R3_Block() method implemented.
+  *
+  * @param group The NcGroup in which the inner Block will be serialized.
+  *
+  * @throw std::logic_error if there is no inner Block to serialize.
+  */
 
-/*--------------------------------------------------------------------------*/
-/*-------------------------- PROTECTED METHODS -----------------------------*/
-/*--------------------------------------------------------------------------*/
+ void serialize_inner_block( netCDF::NcGroup & group ) const;
 
-/*--------------------------------------------------------------------------*/
-/*---------------------------- PROTECTED FIELDS  ---------------------------*/
-/*--------------------------------------------------------------------------*/
+ /**@} ----------------------------------------------------------------------*/
+ /*--------------------- PROTECTED PART OF THE CLASS ------------------------*/
+ /*--------------------------------------------------------------------------*/
+
+ protected:
+ /*--------------------------------------------------------------------------*/
+ /*-------------------------- PROTECTED METHODS -----------------------------*/
+ /*--------------------------------------------------------------------------*/
+
+ /*--------------------------------------------------------------------------*/
+ /*---------------------------- PROTECTED FIELDS  ---------------------------*/
+ /*--------------------------------------------------------------------------*/
 
  /// The vector of data mappings
  std::vector< std::unique_ptr< SimpleDataMappingBase > > data_mappings;
 
-/*--------------------------------------------------------------------------*/
-/*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
+ /*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
+ /*--------------------------------------------------------------------------*/
 
-private:
-
-/*--------------------------------------------------------------------------*/
-/*---------------------------- PRIVATE FIELDS ------------------------------*/
-/*--------------------------------------------------------------------------*/
+ private:
+ /*--------------------------------------------------------------------------*/
+ /*---------------------------- PRIVATE FIELDS ------------------------------*/
+ /*--------------------------------------------------------------------------*/
 
  SMSpp_insert_in_factory_h;
 
-/*--------------------------------------------------------------------------*/
+ /*--------------------------------------------------------------------------*/
 
-};   // end( class StochasticBlock )
+ }; // end( class StochasticBlock )
 
 /** @} end( group( StochasticBlock_CLASSES ) ) */
 
-}  // end( namespace SMSpp_di_unipi_it )
+}  // namespace SMSpp_di_unipi_it
 
 /*--------------------------------------------------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-#endif  /* StochasticBlock.h included */
+#endif /* StochasticBlock.h included */
 
 /*--------------------------------------------------------------------------*/
 /*--------------------- End File StochasticBlock.h -------------------------*/

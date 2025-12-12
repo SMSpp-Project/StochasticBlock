@@ -30,11 +30,16 @@
 
 # macros to be exported - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-StcBlkOBJ = $(StcBlkSDR)/obj/StochasticBlock.o 
+StcBlkOBJ = $(StcBlkSDR)/obj/DiscreteScenarioSet.o \
+	$(StcBlkSDR)/obj/StochasticBlock.o
+
+StcBlkLIB = 
 
 StcBlkINC = -I$(StcBlkSDR)/include
 
-StcBlkH   = $(StcBlkSDR)/include/StochasticBlock.h 
+StcBlkH   = $(StcBlkSDR)/include/ScenarioGenerator.h \
+	$(StcBlkSDR)/include/DiscreteScenarioSet.h \
+	$(StcBlkSDR)/include/StochasticBlock.h
 
 # clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -43,8 +48,19 @@ clean::
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
-$(StcBlkOBJ): $(StcBlkSDR)/src/StochasticBlock.cpp $(StcBlkH) $(SMS++OBJ)
+$(StcBlkSDR)/obj/StochasticBlock.o: $(StcBlkSDR)/src/StochasticBlock.cpp \
+	$(StcBlkSDR)/include/StochasticBlock.h $(SMS++OBJ)
 	$(CC) -c $(StcBlkSDR)/src/StochasticBlock.cpp -o $@ $(StcBlkINC) \
 	$(SMS++INC) $(SW)
+
+# Note: DiscreteScenarioSet requires CapacitatedFacilityLocationBlock for
+# scenario reduction functionality. The $(CFLBkINC) dependency must be
+# provided by the including makefile when DiscreteScenarioSet is used.
+$(StcBlkSDR)/obj/DiscreteScenarioSet.o: \
+	$(StcBlkSDR)/src/DiscreteScenarioSet.cpp \
+	$(StcBlkSDR)/include/ScenarioGenerator.h \
+	$(StcBlkSDR)/include/DiscreteScenarioSet.h $(SMS++OBJ)
+	$(CC) -c $(StcBlkSDR)/src/DiscreteScenarioSet.cpp -o $@ \
+	$(StcBlkINC) $(CFLBkINC) $(SMS++INC) $(SW)
 
 ########################## End of makefile ###################################

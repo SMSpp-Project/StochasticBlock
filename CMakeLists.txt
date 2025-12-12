@@ -11,18 +11,14 @@
 #                                                                             #
 #        $ cmake --build <build-path> --target install                        #
 #                                                                             #
-#    Note: this file tries to respect the principles of Modern CMake,         #
-#          keep it in mind when editing it.                                   #
-#                                                                             #
-#                              Niccolo' Iardella                              #
 #                                Donato Meoli                                 #
 #                         Dipartimento di Informatica                         #
 #                             Universita' di Pisa                             #
 # --------------------------------------------------------------------------- #
-cmake_minimum_required(VERSION 3.19)
-cmake_policy(VERSION 3.12)
+cmake_minimum_required(VERSION 3.16)
+cmake_policy(VERSION 3.15)
 project(StochasticBlock
-        VERSION 0.4.3
+        VERSION 0.6.0
         DESCRIPTION "SMS++ StochasticBlock module"
         HOMEPAGE_URL https://gitlab.com/smspp/stochasticblock
         LANGUAGES C CXX)
@@ -63,7 +59,7 @@ configure_file(cmake/${modName}Config.h.in ${modName}Config.h)
 # With the BUILD_SHARED_LIBS variable we can specify if the library will
 # be STATIC or SHARED, so no reason to do it now.
 add_library(${modName})
-target_compile_features(${modName} PUBLIC cxx_std_17)
+target_compile_features(${modName} PUBLIC cxx_std_20)
 
 # When adding source files with target_sources(), PRIVATE means that the files
 # should only be added to this library, whereas PUBLIC means they should be
@@ -71,7 +67,9 @@ target_compile_features(${modName} PUBLIC cxx_std_17)
 # INTERFACE can be used for sources that should not be added to this library
 # but should be added to anything that links to it.
 # Note: do not GLOB files here.
-target_sources(${modName} PRIVATE src/StochasticBlock.cpp)
+target_sources(${modName} PRIVATE
+               src/StochasticBlock.cpp
+               src/DiscreteScenarioSet.cpp)
 
 # When using target_include_directories(), PUBLIC means that any targets
 # that link to this target also need that include directory.
@@ -93,7 +91,9 @@ target_include_directories(
 # PUBLIC means they will be linked also to the targets that depend on this
 # library, INTERFACE means they will be linked only to the targets that depend
 # on this library.
-target_link_libraries(${modName} PUBLIC ${modNamespace}::SMS++)
+target_link_libraries(${modName} PUBLIC 
+                      ${modNamespace}::SMS++
+                      ${modNamespace}::CapacitatedFacilityLocationBlock)
 
 # This alias is defined so that executables in this same project can use
 # the library with this notation.
@@ -102,6 +102,7 @@ add_library(${modNamespace}::${modName} ALIAS ${modName})
 # ----- Subdirectories ------------------------------------------------------ #
 if (BUILD_TESTING)
     add_subdirectory(test)
+    add_subdirectory(test_discrete)
 endif ()
 
 # ----- Install instructions ------------------------------------------------ #
@@ -114,11 +115,12 @@ include(GNUInstallDirs)
 # Install the library
 install(TARGETS ${modName}
         EXPORT ${modName}Targets
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} # .dll
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} # .so .dylib
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}) # .lib
 
 # Install the headers
-install(DIRECTORY include
+install(DIRECTORY include/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${modNamespace})
 
 # Install the auto-generated configuration header (see above).
@@ -174,7 +176,7 @@ endif ()
 # Using this with the umbrella project is too messy.
 if (NOT hasParent)
     set(CPACK_PACKAGE_VENDOR "SMS++ Team")
-    set(CPACK_PACKAGE_CONTACT "Niccolo' Iardella")
+    set(CPACK_PACKAGE_CONTACT "Donato Meoli")
     set(CPACK_PACKAGE_DESCRIPTION_SUMMARY ${PROJECT_DESCRIPTION})
     set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_LIST_DIR}/LICENSE")
     set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_LIST_DIR}/README.md")

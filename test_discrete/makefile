@@ -2,7 +2,7 @@
 ################################ makefile ####################################
 ##############################################################################
 #                                                                            #
-#   makefile of test (for StochasticBlock)                                   #
+#   makefile of test for DiscreteScenarioSet                                 #
 #                                                                            #
 #                              Antonio Frangioni                             #
 #                          Dipartimento di Informatica                       #
@@ -10,19 +10,19 @@
 #                                                                            #
 ##############################################################################
 
-# module name
-NAME = StochasticBlock_test
+# module name - must match the binary name and source file
+NAME = test_discrete
 
 # basic directory
 DIR = .
 
 # common flags
-COMMON_SW = -std=c++20 -ferror-limit=1
+COMMON_SW = -std=c++20 -ferror-limit=1 -Wno-enum-compare
 
 # debug switches
-SW_DEBUG = -g -glldb -fno-inline $(COMMON_SW)
+SW_DEBUG = -g3 -glldb -fno-inline $(COMMON_SW) -DCLANG_1200_0_32_27_PATCH
 # debug switches with address sanitizer and extra pedantic warning
-SW_DEBUG_ASAN = -g3 -glldb -fno-inline $(COMMON_SW) -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer -Wpedantic -Wextra -Wno-unused-parameter
+SW_DEBUG_ASAN = -g3 -glldb -fno-inline $(COMMON_SW) -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer -Wpedantic -Wextra -Wno-unused-parameter -Wno-enum-compare -Wno-deprecated-copy-with-user-provided-copy
 # production switches
 SW_RELEASE = -O3 $(COMMON_SW) -DNDEBUG -DCLANG_1200_0_32_27_PATCH
 
@@ -51,7 +51,7 @@ release: $(DIR)/$(NAME)
 # clean target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 clean::
-	rm -f $(DIR)/*.o $(DIR)/*~ $(DIR)/$(NAME)
+	rm -f $(DIR)/*.o $(DIR)/*~ $(NAME)
 
 # define & include the necessary modules- - - - - - - - - - - - - - - - - - -
 # if a module is not used in the current configuration, just comment out the
@@ -66,29 +66,34 @@ clean::
 StcBlkSDR = ..
 include $(StcBlkSDR)/makefile-c
 
+# MILPSolver (without core SMS++)
+MILPSSDR = ../../MILPSolver
+include $(MILPSSDR)/makefile-s
+
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
-# object files - only StochasticBlock.o, not DiscreteScenarioSet.o
-MOBJ =  $(StcBlkOBJ)
+# object files
+MOBJ = $(StcBlkOBJ) $(MILPSOBJ)
 
-# libraries
-MLIB =   $(StcBlkLIB)
+# libraries 
+MLIB = $(StcBlkLIB) $(MILPSLIB)
 
-$(DIR)/$(NAME): $(MOBJ) $(DIR)/test.o
-	$(CC) -o $(DIR)/$(NAME) $(DIR)/test.o $(MOBJ) $(StcBlkLIB) $(SW)
+# Final compilation target
+$(DIR)/$(NAME): $(MOBJ) $(DIR)/$(NAME).o
+	$(CC) -o $(DIR)/$(NAME) $^ $(MLIB) $(SW)
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
 # include directives
-MINC =  $(StcBlkINC)
+MINC =  $(MILPSINC) $(StcBlkINC)
+# ??? -I../include -I../build
 
-# includes - only StochasticBlock.h, not the full StcBlklkH
-MH =    $(StcBlkH)
+# includes
+MH =    $(StcBlkH) $(MILPSH)
 
 # compile command
-
-$(DIR)/test.o: $(DIR)/test.cpp $(MH)
-	$(CC) -c $*.cpp -o $@ $(MINC) $(SW)
+$(DIR)/$(NAME).o: $(DIR)/$(NAME).cpp $(MH)
+	$(CC) -c $(DIR)/$(NAME).cpp -o $@ $(MINC) $(SW)
 
 # distclean target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
