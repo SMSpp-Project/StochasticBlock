@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.6.0] - 2025-12-12
+
+### Added
+
 - makefile-s and -c
 
 - comprehensive test suite for DiscreteScenarioSet scenario reduction
@@ -109,7 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - First test release.
 
-[Unreleased]: https://gitlab.com/smspp/stochasticblock/-/compare/0.5.0...develop
+[Unreleased]: https://gitlab.com/smspp/stochasticblock/-/compare/0.6.0...develop
+[0.6.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.5.0...0.6.0
 [0.5.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.3...0.5.0
 [0.4.3]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.2...0.4.3
 [0.4.2]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.1...0.4.2
