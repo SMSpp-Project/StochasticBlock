@@ -211,7 +211,7 @@ BlockSolverConfig * create_solver_config( const string & solver_type ,
  else {
   // MILP Solver configuration
   auto * compute_config = new ComputeConfig();
-  compute_config->f_diff = true;
+  compute_config->set_diff( true );
 
   // Add common MILP parameters
   compute_config->int_pars.emplace_back( "intLogVerb" , verbosity );
