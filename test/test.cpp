@@ -297,10 +297,33 @@ void test( std::size_t int_size , std::size_t dbl_size ) {
 bool VERBOSE_TESTS = false; // Can be set via command-line argument
 
 /*--------------------------------------------------------------------------*/
+
+/// Custom terminate function to print the exception message
+
+void smspp_terminate( void ) {
+
+ std::cerr << "Uncaught exception in executing SMS++:\n";
+ try {
+  std::rethrow_exception( std::current_exception() );
+ }
+ catch( const std::exception & e ) {
+  std::cerr << "\tException type: " << typeid( e ).name() << "\n";
+  std::cerr << "\tException message: " << e.what() << "\n";
+ } catch( ... ) {
+  std::cerr << "\tUnknown exception" << std::endl;
+ }
+ std::abort(); // or exit(1)
+}
+
+/*--------------------------------------------------------------------------*/
 /*---------------------------------- MAIN ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-int main( int argc , char * argv[ ] ) {
+int main( int argc , char ** argv )
+{
+ // override the default terminate handler to print the exception message
+ std::set_terminate( smspp_terminate );
+
  // Parse command-line arguments
  for( int i = 1 ; i < argc ; ++i ) {
   std::string arg = argv[ i ];

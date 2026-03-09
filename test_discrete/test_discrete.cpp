@@ -70,6 +70,27 @@ using namespace SMSpp_di_unipi_it;
 using namespace std;
 
 /*--------------------------------------------------------------------------*/
+/*------------------------------ FUNCTIONS ---------------------------------*/
+/*--------------------------------------------------------------------------*/
+
+/// Custom terminate function to print the exception message
+
+void smspp_terminate( void ) {
+
+ std::cerr << "Uncaught exception in executing SMS++:\n";
+ try {
+  std::rethrow_exception( std::current_exception() );
+ }
+ catch( const std::exception & e ) {
+  std::cerr << "\tException type: " << typeid( e ).name() << "\n";
+  std::cerr << "\tException message: " << e.what() << "\n";
+ } catch( ... ) {
+  std::cerr << "\tUnknown exception" << std::endl;
+ }
+ std::abort(); // or exit(1)
+}
+
+/*--------------------------------------------------------------------------*/
 /*--------------------------- TEST FRAMEWORK -------------------------------*/
 /*--------------------------------------------------------------------------*/
 
@@ -1025,7 +1046,6 @@ TestResult test_iteration_and_spans( ) {
 
 REGISTER_TEST( "Iteration and Spans" , test_iteration_and_spans );
 
-
 /*--------------------------------------------------------------------------*/
 /*-------------------------------- MAIN ------------------------------------*/
 /*--------------------------------------------------------------------------*/
@@ -1040,7 +1060,11 @@ void print_usage( const char * program_name ) {
  cout << "  (no options)   Run all tests" << endl;
 }
 
-int main( int argc , char * argv[ ] ) {
+int main( int argc , char ** argv )
+{
+ // override the default terminate handler to print the exception message
+ std::set_terminate( smspp_terminate );
+
  cout << "========== DiscreteScenarioSet Test Suite ==========" << endl;
  cout << "Testing scenario reduction functionality\n" << endl;
 
