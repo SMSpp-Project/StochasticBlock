@@ -186,6 +186,27 @@ namespace SMSpp_di_unipi_it {
  void serialize( netCDF::NcGroup & group ) const override;
 
  /*--------------------------------------------------------------------------*/
+ /// Load scenario data from a plain-text stream
+ /** Reads scenario data from a plain-text istream in the following format:
+  *
+  *   N D
+  *   w_0 w_1 ... w_{N-1}
+  *   s_0[0] s_0[1] ... s_0[D-1]
+  *   ...
+  *   s_{N-1}[0] ... s_{N-1}[D-1]
+  *
+  * where N = number of scenarios, D = scenario size,
+  * w_i = probability weight (must sum to 1.0 within 1e-6),
+  * s_i[d] = d-th component of scenario i.
+  *
+  * This method internally calls load_from_memory() and resets pool state.
+  *
+  * @param input  input stream to read from
+  * @throws std::invalid_argument if format is invalid
+  */
+ void load( std::istream & input );
+
+ /*--------------------------------------------------------------------------*/
 
  virtual ~DiscreteScenarioSet( );
 
@@ -520,6 +541,58 @@ namespace SMSpp_di_unipi_it {
    throw(std::invalid_argument( "set_ell: ell must be positive" ));
 
   ell = ell_value;
+ }
+
+ /*--------------------------------------------------------------------------*/
+ /// Load scenarios directly from memory (for testing without netCDF)
+ /** Populates the scenario set from in-memory data without requiring a
+  * netCDF file. Intended for unit tests and programmatic construction.
+  *
+  * @param scenarios  N×D matrix: scenarios[i][d] = d-th component of i-th
+  *                   scenario. All rows must have the same size D.
+  * @param weights    N probability weights. If empty, uniform 1/N is used.
+  *                   Weights are stored as-is (need not sum to 1.0 here).
+  * @throws std::invalid_argument if scenarios is empty or rows differ in size
+  */
+ void load_from_memory(
+   const std::vector< std::vector< double > > & scenarios ,
+   const std::vector< double > & weights = {} ) {
+
+  if( scenarios.empty() )
+   throw std::invalid_argument(
+     "DiscreteScenarioSet::load_from_memory: no scenarios provided" );
+
+  const std::size_t N = scenarios.size();
+  const std::size_t D = scenarios[ 0 ].size();
+  for( std::size_t i = 1 ; i < N ; ++i )
+   if( scenarios[ i ].size() != D )
+    throw std::invalid_argument(
+     "DiscreteScenarioSet::load_from_memory: scenario rows differ in size" );
+
+  nbScenarios  = static_cast< ScenarioIndex >( N );
+  scenarioSize = static_cast< ScenarioSize  >( D );
+
+  scenarioSet.resize( boost::extents[ N ][ D ] );
+  for( std::size_t i = 0 ; i < N ; ++i )
+   for( std::size_t d = 0 ; d < D ; ++d )
+    scenarioSet[ i ][ d ] = scenarios[ i ][ d ];
+
+  if( weights.empty() ) {
+   setWeights.assign( N , 1.0 / static_cast< double >( N ) );
+  } else {
+   if( weights.size() != N )
+    throw std::invalid_argument(
+     "DiscreteScenarioSet::load_from_memory: weights size mismatch" );
+   setWeights = weights;
+  }
+
+  // Reset pool state
+  scenarioIndexes.clear();
+  poolWeights.clear();
+  sumPoolWeights = 0.0;
+  currentScenarioIndex = 0;
+  poolSize = 0;
+  is_initialized = false;
  }
 
  /** @} ---------------------------------------------------------------------*/

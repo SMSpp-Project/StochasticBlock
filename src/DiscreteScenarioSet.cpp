@@ -672,6 +672,53 @@ void DiscreteScenarioSet::serialize( netCDF::NcGroup & group ) const
 }
 
 
+/*--------------------------------------------------------------------------*/
+
+void DiscreteScenarioSet::load( std::istream & input )
+{
+ static const std::string sre( "DiscreteScenarioSet::load: stream read error" );
+
+ // Read N (number of scenarios) and D (scenario size)
+ unsigned int N = 0, D = 0;
+ input >> N >> D;
+ if( input.fail() )
+  throw std::invalid_argument( sre + ": expected N D" );
+ if( N == 0 )
+  throw std::invalid_argument( sre + ": N must be positive" );
+ if( D == 0 )
+  throw std::invalid_argument( sre + ": D must be positive" );
+
+ // Read probability weights
+ std::vector< double > weights( N );
+ for( unsigned int i = 0 ; i < N ; ++i ) {
+  input >> weights[ i ];
+  if( input.fail() )
+   throw std::invalid_argument( sre + ": failed reading weight " +
+                                std::to_string( i ) );
+  }
+
+ // Validate weights sum to 1.0
+ double sum = std::accumulate( weights.begin() , weights.end() , 0.0 );
+ if( std::abs( sum - 1.0 ) > 1e-6 )
+  throw std::invalid_argument( sre + ": weights sum to " +
+                               std::to_string( sum ) + ", expected 1.0" );
+
+ // Read scenario data
+ std::vector< std::vector< double > > scenarios( N ,
+                                                  std::vector< double >( D ) );
+ for( unsigned int i = 0 ; i < N ; ++i )
+  for( unsigned int d = 0 ; d < D ; ++d ) {
+   input >> scenarios[ i ][ d ];
+   if( input.fail() )
+    throw std::invalid_argument( sre + ": failed reading scenario " +
+                                 std::to_string( i ) + " element " +
+                                 std::to_string( d ) );
+   }
+
+ // Delegate to load_from_memory() which resets pool state
+ load_from_memory( scenarios , weights );
+}
+
 // Initialize a pool with randomly selected scenarios
 void DiscreteScenarioSet::init_random_pool( ScenarioIndex pool_size )
 {
