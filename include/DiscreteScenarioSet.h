@@ -24,6 +24,9 @@
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  *
+ * \author Claude Opus 4.7 \n
+ *         Antrophic \n
+ *
  * \copyright &copy; by Antonio Frangioni, Benoît Tran
  */
 /*--------------------------------------------------------------------------*/
@@ -50,8 +53,8 @@
 /*--------------------------------------------------------------------------*/
 
 /// namespace for the Structured Modeling System++ (SMS++)
-namespace SMSpp_di_unipi_it {
-
+namespace SMSpp_di_unipi_it
+{
 /*--------------------------------------------------------------------------*/
 /*--------------------- CLASS DiscreteScenarioSet --------------------------*/
 /*--------------------------------------------------------------------------*/
@@ -254,6 +257,21 @@ namespace SMSpp_di_unipi_it {
   return(scenarioSize);
  }
 
+ /*--------------------------------------------------------------------------*/
+ /// Get the support size of the discrete distribution
+ /** A DiscreteScenarioSet has a *finite* support: each call samples from a
+  * fixed pool of nbScenarios distinct scenarios that was loaded at
+  * deserialize() time. We therefore override the base class default
+  * (INFScenario) to return the actual pool size, so callers (e.g.,
+  * SDDPSolver::set_Block in the v1 ScenarioGenerator path) can size their
+  * pools accordingly without resorting to an explicit pool-size parameter.
+  *
+  * @return The number of distinct scenarios available in the pool */
+
+ [[nodiscard]] ScenarioIndex get_support_size( void ) override {
+  return( nbScenarios );
+ }
+
  /** @} ---------------------------------------------------------------------*/
  /*-------------------- SCENARIO POOL MANAGEMENT METHODS --------------------*/
  /*--------------------------------------------------------------------------*/
@@ -279,7 +297,7 @@ namespace SMSpp_di_unipi_it {
   * \endcode
   */
 
- void init_random_pool( ScenarioIndex pool_size ) override;
+ void init_random_pool( ScenarioIndex pool_size = INFScenario ) override;
 
  /*--------------------------------------------------------------------------*/
  /// Select representative scenarios using scenario reduction
@@ -314,7 +332,8 @@ namespace SMSpp_di_unipi_it {
   * \endcode
   */
 
- void init_representative_pool( ScenarioIndex target_pool_size ) override;
+ void init_representative_pool( ScenarioIndex target_pool_size = INFScenario )
+  override;
 
  /** @} ---------------------------------------------------------------------*/
  /*----------------- SCENARIO REDUCTION CONFIG METHODS ----------------------*/
@@ -531,6 +550,19 @@ namespace SMSpp_di_unipi_it {
 
  /// Indexes of the discrete pool
  std::vector< ScenarioIndex > scenarioIndexes;
+
+ /// Indexes (into \c scenarioSet) defining the current universe filter
+ /** This vector holds the subset of scenarios that can be sampled by
+  * subsequent init_random_pool() calls. It is populated by
+  * init_representative_pool(K) with a finite K, and reset to the full
+  * range [0, nbScenarios) by init_representative_pool(INFScenario) (or
+  * any K >= nbScenarios). If it is left empty (no init_*_pool() call
+  * has been made yet) the first init_random_pool() call lazily fills
+  * it with the full range — i.e., "no filter" is the implicit default.
+  *
+  * The pool weights of universeIndexes-restricted random sampling come
+  * from \c setWeights restricted to these indices and renormalised. */
+ std::vector< ScenarioIndex > universeIndexes;
 
  /*--------------------------------------------------------------------------*/
  /*--------------------------- PRIVATE FIELDS -------------------------------*/
