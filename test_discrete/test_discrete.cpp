@@ -367,9 +367,18 @@ TestResult test_basic_functionality( ) {
 
   // Part 5: Test utility methods
   // Test is_pool_initialized
+  // A freshly constructed instance has no pool yet.
+  auto dss_fresh = make_unique< DiscreteScenarioSet >();
+  if( dss_fresh->is_pool_initialized() ) {
+   return { false , "Pool should not be initialized before deserialization" };
+  }
+
+  // After deserialization the pool is lazily set to the canonical (full) order,
+  // so the generator is immediately walkable (see
+  // DiscreteScenarioSet::deserialize).
   auto dss_util = load_test_scenarios( 10 , 4 );
-  if( dss_util->is_pool_initialized() ) {
-   return { false , "Pool should not be initialized initially" };
+  if( ! dss_util->is_pool_initialized() ) {
+   return { false , "Pool should be initialized after deserialization" };
   }
 
   dss_util->init_random_pool( 5 );
@@ -471,8 +480,10 @@ TestResult test_basic_functionality( ) {
    return { false , "Should iterate through all 5 scenarios" };
   }
 
-  // Test error conditions - access before initialization
-  auto dss_uninit = load_test_scenarios( 10 , 4 );
+  // Test error conditions - access before initialization. A freshly
+  // constructed instance (not deserialized) has no pool yet, since
+  // deserialization lazily sets the canonical pool.
+  auto dss_uninit = make_unique< DiscreteScenarioSet >();
 
   try {
    ( void )dss_uninit->get_selected_scenarios();
@@ -936,16 +947,19 @@ TestResult test_serialization_deserialization( ) {
     file.close();
    }
 
-   // After deserialization, pool is NOT initialized
-   if( dss2->is_pool_initialized() ) {
+   // After deserialization, the pool is lazily set to the canonical (full)
+   // order, so the generator is immediately walkable. Note that the saved
+   // pool state (selected scenarios / iteration position) is NOT preserved:
+   // only the scenarios and weights are serialized.
+   if( ! dss2->is_pool_initialized() ) {
     remove( nc_filename.c_str() );
     return {
      false ,
-     "Pool should not be initialized after deserialization (current behavior)"
+     "Pool should be initialized (canonical order) after deserialization"
     };
    }
 
-   // Must re-initialize to use
+   // Re-initialize with a random pool to exercise the usual workflow.
    dss2->init_random_pool( 6 );
 
    // Due to random selection, the selected scenarios will likely differ
