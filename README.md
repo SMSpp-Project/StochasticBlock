@@ -153,8 +153,8 @@ represented as collections of scenario vectors.
 
   * **Representative Selection** (`init_representative_pool()`): Selects a
     representative subset that minimizes the Wasserstein distance (when
-	configured with solver) or selects highest-weight scenarios (baseline
-	method)
+    configured with solver) or selects highest-weight scenarios (baseline
+    method)
 
 ### Usage Pattern
 
@@ -197,10 +197,10 @@ you to choose the approach that best fits your workflow:
    auto* block_config = new BlockConfig();
    auto* solver_config = new BlockSolverConfig();
    // Configure parameters as needed...
-   
+
    // Option A: Set config without pool size (specify later)
    scenario_set.set_config(block_config, solver_config);
-   
+
    // Option B: Set config with pool size together
    scenario_set.set_config(block_config, solver_config, 50);
    ```
@@ -225,13 +225,13 @@ you to choose the approach that best fits your workflow:
    // Simple: Just pool size (uses baseline method)
    auto config = new SimpleConfiguration<int>(50);
    scenario_set.set_config(config);
-   
+
    // Advanced: Pool size + Solver configuration
    auto config = new SimpleConfiguration<pair<int, Configuration*>>(
        make_pair(50, solver_config)
    );
    scenario_set.set_config(config);
-   
+
    // Full: Complete Block and Solver configuration
    auto config = new SimpleConfiguration<pair<Configuration*, Configuration*>>(
        make_pair(block_config, solver_config)
@@ -313,6 +313,12 @@ your OS `*` and edit the relevant bits (commenting out all the rest).
 
 Check the [SMS++ installation wiki](https://gitlab.com/smspp/smspp-project/-/wikis/Customize-the-configuration#location-of-required-libraries)
 for further details.
+
+
+## Tests
+
+The [test](test) folder contains a tester for `StochasticBlock`, which builds
+an instance, attaches a `:Solver` and checks its solution.
 
 
 ## Getting help
