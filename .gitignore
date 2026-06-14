@@ -4,8 +4,7 @@
 
 # --- Project-specific ---------------------------------------
 test/StochasticBlock_test
-test_discrete/StochasticBlock_test_discrete
-test_discrete/test_discrete
+test/test_discrete
 
 # --- C/C++ build artifacts ----------------------------------
 *.o

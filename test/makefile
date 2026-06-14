@@ -2,7 +2,7 @@
 ################################ makefile ####################################
 ##############################################################################
 #                                                                            #
-#   makefile of test (for StochasticBlock)                                   #
+#   makefile of the StochasticBlock tests                                    #
 #                                                                            #
 #                              Antonio Frangioni                             #
 #                          Dipartimento di Informatica                       #
@@ -10,8 +10,8 @@
 #                                                                            #
 ##############################################################################
 
-# module name
-NAME = StochasticBlock_test
+# the executables built here
+NAMES = StochasticBlock_test test_discrete
 
 # basic directory
 DIR = .
@@ -36,26 +36,24 @@ default: release
 # debug target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 debug: SW = $(SW_DEBUG)
-debug: $(DIR)/$(NAME)
+debug: $(addprefix $(DIR)/,$(NAMES))
 
 # debug_asan target - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 debug_asan: SW = $(SW_DEBUG_ASAN)
-debug_asan: $(DIR)/$(NAME)
+debug_asan: $(addprefix $(DIR)/,$(NAMES))
 
 # release target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 release: SW = $(SW_RELEASE)
-release: $(DIR)/$(NAME)
+release: $(addprefix $(DIR)/,$(NAMES))
 
 # clean target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 clean::
-	rm -f $(DIR)/*.o $(DIR)/*~ $(DIR)/$(NAME)
+	rm -f $(DIR)/*.o $(DIR)/*~ $(addprefix $(DIR)/,$(NAMES))
 
 # define & include the necessary modules- - - - - - - - - - - - - - - - - - -
-# if a module is not used in the current configuration, just comment out the
-# corresponding include line
 # each module outputs some macros to be used here:
 # *OBJ is the final object(s) / library
 # *LIB is the external libraries + -L< libdirs >
@@ -66,29 +64,33 @@ clean::
 StcBlkSDR = ..
 include $(StcBlkSDR)/makefile-c
 
+# MILPSolver (without core SMS++), only needed by test_discrete
+MILPSSDR = ../../MILPSolver
+include $(MILPSSDR)/makefile-s
+
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
-# object files - only StochasticBlock.o, not DiscreteScenarioSet.o
-MOBJ =  $(StcBlkOBJ)
+# StochasticBlock_test needs only StochasticBlock + core
+$(DIR)/StochasticBlock_test: $(StcBlkOBJ) $(DIR)/test.o
+	$(CC) -o $@ $(DIR)/test.o $(StcBlkOBJ) $(StcBlkLIB) $(SW)
 
-# libraries
-MLIB =   $(StcBlkLIB)
-
-$(DIR)/$(NAME): $(MOBJ) $(DIR)/test.o
-	$(CC) -o $(DIR)/$(NAME) $(DIR)/test.o $(MOBJ) $(StcBlkLIB) $(SW)
+# test_discrete additionally needs MILPSolver
+$(DIR)/test_discrete: $(StcBlkOBJ) $(MILPSOBJ) $(DIR)/test_discrete.o
+	$(CC) -o $@ $(DIR)/test_discrete.o $(StcBlkOBJ) $(MILPSOBJ) \
+	      $(StcBlkLIB) $(MILPSLIB) $(SW)
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
 # include directives
-MINC =  $(StcBlkINC)
+MINC =  $(StcBlkINC) $(MILPSINC)
 
-# includes - only StochasticBlock.h, not the full StcBlklkH
-MH =    $(StcBlkH)
+# includes
+MH =    $(StcBlkH) $(MILPSH)
 
 # compile command
 
-$(DIR)/test.o: $(DIR)/test.cpp $(MH)
-	$(CC) -c $*.cpp -o $@ $(MINC) $(SW)
+$(DIR)/%.o: $(DIR)/%.cpp $(MH)
+	$(CC) -c $< -o $@ $(MINC) $(SW)
 
 # distclean target- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
