@@ -55,9 +55,6 @@
  *         Dipartimento di Informatica \n
  *         Universita' di Pisa \n
  *
- * \author Claude Opus 4.7 \n
- *         Antrophic \n
- *
  * \copyright &copy; by Antonio Frangioni and Benoit Tran
  */
 /*--------------------------------------------------------------------------*/
