@@ -11,7 +11,7 @@
 ##############################################################################
 
 # the executables built here
-NAMES = StochasticBlock_test test_discrete
+NAMES = StochasticBlock_test test_discrete test_mssds
 
 # basic directory
 DIR = .
@@ -78,6 +78,10 @@ $(DIR)/StochasticBlock_test: $(StcBlkOBJ) $(DIR)/test.o
 $(DIR)/test_discrete: $(StcBlkOBJ) $(MILPSOBJ) $(DIR)/test_discrete.o
 	$(CC) -o $@ $(DIR)/test_discrete.o $(StcBlkOBJ) $(MILPSOBJ) \
 	      $(StcBlkLIB) $(MILPSLIB) $(SW)
+
+# test_mssds needs only StochasticBlock + core
+$(DIR)/test_mssds: $(StcBlkOBJ) $(DIR)/test_mssds.o
+	$(CC) -o $@ $(DIR)/test_mssds.o $(StcBlkOBJ) $(StcBlkLIB) $(SW)
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 

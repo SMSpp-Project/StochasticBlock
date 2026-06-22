@@ -74,6 +74,7 @@
 
 // Required for Scenario type but not available in SMSTypedefs.h yet
 // TODO: Consider adding to SMSTypedefs.h in a future update
+#include <memory>    // for std::unique_ptr (View handles)
 #include <span>      // C++20: For non-owning views of contiguous data
 #include <stdexcept> // for std::logic_error / std::invalid_argument
 #include <vector>    // for std::vector< ScenarioIndex > overloads
@@ -1012,6 +1013,61 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
  // previous_stage( INFStage ) (which clamps to 0 and, per the
  // previous_stage contract, also resets the destination stage's
  // iteration). No dedicated reset_stage() is provided.
+
+/** @} ---------------------------------------------------------------------*/
+/*------------------- VIEW-BASED (HISTORY-PINNED) ACCESS -------------------*/
+/*--------------------------------------------------------------------------*/
+/** @name View-based, history-pinned access
+ *  @{ */
+
+ /// a lightweight, history-pinned view of the process, itself a SG
+ /** A View pins a history H (a sub-path from the root down to a node) and *is*
+  * a single-stage ScenarioGenerator over the *children* of that node, i.e.
+  * over the realizations of X_{t+1} | H, with their conditional probabilities
+  * as the pool weights. A consumer that only needs "the scenarios at this
+  * point" (e.g. a TwoStageStochasticBlock) thus uses a View as an ordinary
+  * ScenarioGenerator, unaware of sitting inside a larger tree.
+  *
+  * A View is meant to be a cheap handle (conceptually a pointer to the
+  * immutable generator plus the pinned position), so that arbitrarily many
+  * can be held at once, e.g. one per node to build the corresponding Block
+  * tree, possibly concurrently since the generator is not mutated.
+  *
+  * From a View one descends into the currently selected child via descend(),
+  * which extends H by one stage and returns the View pinned there; this is
+  * the canonical way to walk the tree. */
+
+ class View : public ScenarioGenerator
+ {
+  public:
+
+   /// descend into the child currently selected by get_current_scenario()
+   /** Returns a View pinned at the child currently selected by the inherited
+    * get_current_scenario() (extending the history H by one stage); the
+    * returned View's pool are the children of that child. Returns nullptr if
+    * the current child is a leaf (there is no further stage). */
+
+   [[nodiscard]] virtual std::unique_ptr< View > descend() const = 0;
+
+   /// the stage (depth of the pinned history H) of this View
+
+   [[nodiscard]] virtual StageIndex stage() const = 0;
+
+ };   // end( class View )
+
+/*--------------------------------------------------------------------------*/
+ /// create a View pinned at the root (empty history, stage 0)
+ /** Returns a View pinned at the root of the scenario tree: its history H is
+  * empty and its pool are the first-stage realizations. From it the whole
+  * tree is reached via descend(). The base class default throws: only
+  * :MultiStageScenarioGenerator that support the view-based access override
+  * it, so that adding this contract is non-breaking for the others. */
+
+ [[nodiscard]] virtual std::unique_ptr< View > root_view() const {
+  throw( std::logic_error(
+   "MultiStageScenarioGenerator::root_view: view-based access not supported "
+   "by this :MultiStageScenarioGenerator" ) );
+  }
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PROTECTED PART OF THE CLASS ------------------------*/

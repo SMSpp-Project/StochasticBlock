@@ -31,6 +31,7 @@
 # macros to be exported - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 StcBlkOBJ = $(StcBlkSDR)/obj/DiscreteScenarioSet.o \
+	$(StcBlkSDR)/obj/MultiStageDiscreteScenarioSet.o \
 	$(StcBlkSDR)/obj/StochasticBlock.o
 
 StcBlkLIB = 
@@ -39,6 +40,7 @@ StcBlkINC = -I$(StcBlkSDR)/include
 
 StcBlkH   = $(StcBlkSDR)/include/ScenarioGenerator.h \
 	$(StcBlkSDR)/include/DiscreteScenarioSet.h \
+	$(StcBlkSDR)/include/MultiStageDiscreteScenarioSet.h \
 	$(StcBlkSDR)/include/StochasticBlock.h
 
 # clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -62,5 +64,14 @@ $(StcBlkSDR)/obj/DiscreteScenarioSet.o: \
 	$(StcBlkSDR)/include/DiscreteScenarioSet.h $(SMS++OBJ)
 	$(CC) -c $(StcBlkSDR)/src/DiscreteScenarioSet.cpp -o $@ \
 	$(StcBlkINC) $(CFLBkINC) $(SMS++INC) $(SW)
+
+# MultiStageDiscreteScenarioSet only needs the (abstract) ScenarioGenerator
+# and core SMS++ (netCDF, factory); no CapacitatedFacilityLocationBlock.
+$(StcBlkSDR)/obj/MultiStageDiscreteScenarioSet.o: \
+	$(StcBlkSDR)/src/MultiStageDiscreteScenarioSet.cpp \
+	$(StcBlkSDR)/include/ScenarioGenerator.h \
+	$(StcBlkSDR)/include/MultiStageDiscreteScenarioSet.h $(SMS++OBJ)
+	$(CC) -c $(StcBlkSDR)/src/MultiStageDiscreteScenarioSet.cpp -o $@ \
+	$(StcBlkINC) $(SMS++INC) $(SW)
 
 ########################## End of makefile ###################################
