@@ -32,6 +32,7 @@ target_sources( ${modName} PRIVATE
     src/StochasticBlock.cpp
     src/DiscreteScenarioSet.cpp
     src/ScenarioReductionBlock.cpp
+    src/IndependentMultiStageScenarioGenerator.cpp
 )
 
 target_include_directories( ${modName} PUBLIC

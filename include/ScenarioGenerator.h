@@ -74,15 +74,17 @@
 
 // Required for Scenario type but not available in SMSTypedefs.h yet
 // TODO: Consider adding to SMSTypedefs.h in a future update
-#include <span>  // C++20: For non-owning views of contiguous data
+#include <span>      // C++20: For non-owning views of contiguous data
+#include <stdexcept> // for std::logic_error / std::invalid_argument
+#include <vector>    // for std::vector< ScenarioIndex > overloads
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
 /// namespace for the Structured Modeling System++ (SMS++)
-namespace SMSpp_di_unipi_it {
-
+namespace SMSpp_di_unipi_it
+{
 // Forward declaration of Block class
 class Block;
 
@@ -209,8 +211,7 @@ class ScenarioGenerator
 /// Note about Block usage
 /** Derived classes of ScenarioGenerator *might* need the data of a problem
  * contained into a Block. These derived class will include (derived) classes
- * of Block. The Block class is forward declared at the namespace level.
- */
+ * of Block. The Block class is forward declared at the namespace level. */
 
 /** @} ---------------------------------------------------------------------*/
 /*------------ CONSTRUCTING AND DESTRUCTING ScenarioGenerator --------------*/
@@ -559,45 +560,94 @@ class ScenarioGenerator
  virtual void set_seed( unsigned long seed = 0 ) = 0;
 
 /*--------------------------------------------------------------------------*/
- /// generate a random pool of given size
- /** This method (logically) constructs the scenario pool from realizations of
-  * the random variable, typically by sampling. One would expect the scenarios
-  * to be uniformly distributed across the (possibly, infinite) set of
-  * possible realizations, so that the corresponding scenarios can be used,
-  * e.g., during a simulation phase to evaluate the quality of the decisions
-  * taken by some optimization model that has only "seen" a (much) smaller
-  * number of scenarios [see init_representative_pool()].
+ /// generate a random pool by sampling from the current universe
+ /** This method (logically) constructs the scenario pool by sampling \p
+  * size scenarios from the *current universe* of the generator. The
+  * universe is the (possibly restricted) set of scenarios available to
+  * the random sampling:
   *
-  * \p size is the number of scenarios in the produced pool.
+  *  - by default (no prior call to init_representative_pool()) the
+  *    universe is the full set of scenarios the generator can produce;
   *
-  * Once the method returns, the first scenario in the pool is available as
-  * the current scenario and can be read [see get_current_scenario()] and
-  * get_current_scenario_probability()] right away. */
+  *  - a previous call to init_representative_pool(K) restricts the
+  *    universe to K representatives (the "filter"). The restriction is
+  *    *persistent* across subsequent init_random_pool() calls;
+  *
+  *  - calling init_representative_pool(INFScenario) resets the universe
+  *    back to the full set.
+  *
+  * The scenarios in the resulting pool are typically used during a
+  * simulation phase to evaluate the quality of decisions taken by some
+  * optimization model that has only "seen" a (much) smaller, more
+  * carefully chosen set of representative scenarios.
+  *
+  * \p size is the number of scenarios in the produced pool. The
+  * default value INFScenario means "use the whole current universe"
+  * (i.e., size := |universe|). Any finite value of \p size must be
+  * less than or equal to the size of the current universe; otherwise
+  * an exception is thrown (it is a caller bug to ask for more
+  * scenarios than the universe can provide — use INFScenario to opt
+  * into the "give me everything" case explicitly).
+  *
+  * Once the method returns, the first scenario in the pool is available
+  * as the current scenario and can be read [see get_current_scenario()
+  * and get_current_scenario_probability()] right away.
+  *
+  * In the :MultiStageScenarioGenerator setting, init_random_pool() acts
+  * on the *current stage only*, consistently with the way every other
+  * "current scenario" method is interpreted (get_scenario_size(),
+  * get_current_scenario(), next_scenario(), ...). To (re-)init the pool
+  * of more than one stage, the caller walks the stages with next_stage()
+  * and calls init_random_pool() once per stage. */
 
-  virtual void init_random_pool( ScenarioIndex size ) = 0;
+  virtual void init_random_pool( ScenarioIndex size = INFScenario ) = 0;
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
- /// generate a "representative" pool of given size
- /** This method (logically) constructs the scenario pool from realizations of
-  * the random variable, working hard to ensure that the set is "as much
-  * representative as possible" of the whole (possibly, infinite) set of
-  * possible realizations, so that the corresponding scenarios can be used,
-  * e.g., to build an optimization model of "reasonable size" (so that it can
-  * be solved) that still "sees enough of the random variable to take good
-  * decisions". This may be nontrivial, in particular if the underlying
-  * variable is discrete in nature and therefore something like an Optimal
-  * Transport Problem needs to be solved. Thus, this method may have a
-  * nontrivial computational cost. Then, the decisions taken by such a model
-  * can be evaluated with a simulation on (much) larger number of "uniformly
-  * distributed" scenarios [see init_random_pool()].
+ /// restrict the universe to a "representative" subset of given size
+ /** This method (logically) restricts the *universe* of available
+  * scenarios to a subset of \p size representatives, working hard to
+  * ensure that the chosen subset is "as much representative as
+  * possible" of the whole (possibly, infinite) set of possible
+  * realizations. This may be nontrivial: for the discrete case it
+  * typically involves solving an Optimal Transport Problem, hence a
+  * potentially non-negligible computational cost. The restriction is
+  * persistent and survives across later calls to init_random_pool(),
+  * which will then sample from these representatives only. To remove
+  * the restriction and return to the full universe, call this method
+  * again with \p size == INFScenario (the default).
   *
-  * \p size is the number of scenarios in the produced pool.
+  * As a side effect, this method also initialises the current pool to
+  * the universe just selected, walked in its canonical (i.e., natural)
+  * order — there is no shuffling. Hence after a call to
+  * init_representative_pool(K) the user can directly read the K
+  * representatives with reset_pool() + next_scenario() in their
+  * canonical order, without having to call init_random_pool()
+  * separately. This is what the TwoStageStochasticBlock-style users
+  * want: "give me all my scenarios in order".
   *
-  * Once the method returns, the first scenario in the pool is available as
-  * the current scenario and can be read [see get_current_scenario()] and
-  * get_current_scenario_probability()] right away. */
+  * The decisions taken by a model built on the restricted universe can
+  * subsequently be evaluated with init_random_pool(K') (with K' larger
+  * than \p size and limited to the restricted universe) to draw a
+  * random sample for simulation.
+  *
+  * \p size is the number of representatives. The default value
+  * INFScenario means "the universe is the full set of scenarios"
+  * (i.e., no restriction): use it to *reset* a previous restriction.
+  * Other special values: a value larger than the natural support size
+  * is treated as INFScenario.
+  *
+  * Once the method returns, the first scenario in the pool is
+  * available as the current scenario and can be read [see
+  * get_current_scenario() and get_current_scenario_probability()]
+  * right away.
+  *
+  * In the :MultiStageScenarioGenerator setting,
+  * init_representative_pool() acts on the *current stage only*; see
+  * init_random_pool() above for the rationale. To (re-)init the
+  * representative universe of more than one stage, walk the stages
+  * with next_stage() and call init_representative_pool() at each. */
 
-  virtual void init_representative_pool( ScenarioIndex size ) = 0;
+  virtual void init_representative_pool( ScenarioIndex size = INFScenario ) = 0;
 
 /*--------------------------------------------------------------------------*/
  /// read the data of the current scenario
@@ -841,6 +891,25 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
 
  [[nodiscard]] virtual StageIndex get_stage_number( void ) = 0;
 
+/*--------------------------------------------------------------------------*/
+ /// returns true if the stages are mutually independent
+ /** A MultiStageScenarioGenerator is *stage-independent* when, for every t,
+  * the random variable X_t does not depend on the history H_t. In this case
+  * the scenario tree degenerates into a Cartesian product of single-stage
+  * pools, one per stage, and the size of each per-stage pool can be set
+  * independently. Consumers that exploit this structure (e.g.,
+  * SDDPBlock::prepare_multi_stage_generator_pool() walking each stage on
+  * its own) require this property; this method lets them check it
+  * generically, without resorting to dynamic_cast.
+  *
+  * The base class returns false; only :MultiStageScenarioGenerator that
+  * actually implement stage-independent scenarios should override and
+  * return true. */
+
+ [[nodiscard]] virtual bool is_stage_independent( void ) const {
+  return( false );
+  }
+
 /** @} ---------------------------------------------------------------------*/
 /*-------------------- METHODS FOR READING THE SCENARIOS -------------------*/
 /*--------------------------------------------------------------------------*/
@@ -919,6 +988,31 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
 
  virtual void previous_stage( StageIndex step = 1 ) = 0;
 
+/*--------------------------------------------------------------------------*/
+ // Current-stage semantics for inherited pool methods on
+ // :MultiStageScenarioGenerator. Because the base ScenarioGenerator has
+ // no concept of stage, the per-stage refinement of its API can only be
+ // documented here.
+ //
+ // The inherited scalar init_*_pool( K ) overloads from ScenarioGenerator
+ // act on the *current stage only*, mirroring the single-stage semantics
+ // of get_scenario_size() / get_current_scenario() / next_scenario()
+ // (all of which already refer to the current stage). To (re-)init the
+ // pool of more than one stage, the caller walks the stages with
+ // next_stage() and issues a fresh init_*_pool( K_t ) at each. No
+ // per-stage or vector overloads are provided: the explicit loop is the
+ // canonical pattern and keeps the API of ScenarioGenerator and
+ // MultiStageScenarioGenerator identical.
+ //
+ // Symmetrically, the inherited reset_pool() acts on the *current
+ // stage's iteration only*: it rewinds get_current_scenario() to the
+ // first scenario at get_current_stage(), without touching the stage
+ // cursor and without touching the iteration of any other stage. To
+ // also rewind the stage cursor back to 0, the caller invokes
+ // previous_stage( INFStage ) (which clamps to 0 and, per the
+ // previous_stage contract, also resets the destination stage's
+ // iteration). No dedicated reset_stage() is provided.
+
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PROTECTED PART OF THE CLASS ------------------------*/
 /*--------------------------------------------------------------------------*/
@@ -944,7 +1038,7 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
 /*--------------------------------------------------------------------------*/
 
  // probably not needed SMSpp_insert_in_factory_h;
-  
+
 /*--------------------------------------------------------------------------*/
 /*--------------------------------------------------------------------------*/
 
