@@ -186,7 +186,7 @@ class ScenarioGenerator
  * array of double will always be available inside any implementation of the
  * abstract base class, hence a Scenario is just a std::span<> provided
  * read-only access to that data structure. */
- 
+
  using Scenario = std::span< const double >;
 
 /*--------------------------------------------------------------------------*/
@@ -199,7 +199,7 @@ class ScenarioGenerator
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
  /// constexpr for "infinitely many scenarios"
- static constexpr ScenarioIndex INFScenario = Inf< ScenarioIndex >(); 
+ static constexpr ScenarioIndex INFScenario = Inf< ScenarioIndex >();
 
 /*--------------------------------------------------------------------------*/
 /// type for the scenario size (the length of the double vector)
@@ -375,7 +375,7 @@ class ScenarioGenerator
 
   return( nullptr );
   }
- 
+
 /*--------------------------------------------------------------------------*/
  /// de-serialize the current :ScenarioGenerator out of netCDF::NcGroup
  /** Third and final level de-serialization method: takes a netCDF::NcGroup
@@ -417,7 +417,7 @@ class ScenarioGenerator
 /*--------------------------------------------------------------------------*/
  /// destructor
 
- virtual ~ScenarioGenerator() = default; 
+ virtual ~ScenarioGenerator() = default;
 
 /** @} ---------------------------------------------------------------------*/
 /*----- METHODS FOR READING THE STATIC DATA OF THE ScenarioGenerator -------*/
@@ -445,7 +445,7 @@ class ScenarioGenerator
   * that specify the instantiation x_0 of the random variable X_0. This will
   * be the size of the std::span< const double > (Scenario) returned by
   * get_current_scenario(). */
-  
+
  [[nodiscard]] virtual ScenarioSize get_scenario_size( void ) const = 0;
 
 /*--------------------------------------------------------------------------*/
@@ -482,14 +482,14 @@ class ScenarioGenerator
   * from the :Block. This means that 1) a specialised :ScenarioGenerator
   * must be written to handle this, and 2) it has to be provided with a
   * pointer to the original Block.
-  * 
+  *
   * ScenarioGenerator provides this virtual method for this purpose.
   * Whomever is building a ScenarioGenerator should pass it the pointer to
   * the interested Block via this method, that by default does nothing.
   * Derived classes that need information from the Block will have to
   * overwrite the method and check dynamically that the given Block pointer
   * is indeed if the expected type.
-  * 
+  *
   * A main user of ScenarioGenerator is StochasticBlock, so it will be
   * it providing ScenarioGenerator with the Block pointer. In this case,
   * the passed Block will be the StochasticBlock itself rather than its
@@ -502,9 +502,9 @@ class ScenarioGenerator
   * 1. Check if the Block is a StochasticBlock (via dynamic_cast)
   * 2. Access the inner Block via get_inner_block()
   * 3. Verify the inner Block is of the expected type
-  * 4. Verify that scenarios at ScenarioGenerator's disposal are coherent 
+  * 4. Verify that scenarios at ScenarioGenerator's disposal are coherent
   *    with the expected stochasticity of the Block's problem
-  * 
+  *
   * For instance, a StochasticBlock wrapping a
   * CapacitatedFacilityLocationBlock might have stochasticity in either
   * demands or capacities. The corresponding derived version of set_Block
@@ -516,17 +516,17 @@ class ScenarioGenerator
 
 /*--------------------------------------------------------------------------*/
  /// setting configuration for the ScenarioGenerator
- /** This method allows setting configuration parameters for the 
+ /** This method allows setting configuration parameters for the
   * ScenarioGenerator. The base class implementation does nothing, but
   * derived classes can override this to accept Configuration objects.
-  * 
+  *
   * The Configuration object passed should contain the appropriate
   * parameters for the specific :ScenarioGenerator implementation.
   * Implementations should validate the Configuration and may throw
   * exceptions if invalid parameters are provided.
-  * 
+  *
   * @param config The Configuration object containing parameters */
-  
+
   virtual void set_config( Configuration* config ) {}
 
 /** @} ---------------------------------------------------------------------*/
@@ -668,7 +668,7 @@ class ScenarioGenerator
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
  /// return the probability associated to the current scenario
- 
+
  [[nodiscard]] virtual double get_current_scenario_probability( void )
   const = 0;
 
@@ -879,7 +879,7 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
 /*--------------------------------------------------------------------------*/
  /// destructor
 
- virtual ~MultiStageScenarioGenerator() = default; 
+ virtual ~MultiStageScenarioGenerator() = default;
 
 /** @} ---------------------------------------------------------------------*/
 /*- METHODS FOR READING THE STATIC DATA OF THE MultiStageScenarioGenerator -*/
@@ -977,7 +977,7 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
   * next random variable X_{t'} is drawn, ideally subject the current history
   * ( x_0 , ... , x_t = x_{t' - 1} ), and made available via the next call to
   * get_current_scenario(). */
-  
+
  [[nodiscard]] virtual bool next_stage( void ) = 0;
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
