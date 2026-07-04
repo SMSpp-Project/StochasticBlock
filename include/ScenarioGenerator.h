@@ -399,16 +399,20 @@ class ScenarioGenerator
 /*--------------------------------------------------------------------------*/
  /// serialize the current ScenarioGenerator to netCDF::NcGroup
  /** Method to serialize the ScenarioGenerator to a netCDF::NcGroup.
-  * This is the counterpart to deserialize() and should save all the 
+  * This is the counterpart to deserialize() and should save all the
   * information required to reconstruct the ScenarioGenerator state.
-  * 
-  * The base class implementation is empty since there is no base state
-  * to serialize. Derived classes should override this method to save
-  * their specific data.
-  * 
+  *
+  * The base class implementation only writes the mandatory "type"
+  * attribute (the classname(), needed by new_ScenarioGenerator() to
+  * reconstruct the :ScenarioGenerator out of the group). Derived classes
+  * should override this method to save their specific data, calling the
+  * base class method first.
+  *
   * @param group The netCDF group to serialize to */
 
- virtual void serialize( netCDF::NcGroup & group ) const {}
+ virtual void serialize( netCDF::NcGroup & group ) const {
+  group.putAtt( "type" , classname() );
+  }
 
 /*--------------------------------------------------------------------------*/
  /// destructor
