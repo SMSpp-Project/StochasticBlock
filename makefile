@@ -31,6 +31,7 @@
 # macros to be exported - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 StcBlkOBJ = $(StcBlkSDR)/obj/DiscreteScenarioSet.o \
+	$(StcBlkSDR)/obj/ScenarioReductionBlock.o \
 	$(StcBlkSDR)/obj/StochasticBlock.o
 
 StcBlkLIB = 
@@ -39,6 +40,7 @@ StcBlkINC = -I$(StcBlkSDR)/include
 
 StcBlkH   = $(StcBlkSDR)/include/ScenarioGenerator.h \
 	$(StcBlkSDR)/include/DiscreteScenarioSet.h \
+	$(StcBlkSDR)/include/ScenarioReductionBlock.h \
 	$(StcBlkSDR)/include/StochasticBlock.h
 
 # clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -62,5 +64,12 @@ $(StcBlkSDR)/obj/DiscreteScenarioSet.o: \
 	$(StcBlkSDR)/include/DiscreteScenarioSet.h $(SMS++OBJ)
 	$(CC) -c $(StcBlkSDR)/src/DiscreteScenarioSet.cpp -o $@ \
 	$(StcBlkINC) $(CFLBkINC) $(SMS++INC) $(SW)
+
+$(StcBlkSDR)/obj/ScenarioReductionBlock.o: \
+	$(StcBlkSDR)/src/ScenarioReductionBlock.cpp \
+	$(StcBlkSDR)/include/ScenarioReductionBlock.h \
+	$(StcBlkSDR)/include/ScenarioGenerator.h $(SMS++OBJ)
+	$(CC) -c $(StcBlkSDR)/src/ScenarioReductionBlock.cpp -o $@ \
+	$(StcBlkINC) $(SMS++INC) $(SW)
 
 ########################## End of makefile ###################################

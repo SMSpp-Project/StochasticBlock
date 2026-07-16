@@ -79,7 +79,8 @@ endif ()
 # Note: do not GLOB files here.
 target_sources(${modName} PRIVATE
         src/StochasticBlock.cpp
-        src/DiscreteScenarioSet.cpp)
+        src/DiscreteScenarioSet.cpp
+        src/ScenarioReductionBlock.cpp)
 
 # When using target_include_directories(), PUBLIC means that any targets
 # that link to this target also need that include directory.
