@@ -33,6 +33,7 @@
 StcBlkOBJ = $(StcBlkSDR)/obj/DiscreteScenarioSet.o \
 	$(StcBlkSDR)/obj/IndependentMultiStageScenarioGenerator.o \
 	$(StcBlkSDR)/obj/MultiStageDiscreteScenarioSet.o \
+	$(StcBlkSDR)/obj/ScenarioReductionBlock.o \
 	$(StcBlkSDR)/obj/StochasticBlock.o
 
 StcBlkLIB = 
@@ -43,6 +44,7 @@ StcBlkH   = $(StcBlkSDR)/include/ScenarioGenerator.h \
 	$(StcBlkSDR)/include/DiscreteScenarioSet.h \
 	$(StcBlkSDR)/include/IndependentMultiStageScenarioGenerator.h \
 	$(StcBlkSDR)/include/MultiStageDiscreteScenarioSet.h \
+	$(StcBlkSDR)/include/ScenarioReductionBlock.h \
 	$(StcBlkSDR)/include/StochasticBlock.h
 
 # clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -83,6 +85,13 @@ $(StcBlkSDR)/obj/MultiStageDiscreteScenarioSet.o: \
 	$(StcBlkSDR)/include/ScenarioGenerator.h \
 	$(StcBlkSDR)/include/MultiStageDiscreteScenarioSet.h $(SMS++OBJ)
 	$(CC) -c $(StcBlkSDR)/src/MultiStageDiscreteScenarioSet.cpp -o $@ \
+	$(StcBlkINC) $(SMS++INC) $(SW)
+
+$(StcBlkSDR)/obj/ScenarioReductionBlock.o: \
+	$(StcBlkSDR)/src/ScenarioReductionBlock.cpp \
+	$(StcBlkSDR)/include/ScenarioReductionBlock.h \
+	$(StcBlkSDR)/include/ScenarioGenerator.h $(SMS++OBJ)
+	$(CC) -c $(StcBlkSDR)/src/ScenarioReductionBlock.cpp -o $@ \
 	$(StcBlkINC) $(SMS++INC) $(SW)
 
 ########################## End of makefile ###################################

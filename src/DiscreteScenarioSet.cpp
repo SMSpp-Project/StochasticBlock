@@ -666,6 +666,49 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
 
 /*--------------------------------------------------------------------------*/
 
+void DiscreteScenarioSet::load_from_memory(
+ const std::vector< std::vector< double > > & scenarios ,
+ const std::vector< double > & weights )
+{
+ if( scenarios.empty() )
+  throw std::invalid_argument(
+   "DiscreteScenarioSet::load_from_memory: no scenarios provided" );
+
+ const std::size_t N = scenarios.size();
+ const std::size_t D = scenarios[ 0 ].size();
+ for( std::size_t i = 1 ; i < N ; ++i )
+  if( scenarios[ i ].size() != D )
+   throw std::invalid_argument(
+    "DiscreteScenarioSet::load_from_memory: scenario rows differ in size" );
+
+ nbScenarios  = static_cast< ScenarioIndex >( N );
+ scenarioSize = static_cast< ScenarioSize >( D );
+
+ scenarioSet.resize( boost::extents[ N ][ D ] );
+ for( std::size_t i = 0 ; i < N ; ++i )
+  for( std::size_t d = 0 ; d < D ; ++d )
+   scenarioSet[ i ][ d ] = scenarios[ i ][ d ];
+
+ if( weights.empty() )
+  setWeights.assign( N , 1.0 / static_cast< double >( N ) );
+ else {
+  if( weights.size() != N )
+   throw std::invalid_argument(
+    "DiscreteScenarioSet::load_from_memory: weights size mismatch" );
+  setWeights = weights;
+  }
+
+ universeIndexes.clear();
+ scenarioIndexes.clear();
+ poolWeights.clear();
+ sumPoolWeights = 0.0;
+ currentScenarioIndex = 0;
+ poolSize = 0;
+ is_initialized = false;
+ }
+
+/*--------------------------------------------------------------------------*/
+
 void DiscreteScenarioSet::serialize( netCDF::NcGroup & group ) const
 {
  // Always call base class serialize first
