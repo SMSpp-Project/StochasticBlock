@@ -173,6 +173,24 @@ namespace SMSpp_di_unipi_it
  void deserialize( const netCDF::NcGroup & group ) override;
 
  /*--------------------------------------------------------------------------*/
+ /// Load scenarios (and optional weights) directly from memory
+ /** Fill the scenario set from an in-memory matrix instead of a netCDF file:
+  * \p scenarios[ i ] is the vector of the i-th scenario (all rows must have
+  * the same size) and \p weights[ i ] its probability weight. If \p weights
+  * is empty, uniform weights 1/N are used. Any previously loaded data and any
+  * initialized pool are discarded; call init_random_pool() or
+  * init_representative_pool() afterwards.
+  *
+  * @param scenarios The N scenario vectors, all of the same dimension
+  * @param weights The N probability weights, or empty for uniform 1/N
+  * @throws std::invalid_argument If \p scenarios is empty, its rows differ in
+  *              size, or \p weights has the wrong size */
+
+ void load_from_memory(
+  const std::vector< std::vector< double > > & scenarios ,
+  const std::vector< double > & weights = {} );
+
+ /*--------------------------------------------------------------------------*/
  /// Serialize the DiscreteScenarioSet to a netCDF group
  /** Write the discrete scenario set to a netCDF::NcGroup with the format
   * described by deserialize().
@@ -477,6 +495,22 @@ namespace SMSpp_di_unipi_it
 
   return(scenarioSet[ scenario_idx ][ component_idx ]);
  }
+
+ /*--------------------------------------------------------------------------*/
+ /// Get the full vector of the scenario with the given index
+ /** @param idx The index of the scenario, in [0, NumberScenarios)
+  * @return A copy of the scenario vector (of size ScenarioSize)
+  * @throws std::out_of_range If \p idx is out of range */
+
+ [[nodiscard]] inline std::vector< double > get_scenario( ScenarioIndex idx )
+  const {
+  if( idx >= nbScenarios )
+   throw( std::out_of_range(
+    "DiscreteScenarioSet::get_scenario: index out of range" ) );
+  return( std::vector< double >(
+   & scenarioSet[ idx ][ 0 ] ,
+   & scenarioSet[ idx ][ 0 ] + scenarioSize ) );
+  }
 
  /*--------------------------------------------------------------------------*/
  /// Get all indices of selected scenarios
