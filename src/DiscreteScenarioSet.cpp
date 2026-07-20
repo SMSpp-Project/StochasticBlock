@@ -188,47 +188,6 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
  is_initialized = true;
  }
 
-/*--------------------------------------------------------------------------*/
-/*--------------------------------- load ----------------------------------*/
-/*--------------------------------------------------------------------------*/
-
-void DiscreteScenarioSet::load( std::istream & input )
-{
- static const std::string sre( "DiscreteScenarioSet::load: stream read error" );
-
- // Read header: N scenarios of dimension D
- unsigned int N = 0 , D = 0;
- input >> N >> D;
- if( input.fail() )
-  throw std::invalid_argument( sre + ": expected N D" );
- if( N == 0 ) throw std::invalid_argument( sre + ": N must be positive" );
- if( D == 0 ) throw std::invalid_argument( sre + ": D must be positive" );
-
- std::vector< double > weights( N );
- for( unsigned int i = 0 ; i < N ; ++i ) {
-  input >> weights[ i ];
-  if( input.fail() )
-   throw std::invalid_argument( sre + ": failed reading weight " +
-                                std::to_string( i ) );
-  }
-
-  double sum = std::accumulate( weights.begin() , weights.end() , 0.0 );
- if( std::abs( sum - 1.0 ) > 1e-6 )
-  throw std::invalid_argument( sre + ": weights sum to " +
-                               std::to_string( sum ) );
-
- std::vector< std::vector< double > > scenarios(
-  N , std::vector< double >( D ) );
- for( unsigned int i = 0 ; i < N ; ++i )
-  for( unsigned int d = 0 ; d < D ; ++d ) {
-   input >> scenarios[ i ][ d ];
-   if( input.fail() )
-    throw std::invalid_argument( sre + ": failed reading scenario " +
-                                 std::to_string( i ) );
-   }
-
- load_from_memory( scenarios , weights );
- }
 
 /*--------------------------------------------------------------------------*/
 /*------------------------------ load_from_memory -------------------------*/
@@ -244,6 +203,7 @@ void DiscreteScenarioSet::load_from_memory(
 
  const std::size_t N = scenarios.size();
  const std::size_t D = scenarios[ 0 ].size();
+
  for( std::size_t i = 1 ; i < N ; ++i )
   if( scenarios[ i ].size() != D )
    throw std::invalid_argument(
@@ -273,9 +233,8 @@ void DiscreteScenarioSet::load_from_memory(
  currentScenarioIndex = 0;
  poolSize = 0;
  is_initialized = false;
- f_solution_ready = false;  // invalidate any cached solution
- }
-
+ f_solution_ready = false;
+}
 /*--------------------------------------------------------------------------*/
 /*------------------------------ set_config --------------------------------*/
 /*--------------------------------------------------------------------------*/
