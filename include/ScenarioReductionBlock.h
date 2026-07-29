@@ -146,10 +146,10 @@ public:
   }
 
  /** Set the sub-problem block (e.g. synthetic N×N CFLB) that the solver
-  * uses to read nb_atoms, nb_reduced, weights, and distances*/
+  * uses to read nb_atoms, nb_reduced, weights, and distances. */
  void set_sub_problem_block( Block * b ) { f_sub_problem_block = b; }
  [[nodiscard]] Block * get_sub_problem_block() const {
-  return f_sub_problem_block;
+  return( f_sub_problem_block );
   }
 
  /** Write a solution into the inner ScenarioReductionBlockSolution.
@@ -184,7 +184,7 @@ public:
   * set. Used by CSSCScenarioReductionSolver to inject scenario j into
   * sub-Block i during Step 1. */
  [[nodiscard]] Block * get_scenario_applicator() const {
-  return f_stoch_applicator;
+  return( f_stoch_applicator );
   }
 
 /*--------------------------------------------------------------------------*/
