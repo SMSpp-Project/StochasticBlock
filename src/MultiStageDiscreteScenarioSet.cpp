@@ -43,7 +43,7 @@ void MultiStageDiscreteScenarioSet::deserialize(
 {
  f_nodes.clear();
  f_stage_size.clear();
- f_current_node = 0;
+ f_self_view.reset();
 
  // mandatory dimensions
  std::size_t T = 0 , N = 0 , D = 0;
@@ -118,8 +118,6 @@ void MultiStageDiscreteScenarioSet::deserialize(
     " has parent " + std::to_string( p ) + ")" ) );
   f_nodes[ p ].children.push_back( static_cast< NodeIndex >( n ) );
   }
-
- f_current_node = get_root();
  }
 
 /*--------------------------------------------------------------------------*/
@@ -171,37 +169,49 @@ void MultiStageDiscreteScenarioSet::serialize( netCDF::NcGroup & group ) const
  }
 
 /*--------------------------------------------------------------------------*/
-/*------------------- VIEW-BASED (PARALLEL) ACCESS -------------------------*/
-/*--------------------------------------------------------------------------*/
-
-ScenarioGenerator * MultiStageDiscreteScenarioSet::make_view(
-                                                       NodeIndex n ) const
-{
- if( n >= f_nodes.size() )
-  throw( std::out_of_range(
-   "MultiStageDiscreteScenarioSet::make_view: node index out of range" ) );
- return( new NodeView( this , n ) );
- }
-
+/*------------------------- VIEW-BASED ACCESS ------------------------------*/
 /*--------------------------------------------------------------------------*/
 
 std::unique_ptr< MultiStageScenarioGenerator::View >
 MultiStageDiscreteScenarioSet::root_view( void ) const
 {
- return( std::make_unique< NodeView >( this , get_root() ) );
+ if( f_nodes.empty() )
+  throw( std::logic_error(
+   "MultiStageDiscreteScenarioSet::root_view: empty tree" ) );
+ return( std::make_unique< TreeView >( this , get_root() ) );
  }
 
 /*--------------------------------------------------------------------------*/
-/*----------------- LEGACY SINGLE-CURSOR ACCESS ----------------------------*/
+
+MultiStageDiscreteScenarioSet::TreeView &
+MultiStageDiscreteScenarioSet::self_view( void ) const
+{
+ if( f_nodes.empty() )
+  throw( std::logic_error(
+   "MultiStageDiscreteScenarioSet::self_view: empty tree" ) );
+ if( ! f_self_view )
+  f_self_view = std::make_unique< TreeView >( this , get_root() );
+ return( * f_self_view );
+ }
+
+/*--------------------------------------------------------------------------*/
+/*----------------- ScenarioGenerator FACE = THE ROOT VIEW -----------------*/
+/*--------------------------------------------------------------------------*/
+// seen as a plain (single-stage) ScenarioGenerator, this object is its own
+// root view: everything is delegated to it
+
+ScenarioGenerator::ScenarioIndex
+MultiStageDiscreteScenarioSet::get_support_size( void )
+{
+ return( self_view().get_support_size() );
+ }
+
 /*--------------------------------------------------------------------------*/
 
 ScenarioGenerator::ScenarioSize
 MultiStageDiscreteScenarioSet::get_scenario_size( void ) const
 {
- if( f_nodes.empty() )
-  throw( std::logic_error(
-   "MultiStageDiscreteScenarioSet::get_scenario_size: empty tree" ) );
- return( f_nodes[ f_current_node ].data.size() );
+ return( self_view().get_scenario_size() );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -209,11 +219,7 @@ MultiStageDiscreteScenarioSet::get_scenario_size( void ) const
 ScenarioGenerator::Scenario
 MultiStageDiscreteScenarioSet::get_current_scenario( void ) const
 {
- if( f_nodes.empty() )
-  throw( std::logic_error(
-   "MultiStageDiscreteScenarioSet::get_current_scenario: empty tree" ) );
- const auto & d = f_nodes[ f_current_node ].data;
- return( Scenario( d.data() , d.size() ) );
+ return( self_view().get_current_scenario() );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -221,65 +227,21 @@ MultiStageDiscreteScenarioSet::get_current_scenario( void ) const
 double MultiStageDiscreteScenarioSet::
                               get_current_scenario_probability( void ) const
 {
- if( f_nodes.empty() )
-  throw( std::logic_error(
-   "MultiStageDiscreteScenarioSet::get_current_scenario_probability: "
-   "empty tree" ) );
- return( f_nodes[ f_current_node ].probability );
+ return( self_view().get_current_scenario_probability() );
  }
 
 /*--------------------------------------------------------------------------*/
 
 bool MultiStageDiscreteScenarioSet::next_scenario( void )
 {
- // another realization of X_t with the same history = next sibling
- const auto p = f_nodes[ f_current_node ].parent;
- if( p == InvalidNode )
-  return( false );   // the root is unique
- const auto & sibs = f_nodes[ p ].children;
- for( std::size_t i = 0 ; i < sibs.size() ; ++i )
-  if( sibs[ i ] == f_current_node ) {
-   if( i + 1 < sibs.size() ) {
-    f_current_node = sibs[ i + 1 ];
-    return( true );
-    }
-   return( false );
-   }
- return( false );
+ return( self_view().next_scenario() );
  }
 
 /*--------------------------------------------------------------------------*/
 
 void MultiStageDiscreteScenarioSet::reset_pool( void )
 {
- // rewind to the first sibling at the current node's history
- const auto p = f_nodes.at( f_current_node ).parent;
- if( p != InvalidNode )
-  f_current_node = f_nodes[ p ].children.front();
- }
-
-/*--------------------------------------------------------------------------*/
-
-bool MultiStageDiscreteScenarioSet::next_stage( void )
-{
- // descend to the first child = first realization of X_{t+1} | history
- const auto & ch = f_nodes[ f_current_node ].children;
- if( ch.empty() )
-  return( false );
- f_current_node = ch.front();
- return( true );
- }
-
-/*--------------------------------------------------------------------------*/
-
-void MultiStageDiscreteScenarioSet::previous_stage( StageIndex step )
-{
- for( StageIndex s = 0 ; s < step ; ++s ) {
-  const auto p = f_nodes[ f_current_node ].parent;
-  if( p == InvalidNode )
-   break;
-  f_current_node = p;
-  }
+ self_view().reset_pool();
  }
 
 /*--------------------------------------------------------------------------*/
@@ -299,69 +261,68 @@ void MultiStageDiscreteScenarioSet::init_representative_pool( ScenarioIndex )
  }
 
 /*--------------------------------------------------------------------------*/
-/*------------------------- CLASS NodeView ---------------------------------*/
+/*------------------------- CLASS TreeView ---------------------------------*/
 /*--------------------------------------------------------------------------*/
 
 const std::string &
-MultiStageDiscreteScenarioSet::NodeView::private_name( void ) const
+MultiStageDiscreteScenarioSet::TreeView::private_name( void ) const
 {
- static const std::string name( "MultiStageDiscreteScenarioSet::NodeView" );
+ static const std::string name( "MultiStageDiscreteScenarioSet::TreeView" );
  return( name );
  }
 
 /*--------------------------------------------------------------------------*/
 
 ScenarioGenerator::ScenarioSize
-MultiStageDiscreteScenarioSet::NodeView::get_scenario_size( void ) const
+MultiStageDiscreteScenarioSet::TreeView::get_scenario_size( void ) const
 {
- const auto & ch = f_parent->f_nodes.at( f_node ).children;
+ const auto & ch = f_parent->get_children( f_node );
  if( ch.empty() )
   return( 0 );
- return( f_parent->f_nodes[ ch.front() ].data.size() );
+ return( f_parent->get_node_data( ch.front() ).size() );
  }
 
 /*--------------------------------------------------------------------------*/
 
 ScenarioGenerator::ScenarioIndex
-MultiStageDiscreteScenarioSet::NodeView::get_support_size( void )
+MultiStageDiscreteScenarioSet::TreeView::get_support_size( void )
 {
  return( static_cast< ScenarioIndex >(
-          f_parent->f_nodes.at( f_node ).children.size() ) );
+                            f_parent->get_children( f_node ).size() ) );
  }
 
 /*--------------------------------------------------------------------------*/
 
 ScenarioGenerator::Scenario
-MultiStageDiscreteScenarioSet::NodeView::get_current_scenario( void ) const
+MultiStageDiscreteScenarioSet::TreeView::get_current_scenario( void ) const
 {
- const auto & ch = f_parent->f_nodes.at( f_node ).children;
+ const auto & ch = f_parent->get_children( f_node );
  if( f_pos >= ch.size() )
   throw( std::out_of_range(
-   "MultiStageDiscreteScenarioSet::NodeView::get_current_scenario: "
-   "iteration past the last child" ) );
- const auto & d = f_parent->f_nodes[ ch[ f_pos ] ].data;
- return( Scenario( d.data() , d.size() ) );
+   "MultiStageDiscreteScenarioSet::TreeView::get_current_scenario: "
+   "iteration past the last realization" ) );
+ return( f_parent->get_node_data( ch[ f_pos ] ) );
  }
 
 /*--------------------------------------------------------------------------*/
 
-double MultiStageDiscreteScenarioSet::NodeView::
+double MultiStageDiscreteScenarioSet::TreeView::
                               get_current_scenario_probability( void ) const
 {
- const auto & ch = f_parent->f_nodes.at( f_node ).children;
+ const auto & ch = f_parent->get_children( f_node );
  if( f_pos >= ch.size() )
   throw( std::out_of_range(
-   "MultiStageDiscreteScenarioSet::NodeView::"
-   "get_current_scenario_probability: iteration past the last child" ) );
- return( f_parent->f_nodes[ ch[ f_pos ] ].probability );
+   "MultiStageDiscreteScenarioSet::TreeView::"
+   "get_current_scenario_probability: iteration past the last "
+   "realization" ) );
+ return( f_parent->get_node_probability( ch[ f_pos ] ) );
  }
 
 /*--------------------------------------------------------------------------*/
 
-bool MultiStageDiscreteScenarioSet::NodeView::next_scenario( void )
+bool MultiStageDiscreteScenarioSet::TreeView::next_scenario( void )
 {
- const auto & ch = f_parent->f_nodes.at( f_node ).children;
- if( f_pos + 1 < ch.size() ) {
+ if( f_pos + 1 < f_parent->get_children( f_node ).size() ) {
   ++f_pos;
   return( true );
   }
@@ -370,24 +331,51 @@ bool MultiStageDiscreteScenarioSet::NodeView::next_scenario( void )
 
 /*--------------------------------------------------------------------------*/
 
-std::unique_ptr< MultiStageScenarioGenerator::View >
-MultiStageDiscreteScenarioSet::NodeView::descend( void ) const
+bool MultiStageDiscreteScenarioSet::TreeView::descend( void )
 {
- const auto & ch = f_parent->f_nodes.at( f_node ).children;
+ const auto & ch = f_parent->get_children( f_node );
  if( f_pos >= ch.size() )
-  return( nullptr );                       // no current child
+  return( false );                       // no realization selected
  const auto child = ch[ f_pos ];
- if( f_parent->f_nodes[ child ].children.empty() )
-  return( nullptr );                       // current child is a leaf
- return( std::make_unique< NodeView >( f_parent , child ) );
+ if( f_parent->get_children( child ).empty() )
+  return( false );                       // the selected one is a leaf
+ f_node = child;                         // H <- ( H , x_t )
+ f_pos = 0;
+ return( true );
+ }
+
+/*--------------------------------------------------------------------------*/
+
+bool MultiStageDiscreteScenarioSet::TreeView::climb( void )
+{
+ const auto p = f_parent->get_parent( f_node );
+ if( p == InvalidNode )
+  return( false );                       // already pinned at the root
+ // re-select the realization this view had descended into, so that
+ // climb() undoes descend()
+ const auto & sibs = f_parent->get_children( p );
+ std::size_t i = 0;
+ while( ( i < sibs.size() ) && ( sibs[ i ] != f_node ) )
+  ++i;
+ f_node = p;
+ f_pos = i;
+ return( true );
+ }
+
+/*--------------------------------------------------------------------------*/
+
+std::unique_ptr< MultiStageScenarioGenerator::View >
+MultiStageDiscreteScenarioSet::TreeView::clone( void ) const
+{
+ return( std::make_unique< TreeView >( * this ) );
  }
 
 /*--------------------------------------------------------------------------*/
 
 MultiStageScenarioGenerator::StageIndex
-MultiStageDiscreteScenarioSet::NodeView::stage( void ) const
+MultiStageDiscreteScenarioSet::TreeView::stage( void ) const
 {
- return( f_parent->f_nodes.at( f_node ).stage );
+ return( f_parent->get_node_stage( f_node ) );
  }
 
 /*--------------------------------------------------------------------------*/

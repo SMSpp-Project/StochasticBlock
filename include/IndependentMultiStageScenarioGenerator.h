@@ -79,16 +79,32 @@ namespace SMSpp_di_unipi_it
  *    attribute, or as an indirect group with "filename" attribute).
  *
  * After deserialize() returns, the generator is left in canonical
- * walkable state: current_stage = 0, each inner already in its canonical
- * full-universe state (per the inner-specific lazy-init contract).
+ * walkable state: each inner already in its canonical full-universe
+ * state (per the inner-specific lazy-init contract).
+ *
+ * ### Reading the scenarios: views
+ *
+ * As any :MultiStageScenarioGenerator, this class is read through
+ * MultiStageScenarioGenerator::View, here implemented by StageView: since
+ * the stages are mutually independent, a history H is irrelevant and a
+ * position in the process boils down to the stage t it has reached, whose
+ * pool is the inner of stage t. descend() / climb() move to t + 1 / t - 1,
+ * and the generator itself, seen as a plain ScenarioGenerator, behaves
+ * like the view pinned at stage 0.
+ *
+ * Note that, the cursor of each stage being held by the inner
+ * :ScenarioGenerator of that stage, two StageView pinned at the *same*
+ * stage do share it, and therefore cannot be used independently; views
+ * pinned at distinct stages are instead completely independent, which is
+ * all a stage-independent process needs.
  *
  * ### Pool semantics
  *
- * init_random_pool( K ) / init_representative_pool( K ) act on the
- * inner of the *current stage* only — this is the
- * :MultiStageScenarioGenerator convention (see the comments on the
- * base class scalar forms in ScenarioGenerator.h). To (re-)init the
- * pool of more than one stage, walk them with next_stage() and call
+ * init_random_pool( K ) / init_representative_pool( K ) act on the inner
+ * of the stage the view they are called on is pinned at, this is the
+ * :MultiStageScenarioGenerator convention (see the comments on the base
+ * class scalar forms in ScenarioGenerator.h). To (re-)init the pool of
+ * more than one stage, walk them with View::descend() and call
  * init_*_pool() once per stage with the desired per-stage size. */
 
 class IndependentMultiStageScenarioGenerator
@@ -152,6 +168,10 @@ class IndependentMultiStageScenarioGenerator
 
 /*--------------------------------------------------------------------------*/
 
+ [[nodiscard]] ScenarioIndex get_support_size( void ) override;
+
+/*--------------------------------------------------------------------------*/
+
  [[nodiscard]] ScenarioSize get_scenario_size( void ) const override;
 
 /*--------------------------------------------------------------------------*/
@@ -182,30 +202,24 @@ class IndependentMultiStageScenarioGenerator
 
 /*--------------------------------------------------------------------------*/
 
- [[nodiscard]] StageIndex get_current_stage( void ) override {
-  return( current_stage );
-  }
-
-/*--------------------------------------------------------------------------*/
-
- [[nodiscard]] bool next_stage( void ) override;
-
-/*--------------------------------------------------------------------------*/
-
- void previous_stage( StageIndex step = 1 ) override;
-
-/*--------------------------------------------------------------------------*/
-
  [[nodiscard]] bool is_stage_independent( void ) const override {
   return( true );
   }
 
 /*--------------------------------------------------------------------------*/
+ /// create a View pinned at stage 0 (the MSSG view entry point)
+ /** Implements MultiStageScenarioGenerator::root_view(): returns a View (a
+  * StageView) pinned at stage 0, whose pool is the inner of that stage.
+  * The other stages are reached from it via View::descend(). */
+
+ [[nodiscard]] std::unique_ptr< View > root_view( void ) const override;
+
+/*--------------------------------------------------------------------------*/
  // init_random_pool() / init_representative_pool() act on the inner of
- // the current stage only — see the comments on the base class scalar
- // forms in ScenarioGenerator.h. No per-stage or vector overloads are
- // exposed: the per-stage loop with next_stage() is the canonical way
- // to (re-)init more than one stage at a time.
+ // the stage of the view they are called on — see the comments on the
+ // base class scalar forms in ScenarioGenerator.h. No per-stage or
+ // vector overloads are exposed: the per-stage walk with View::descend()
+ // is the canonical way to (re-)init more than one stage at a time.
 
  void init_random_pool( ScenarioIndex size = INFScenario ) override;
 
@@ -229,6 +243,90 @@ class IndependentMultiStageScenarioGenerator
  private:
 
 /*--------------------------------------------------------------------------*/
+/*--------------------------- PRIVATE TYPES --------------------------------*/
+/*--------------------------------------------------------------------------*/
+ /// read-only single-stage view of one stage of the process
+ /** A StageView is the object returned by
+  * IndependentMultiStageScenarioGenerator::root_view(). Since the stages
+  * are mutually independent, the history H that a View pins is irrelevant
+  * and only the stage t it has reached matters: the StageView is therefore
+  * a thin forwarder to the inner :ScenarioGenerator of stage t, and
+  * descend() / climb() just move to the next / previous stage. Because
+  * that inner holds the cursor, two StageView pinned at the same stage
+  * share it (see the class comments). */
+
+ class StageView : public MultiStageScenarioGenerator::View
+ {
+  public:
+
+   StageView( const IndependentMultiStageScenarioGenerator * parent ,
+	      StageIndex stage )
+    : f_parent( parent ) , f_stage( stage ) { }
+
+   void deserialize( const netCDF::NcGroup & ) override {
+    throw( std::logic_error(
+     "IndependentMultiStageScenarioGenerator::StageView::deserialize: a "
+     "view is not independently (de)serializable" ) );
+    }
+
+   void set_seed( unsigned long seed = 0 ) override {
+    inner()->set_seed( seed );
+    }
+
+   [[nodiscard]] ScenarioIndex get_support_size( void ) override {
+    return( inner()->get_support_size() );
+    }
+
+   [[nodiscard]] ScenarioSize get_scenario_size( void ) const override {
+    return( inner()->get_scenario_size() );
+    }
+
+   [[nodiscard]] Scenario get_current_scenario( void ) const override {
+    return( inner()->get_current_scenario() );
+    }
+
+   [[nodiscard]] double get_current_scenario_probability( void )
+    const override { return( inner()->get_current_scenario_probability() ); }
+
+   bool next_scenario( void ) override {
+    return( inner()->next_scenario() );
+    }
+
+   void reset_pool( void ) override { inner()->reset_pool(); }
+
+   [[nodiscard]] bool is_pool_initialized( void ) const override {
+    return( inner()->is_pool_initialized() );
+    }
+
+   // the stages being independent, each is reduced on its own
+   void init_random_pool( ScenarioIndex size = INFScenario ) override {
+    inner()->init_random_pool( size );
+    }
+
+   void init_representative_pool( ScenarioIndex size = INFScenario )
+    override { inner()->init_representative_pool( size ); }
+
+   // history-pinned View interface: move through the stages
+   bool descend( void ) override;
+   bool climb( void ) override;
+   [[nodiscard]] std::unique_ptr< View > clone( void ) const override;
+   [[nodiscard]] StageIndex stage( void ) const override {
+    return( f_stage );
+    }
+
+  private:
+
+   /// the inner :ScenarioGenerator this view is pinned at
+   [[nodiscard]] ScenarioGenerator * inner( void ) const;
+
+   const IndependentMultiStageScenarioGenerator * f_parent;  ///< owner
+   StageIndex f_stage;        ///< stage whose inner this view reads
+
+   [[nodiscard]] const std::string & private_name( void ) const override;
+
+ };   // end( class StageView )
+
+/*--------------------------------------------------------------------------*/
 /*--------------------------- PRIVATE METHODS ------------------------------*/
 /*--------------------------------------------------------------------------*/
 
@@ -241,9 +339,6 @@ class IndependentMultiStageScenarioGenerator
 
  /// inner per-stage :ScenarioGenerator pointers, owned by this object
  std::vector< ScenarioGenerator * > inners;
-
- /// current stage in 0, ..., inners.size() - 1
- StageIndex current_stage = 0;
 
 /*--------------------------------------------------------------------------*/
 

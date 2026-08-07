@@ -85,29 +85,23 @@ namespace SMSpp_di_unipi_it
  * stores it without the combinatorial blow-up. This class is for when the
  * children genuinely depend on the branch.
  *
- * ### Two access paths (additive)
+ * ### Reading the tree: views
  *
- * This class offers two ways to read the tree, and they coexist:
+ * The tree is read exclusively through MultiStageScenarioGenerator::View,
+ * here implemented by TreeView: a small read-only ScenarioGenerator pinned
+ * to one node, which iterates *the children of that node* as an ordinary
+ * single-stage pool (with the conditional probabilities as the pool
+ * weights), and which moves through the tree with descend() / climb().
+ * root_view() returns the one pinned at the root; the generator itself,
+ * seen as a plain ScenarioGenerator, behaves exactly like it.
  *
- *  1. **Legacy single cursor** — the interface inherited from
- *     MultiStageScenarioGenerator. The object holds one internal cursor
- *     (current node) and the usual get_current_scenario() / next_scenario()
- *     / next_stage() / previous_stage() walk that cursor through the tree.
- *     This makes a MultiStageDiscreteScenarioSet a drop-in
- *     MultiStageScenarioGenerator for existing consumers that drive a single
- *     cursor (e.g. SDDPBlock::prepare_multi_stage_generator_pool()).
- *
- *  2. **Views** — make_view( node ) returns a NodeView, a small read-only
- *     ScenarioGenerator pinned to one node that iterates *the children of
- *     that node* as an ordinary single-stage pool (with the conditional
- *     probabilities as the pool weights). The tree data is immutable after
- *     deserialize() (and after any global reduction, see below), so an
- *     arbitrary number of views can be alive simultaneously, each carrying
- *     its own cursor. This is what allows building the corresponding Block
- *     tree concurrently — one view per subtree, on as many threads as one
- *     likes — and what lets a node-local consumer (a
- *     TwoStageStochasticBlock) treat its slice of the tree as a plain
- *     ScenarioGenerator without knowing about the rest.
+ * The tree data is immutable after deserialize() (and after any global
+ * reduction, see below), and each view carries its own cursor, so an
+ * arbitrary number of views can be alive and be used *at the same time*.
+ * This is what allows building the corresponding Block tree concurrently,
+ * one view per subtree, on as many threads as one likes, and what lets a
+ * node-local consumer (a TwoStageStochasticBlock) treat its slice of the
+ * tree as a plain ScenarioGenerator without knowing about the rest.
  *
  * ### Scenario selection is global
  *
@@ -115,9 +109,9 @@ namespace SMSpp_di_unipi_it
  * operation: reducing each stage independently would lose the joint
  * structure of the tree. Hence init_representative_pool( K ) on the
  * MultiStageDiscreteScenarioSet itself reduces the *whole tree* at once
- * (rebuilding an equivalent, smaller immutable tree), unlike the inherited
- * per-current-stage contract documented on the scalar forms in
- * ScenarioGenerator.h. Consistently, NodeView::init_*_pool() is a no-op: a
+ * (rebuilding an equivalent, smaller immutable tree), unlike the
+ * per-position contract documented on the scalar forms in
+ * ScenarioGenerator.h. Consistently, TreeView::init_*_pool() is a no-op: a
  * view never reduces on its own, it only reads the (already globally
  * reduced) tree. The intended pattern is therefore: build / deserialize the
  * tree, optionally call init_representative_pool( K ) once on the whole
@@ -199,86 +193,37 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
  void serialize( netCDF::NcGroup & group ) const override;
 
 /** @} ---------------------------------------------------------------------*/
-/*------------------- VIEW-BASED (PARALLEL) ACCESS -------------------------*/
+/*------------------------- VIEW-BASED ACCESS ------------------------------*/
 /*--------------------------------------------------------------------------*/
-/** @name View-based, parallel-safe access to the tree
- *
- * These methods expose the tree without going through the single internal
- * cursor, so that several consumers (possibly on different threads) can read
- * disjoint or overlapping parts of the (immutable) tree concurrently.
+/** @name View-based access to the tree
  *  @{ */
 
- /// index of the (unique) root node, i.e. the stage-0 node
- [[nodiscard]] NodeIndex get_root( void ) const { return( 0 ); }
-
-/*--------------------------------------------------------------------------*/
- /// the children of node \p n (the realizations of the next stage there)
- [[nodiscard]] const std::vector< NodeIndex > & get_children(
-						   NodeIndex n ) const {
-  return( f_nodes.at( n ).children );
-  }
-
-/*--------------------------------------------------------------------------*/
- /// the stage t in 0, ..., T-1 of node \p n
- [[nodiscard]] StageIndex get_node_stage( NodeIndex n ) const {
-  return( f_nodes.at( n ).stage );
-  }
-
-/*--------------------------------------------------------------------------*/
- /// the conditional probability P( node \p n | its parent )
- [[nodiscard]] double get_node_probability( NodeIndex n ) const {
-  return( f_nodes.at( n ).probability );
-  }
-
-/*--------------------------------------------------------------------------*/
- /// the realization x_t stored at node \p n (length get_stage_size(stage))
- [[nodiscard]] Scenario get_node_data( NodeIndex n ) const {
-  const auto & nd = f_nodes.at( n );
-  return( Scenario( nd.data.data() , nd.data.size() ) );
-  }
-
-/*--------------------------------------------------------------------------*/
- /// length d_t of a stage-\p t realization vector
- [[nodiscard]] ScenarioSize get_stage_size( StageIndex t ) const {
-  return( f_stage_size.at( t ) );
-  }
-
-/*--------------------------------------------------------------------------*/
- /// a read-only single-stage view of the children of node \p n
- /** Returns a freshly minted NodeView (a ScenarioGenerator) whose pool is
-  * the set of children of node \p n, i.e. the realizations of the random
-  * variable of the *next* stage conditioned on the history that leads to
-  * \p n, with the conditional probabilities as pool weights. The returned
-  * object is owned by the caller, which must delete it; it holds a
-  * (non-owning) pointer to this MultiStageDiscreteScenarioSet, which must
-  * outlive it. Several views can be alive at once: each has its own cursor
-  * and only reads the (immutable) tree, so this is safe to call and use
-  * concurrently from multiple threads. */
-
- [[nodiscard]] ScenarioGenerator * make_view( NodeIndex n ) const;
-
-/*--------------------------------------------------------------------------*/
- /// create a View pinned at the root (the abstract MSSG view entry point)
+ /// create a View pinned at the root (the MSSG view entry point)
  /** Implements MultiStageScenarioGenerator::root_view(): returns a View (a
-  * NodeView) pinned at the root, whose pool are the first-stage realizations.
-  * From it the whole tree is walked via View::descend(). This is the
-  * generator-agnostic entry point used by consumers (e.g. MSSB) that hold a
-  * general MultiStageScenarioGenerator rather than this concrete type. */
+  * TreeView) pinned at the root, whose pool are the first-stage
+  * realizations. From it the whole tree is walked via View::descend() and
+  * View::climb(). This is the only way to read the tree, and it is
+  * generator-agnostic: consumers (e.g. MSSB) hold a general
+  * MultiStageScenarioGenerator rather than this concrete type. */
 
- [[nodiscard]] std::unique_ptr< View > root_view() const override;
+ [[nodiscard]] std::unique_ptr< View > root_view( void ) const override;
 
 /** @} ---------------------------------------------------------------------*/
 /*------ METHODS INHERITED FROM (Multi-Stage)ScenarioGenerator -------------*/
 /*--------------------------------------------------------------------------*/
 /** @name Functions inherited from (Multi-Stage)ScenarioGenerator
  *
- * These implement the *legacy single-cursor* access: one internal cursor
- * walks the tree, so a MultiStageDiscreteScenarioSet is a valid drop-in
- * MultiStageScenarioGenerator for single-consumer code. They are kept
- * alongside the view API (above), not replaced by it.
+ * Seen as a plain ScenarioGenerator, a MultiStageDiscreteScenarioSet is its
+ * own root view: these methods all read the realizations of the first
+ * random variable, i.e. the children of the root. Reaching any other
+ * position in the tree is done with root_view() and View::descend().
  *  @{ */
 
  void set_seed( unsigned long seed = 0 ) override { }
+
+/*--------------------------------------------------------------------------*/
+
+ [[nodiscard]] ScenarioIndex get_support_size( void ) override;
 
 /*--------------------------------------------------------------------------*/
 
@@ -314,20 +259,7 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
 
 /*--------------------------------------------------------------------------*/
 
- [[nodiscard]] StageIndex get_current_stage( void ) override {
-  return( f_nodes.at( f_current_node ).stage );
-  }
-
-/*--------------------------------------------------------------------------*/
-
- [[nodiscard]] bool next_stage( void ) override;
-
-/*--------------------------------------------------------------------------*/
-
- void previous_stage( StageIndex step = 1 ) override;
-
-/*--------------------------------------------------------------------------*/
- // init_random_pool() acts on the current stage (legacy contract);
+ // init_random_pool() acts on the pool of the root view;
  // init_representative_pool() reduces the WHOLE tree (see class comments).
 
  void init_random_pool( ScenarioIndex size = INFScenario ) override;
@@ -354,30 +286,31 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
   };
 
 /*--------------------------------------------------------------------------*/
-/*----------------------- CLASS NodeView -----------------------------------*/
+/*----------------------- CLASS TreeView -----------------------------------*/
 /*--------------------------------------------------------------------------*/
  /// read-only single-stage view of the children of a tree node
- /** A NodeView is the object returned by
-  * MultiStageDiscreteScenarioSet::make_view(). It is a full-fledged
+ /** A TreeView is the object returned by
+  * MultiStageDiscreteScenarioSet::root_view(). It is a full-fledged
   * (single-stage) ScenarioGenerator whose "pool" is the children of one
-  * fixed node, iterated in their natural order with the conditional
-  * probabilities as weights. It holds a non-owning pointer to its parent
+  * node, iterated in their natural order with the conditional
+  * probabilities as weights, and it moves to another node of the tree with
+  * descend() / climb(). It holds a non-owning pointer to its parent
   * MultiStageDiscreteScenarioSet and a private cursor, so distinct
-  * NodeView-s never interfere: this is what makes concurrent traversal
-  * safe. A NodeView reads only; init_*_pool() are no-ops because any
+  * TreeView-s never interfere: this is what makes concurrent traversal
+  * safe. A TreeView reads only; init_*_pool() are no-ops because any
   * scenario reduction is performed globally on the parent (see the class
   * comments of MultiStageDiscreteScenarioSet). */
 
- class NodeView : public MultiStageScenarioGenerator::View
+ class TreeView : public MultiStageScenarioGenerator::View
  {
   public:
 
-   NodeView( const MultiStageDiscreteScenarioSet * parent , NodeIndex node )
+   TreeView( const MultiStageDiscreteScenarioSet * parent , NodeIndex node )
     : f_parent( parent ) , f_node( node ) , f_pos( 0 ) { }
 
    void deserialize( const netCDF::NcGroup & ) override {
     throw( std::logic_error(
-     "MultiStageDiscreteScenarioSet::NodeView::deserialize: a view is not "
+     "MultiStageDiscreteScenarioSet::TreeView::deserialize: a view is not "
      "independently (de)serializable" ) );
     }
 
@@ -405,9 +338,11 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
    void init_random_pool( ScenarioIndex = INFScenario ) override { }
    void init_representative_pool( ScenarioIndex = INFScenario ) override { }
 
-   // history-pinned View interface: descend into the current child
-   [[nodiscard]] std::unique_ptr< View > descend() const override;
-   [[nodiscard]] StageIndex stage() const override;
+   // history-pinned View interface: move through the tree
+   bool descend( void ) override;
+   bool climb( void ) override;
+   [[nodiscard]] std::unique_ptr< View > clone( void ) const override;
+   [[nodiscard]] StageIndex stage( void ) const override;
 
   private:
 
@@ -417,7 +352,56 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
 
    [[nodiscard]] const std::string & private_name( void ) const override;
 
- };   // end( class NodeView )
+ };   // end( class TreeView )
+
+/*--------------------------------------------------------------------------*/
+/*-------------------------- PRIVATE METHODS -------------------------------*/
+/*--------------------------------------------------------------------------*/
+ // direct access to the node store: the tree is read from the outside only
+ // through a View, so these are for the TreeView (and this class) alone.
+
+ /// index of the (unique) root node, i.e. the stage-0 node
+ [[nodiscard]] NodeIndex get_root( void ) const { return( 0 ); }
+
+/*--------------------------------------------------------------------------*/
+ /// the children of node \p n (the realizations of the next stage there)
+ [[nodiscard]] const std::vector< NodeIndex > & get_children(
+						   NodeIndex n ) const {
+  return( f_nodes.at( n ).children );
+  }
+
+/*--------------------------------------------------------------------------*/
+ /// the parent of node \p n, InvalidNode if \p n is the root
+ [[nodiscard]] NodeIndex get_parent( NodeIndex n ) const {
+  return( f_nodes.at( n ).parent );
+  }
+
+/*--------------------------------------------------------------------------*/
+ /// the stage t in 0, ..., T-1 of node \p n
+ [[nodiscard]] StageIndex get_node_stage( NodeIndex n ) const {
+  return( f_nodes.at( n ).stage );
+  }
+
+/*--------------------------------------------------------------------------*/
+ /// the conditional probability P( node \p n | its parent )
+ [[nodiscard]] double get_node_probability( NodeIndex n ) const {
+  return( f_nodes.at( n ).probability );
+  }
+
+/*--------------------------------------------------------------------------*/
+ /// the realization x_t stored at node \p n
+ [[nodiscard]] Scenario get_node_data( NodeIndex n ) const {
+  const auto & nd = f_nodes.at( n );
+  return( Scenario( nd.data.data() , nd.data.size() ) );
+  }
+
+/*--------------------------------------------------------------------------*/
+ /// the root view backing the ScenarioGenerator face of this object
+ /** Returns the TreeView pinned at the root that implements the inherited
+  * single-stage ScenarioGenerator methods; it is created on first use and
+  * reset by deserialize(). Throws if the tree is empty. */
+
+ [[nodiscard]] TreeView & self_view( void ) const;
 
 /*--------------------------------------------------------------------------*/
 /*-------------------------- PRIVATE FIELDS --------------------------------*/
@@ -432,8 +416,8 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
  /// per-stage realization size d_t
  std::vector< ScenarioSize > f_stage_size;
 
- /// legacy single cursor: the "current" node of the depth-first walk
- NodeIndex f_current_node = 0;
+ /// the root view implementing the ScenarioGenerator face of this object
+ mutable std::unique_ptr< TreeView > f_self_view;
 
 /*--------------------------------------------------------------------------*/
 

@@ -598,12 +598,13 @@ class ScenarioGenerator
   * as the current scenario and can be read [see get_current_scenario()
   * and get_current_scenario_probability()] right away.
   *
-  * In the :MultiStageScenarioGenerator setting, init_random_pool() acts
-  * on the *current stage only*, consistently with the way every other
-  * "current scenario" method is interpreted (get_scenario_size(),
-  * get_current_scenario(), next_scenario(), ...). To (re-)init the pool
-  * of more than one stage, the caller walks the stages with next_stage()
-  * and calls init_random_pool() once per stage. */
+  * In the :MultiStageScenarioGenerator setting the stage is the one of
+  * the View this is called on [see MultiStageScenarioGenerator::View],
+  * consistently with the way every other "current scenario" method is
+  * interpreted (get_scenario_size(), get_current_scenario(),
+  * next_scenario(), ...). To (re-)init the pool of more than one stage,
+  * the caller walks the tree with View::descend() and calls
+  * init_random_pool() once per stage. */
 
   virtual void init_random_pool( ScenarioIndex size = INFScenario ) = 0;
 
@@ -647,10 +648,15 @@ class ScenarioGenerator
   * right away.
   *
   * In the :MultiStageScenarioGenerator setting,
-  * init_representative_pool() acts on the *current stage only*; see
-  * init_random_pool() above for the rationale. To (re-)init the
-  * representative universe of more than one stage, walk the stages
-  * with next_stage() and call init_representative_pool() at each. */
+  * init_representative_pool() acts on the pool of the View this is
+  * called on; see init_random_pool() above for the rationale. To
+  * (re-)init the representative universe of more than one stage, walk
+  * the tree with View::descend() and call init_representative_pool() at
+  * each. Note that this is only meaningful when the stages can be
+  * reduced independently: for a genuine scenario *tree* the reduction
+  * is inherently global, hence it is rather performed by the generator
+  * as a whole and a View may refuse to reduce on its own; see the
+  * specific derived class. */
 
   virtual void init_representative_pool( ScenarioIndex size = INFScenario ) = 0;
 
@@ -921,22 +927,30 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
 /** @name Managing the time component while reading the scenarios
  *
  * MultiStageScenarioGenerator inherits the concepts of "pool" and "current
- * scenario" from ScenarioGenerator and adds that of "current stage". The
- * current stage is initialized to t = 0 (first stage, with empty H_t) when
- * the current scenario is (logically) created, i.e., right after the call to
- * init_*_pool() or that of next_scenario(), and either increased with
- * next_stage() or decreased by previous_stage(). Hence, when
- * get_current_scenario() is called, it refers to the scenario *for the
- * current stage*, and so does get_scenario_size() (although the same
- * information can be inferred from the returned Scenario.
+ * scenario" from ScenarioGenerator and adds that of "position in the
+ * process". Because in general X_t depends on the history H_t, a position
+ * is not just a stage index: it is the whole path ( x_0 , ... , x_{t-1} )
+ * followed to reach it. A position is materialized by a View [see below],
+ * which pins one history H and *is* a single-stage ScenarioGenerator over
+ * the realizations that can be drawn next. Hence, all the "current
+ * scenario" methods inherited from ScenarioGenerator (get_scenario_size(),
+ * get_current_scenario(), next_scenario(), reset_pool(), init_*_pool(),
+ * ...) are meant to be called on a View, and refer to the position that
+ * View pins. The MultiStageScenarioGenerator is a ScenarioGenerator itself,
+ * and as such it behaves exactly like the View pinned at the root, i.e., it
+ * reads the realizations of the first random variable; this is a
+ * convenience for the frequent case where only those are needed.
  *
- * It is important to stress that, in MultiStageScenarioGenerator, the meaning
- * of next_stage() is to draw (if possible) another realization of X_t, with
- * t = get_current_stage(). Hence, this creates a new *partial* scenario
- * ( H_t , x_t ) with the same H_t as before the call and a different x_t.
- * One only gets a "full" scenario ( x_0 , ... , x_{T-1} ) after having called
- * get_current_scenario() for all t = 0, ..., T - 1. Hence, when x_t is drawn
- * from X_t the history H_t, if necessary, is known.
+ * The View is the *only* mechanism to move along the time dimension:
+ * View::descend() fixes the realization currently selected and moves to the
+ * next stage, View::climb() moves back to the previous one. It is important
+ * to stress that drawing another realization of X_t with the same history
+ * H_t is *not* descend() but the inherited next_scenario(): descend() moves
+ * to a new *partial* scenario ( H_t , x_t ), i.e., it extends the history.
+ * One only gets a "full" scenario ( x_0 , ... , x_{T-1} ) after having
+ * called get_current_scenario() at each position of a root-to-leaf path.
+ * Hence, when x_t is drawn from X_t the history H_t, if necessary, is
+ * known.
  *
  * A consequence of this, however, is that the parameter size in init_*_pool()
  * is only a "rough" description of the scenario set. The bound is on the
@@ -946,7 +960,7 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
  * number s_t of different realizations for each stage t, and then size
  * = s_0 * ... * s_{T-1}; however, clearly there can be many different ways
  * to choose the s_t that give the same size. Thus, in this case one could
- * have get_support_size() to return s_t for t = get_current_stage(),
+ * have get_support_size() to return s_t for the stage of the View,
  * similarly to get_scenario_size(), and even specify the size of each
  * sub-pool. However, there does not seem to be a general way of doing this
  * for all reasonable distributions that actually depend on H_t, in that the
@@ -963,60 +977,26 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
  * beforehand how many sub-scenarios sharing the same history H_t will be
  * available. */
 
- /// get the current stage t, a number in 0, ..., get_stage_number() - 1
-
- [[nodiscard]] virtual StageIndex get_current_stage( void ) = 0;
-
-/*--------------------------------------------------------------------------*/
- /// increase the current stage by one (if possible)
- /** Increase the value of the current stage t = get_current_stage() to t' =
-  * min( t + 1 , T - 1 ); returns true if it succeeds, i.e., t < t'. If true
-  * is returned, then this "resets the current scenario", i.e., the Scenario
-  * (std::range< const double >) returned by the latest call to
-  * get_current_scenario() is invalidated and the first scenario x_{t'} of the
-  * next random variable X_{t'} is drawn, ideally subject the current history
-  * ( x_0 , ... , x_t = x_{t' - 1} ), and made available via the next call to
-  * get_current_scenario(). */
-
- [[nodiscard]] virtual bool next_stage( void ) = 0;
-
-/*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
- /// decrease the current stage by \p step (if possible)
- /** Decrease the value of the current stage t = get_current_stage() to t' =
-  * max( t - step , 0 ); returns true if it succeeds, i.e., t' < t. If true is
-  * returned, then this "resets the current scenario", i.e., the Scenario
-  * (std::range< const double >) returned by the latest call to
-  * get_current_scenario() is invalidated and the first scenario x_{t'} of the
-  * next random variable X_{t'} is drawn, ideally subject the current history
-  * ( x_0 , ... , x_{t' - 1} ), if nonempty, and made available via the next
-  * call to get_current_scenario(). */
-
- virtual void previous_stage( StageIndex step = 1 ) = 0;
-
-/*--------------------------------------------------------------------------*/
- // Current-stage semantics for inherited pool methods on
+ // Semantics of the inherited pool methods on
  // :MultiStageScenarioGenerator. Because the base ScenarioGenerator has
- // no concept of stage, the per-stage refinement of its API can only be
- // documented here.
+ // no concept of stage, the refinement of its API can only be documented
+ // here.
  //
  // The inherited scalar init_*_pool( K ) overloads from ScenarioGenerator
- // act on the *current stage only*, mirroring the single-stage semantics
- // of get_scenario_size() / get_current_scenario() / next_scenario()
- // (all of which already refer to the current stage). To (re-)init the
- // pool of more than one stage, the caller walks the stages with
- // next_stage() and issues a fresh init_*_pool( K_t ) at each. No
- // per-stage or vector overloads are provided: the explicit loop is the
- // canonical pattern and keeps the API of ScenarioGenerator and
- // MultiStageScenarioGenerator identical.
+ // act on the pool of the position they are called at, mirroring the
+ // single-stage semantics of get_scenario_size() /
+ // get_current_scenario() / next_scenario(). To (re-)init the pool of
+ // more than one stage, the caller walks the tree with View::descend()
+ // and issues a fresh init_*_pool( K_t ) at each. No per-stage or vector
+ // overloads are provided: the explicit walk is the canonical pattern and
+ // keeps the API of ScenarioGenerator and MultiStageScenarioGenerator
+ // identical.
  //
- // Symmetrically, the inherited reset_pool() acts on the *current
- // stage's iteration only*: it rewinds get_current_scenario() to the
- // first scenario at get_current_stage(), without touching the stage
- // cursor and without touching the iteration of any other stage. To
- // also rewind the stage cursor back to 0, the caller invokes
- // previous_stage( INFStage ) (which clamps to 0 and, per the
- // previous_stage contract, also resets the destination stage's
- // iteration). No dedicated reset_stage() is provided.
+ // Symmetrically, the inherited reset_pool() rewinds
+ // get_current_scenario() to the first realization available at the
+ // position it is called at, and does not move that position: rewinding
+ // the position itself is done with View::climb(), or by taking a fresh
+ // root_view().
 
 /** @} ---------------------------------------------------------------------*/
 /*------------------- VIEW-BASED (HISTORY-PINNED) ACCESS -------------------*/
@@ -1024,54 +1004,77 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
 /** @name View-based, history-pinned access
  *  @{ */
 
- /// a lightweight, history-pinned view of the process, itself a SG
- /** A View pins a history H (a sub-path from the root down to a node) and *is*
-  * a single-stage ScenarioGenerator over the *children* of that node, i.e.
-  * over the realizations of X_{t+1} | H, with their conditional probabilities
+ /// a lightweight, history-pinned position in the process, itself a SG
+ /** A View pins a history H (a sub-path from the root down to a node) and
+  * *is* a single-stage ScenarioGenerator over the realizations that can be
+  * drawn next, i.e. over X_{t+1} | H, with their conditional probabilities
   * as the pool weights. A consumer that only needs "the scenarios at this
   * point" (e.g. a TwoStageStochasticBlock) thus uses a View as an ordinary
   * ScenarioGenerator, unaware of sitting inside a larger tree.
   *
-  * A View is meant to be a cheap handle (conceptually a pointer to the
-  * immutable generator plus the pinned position), so that arbitrarily many
-  * can be held at once, e.g. one per node to build the corresponding Block
-  * tree, possibly concurrently since the generator is not mutated.
+  * A View is the only mechanism to move along the time dimension: descend()
+  * fixes the realization currently selected and moves one stage forward,
+  * climb() moves back to the previous one, and each undoes the other, so
+  * that a single View freely roams the whole tree. Both move *this* View: to
+  * retain a position while moving on, take a clone() of it first.
   *
-  * From a View one descends into the currently selected child via descend(),
-  * which extends H by one stage and returns the View pinned there; this is
-  * the canonical way to walk the tree. */
+  * A View is meant to be a cheap handle (conceptually a pointer to the
+  * generator plus the pinned position), so that arbitrarily many can be held
+  * at once, e.g. one per node to build the corresponding Block tree.
+  * Whether distinct Views can also be *used* concurrently depends on the
+  * specific derived class: it is the case whenever the underlying data are
+  * immutable and each View carries its own cursor, but a generator whose
+  * positions share a mutable cursor cannot promise it. */
 
  class View : public ScenarioGenerator
  {
   public:
 
-   /// descend into the child currently selected by get_current_scenario()
-   /** Returns a View pinned at the child currently selected by the inherited
-    * get_current_scenario() (extending the history H by one stage); the
-    * returned View's pool are the children of that child. Returns nullptr if
-    * the current child is a leaf (there is no further stage). */
+   /// move into the realization currently selected, one stage forward
+   /** Moves this View one stage forward, extending the pinned history H with
+    * the realization currently selected by the inherited
+    * get_current_scenario(); its pool becomes that of X_{t+1} | ( H , x_t ),
+    * with the first realization selected. Returns false, leaving the View
+    * unchanged, if there is no further stage, i.e., the realization
+    * currently selected is a leaf of the scenario tree. */
 
-   [[nodiscard]] virtual std::unique_ptr< View > descend() const = 0;
+   virtual bool descend( void ) = 0;
 
+/*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
+   /// move back to the position this View has descended from
+   /** Moves this View one stage backwards, dropping the last realization of
+    * the pinned history H; its pool becomes that of the previous stage, with
+    * the realization that had been descended into selected, so that climb()
+    * undoes descend() and vice-versa. Returns false, leaving the View
+    * unchanged, if it is pinned at the root, where H is empty. */
+
+   virtual bool climb( void ) = 0;
+
+/*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
+   /// returns an independent copy of this View, pinned at the same position
+   /** Returns a View that pins the same history H as this one and selects the
+    * same realization in the pool, but has its own cursor: the two then move
+    * independently. This is how one retains a position while moving on, and
+    * how a Views is handed out to each of several concurrent consumers. */
+
+   [[nodiscard]] virtual std::unique_ptr< View > clone( void ) const = 0;
+
+/*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
    /// the stage (depth of the pinned history H) of this View
 
-   [[nodiscard]] virtual StageIndex stage() const = 0;
+   [[nodiscard]] virtual StageIndex stage( void ) const = 0;
 
  };   // end( class View )
 
 /*--------------------------------------------------------------------------*/
  /// create a View pinned at the root (empty history, stage 0)
  /** Returns a View pinned at the root of the scenario tree: its history H is
-  * empty and its pool are the first-stage realizations. From it the whole
-  * tree is reached via descend(). The base class default throws: only
-  * :MultiStageScenarioGenerator that support the view-based access override
-  * it, so that adding this contract is non-breaking for the others. */
+  * empty and its pool are the realizations of the first random variable.
+  * From it the whole tree is reached via View::descend() and View::climb().
+  * Since the View is the only mechanism to read a scenario tree, this is the
+  * entry point every :MultiStageScenarioGenerator has to provide. */
 
- [[nodiscard]] virtual std::unique_ptr< View > root_view() const {
-  throw( std::logic_error(
-   "MultiStageScenarioGenerator::root_view: view-based access not supported "
-   "by this :MultiStageScenarioGenerator" ) );
-  }
+ [[nodiscard]] virtual std::unique_ptr< View > root_view( void ) const = 0;
 
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PROTECTED PART OF THE CLASS ------------------------*/

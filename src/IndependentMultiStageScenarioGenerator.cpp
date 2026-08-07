@@ -48,7 +48,6 @@ void IndependentMultiStageScenarioGenerator::clear_inners( void )
  for( auto * inner : inners )
   delete inner;
  inners.clear();
- current_stage = 0;
  }
 
 /*--------------------------------------------------------------------------*/
@@ -102,9 +101,8 @@ void IndependentMultiStageScenarioGenerator::deserialize(
   }
 
  // After deserialization the outer is left in canonical walkable state:
- // current_stage = 0 and each inner is already in its own canonical
- // state (per its lazy-init contract).
- current_stage = 0;
+ // each inner is already in its own canonical state (per its lazy-init
+ // contract).
  }
 
 /*--------------------------------------------------------------------------*/
@@ -172,6 +170,18 @@ void IndependentMultiStageScenarioGenerator::set_config(
 
 /*--------------------------------------------------------------------------*/
 
+ScenarioGenerator::ScenarioIndex
+IndependentMultiStageScenarioGenerator::get_support_size( void )
+{
+ if( inners.empty() )
+  throw( std::logic_error(
+   "IndependentMultiStageScenarioGenerator::get_support_size: "
+   "no inner :ScenarioGenerator has been deserialized" ) );
+ return( inners[ 0 ]->get_support_size() );
+ }
+
+/*--------------------------------------------------------------------------*/
+
 ScenarioGenerator::ScenarioSize
 IndependentMultiStageScenarioGenerator::get_scenario_size( void ) const
 {
@@ -179,7 +189,7 @@ IndependentMultiStageScenarioGenerator::get_scenario_size( void ) const
   throw( std::logic_error(
    "IndependentMultiStageScenarioGenerator::get_scenario_size: "
    "no inner :ScenarioGenerator has been deserialized" ) );
- return( inners[ current_stage ]->get_scenario_size() );
+ return( inners[ 0 ]->get_scenario_size() );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -191,7 +201,7 @@ IndependentMultiStageScenarioGenerator::get_current_scenario( void ) const
   throw( std::logic_error(
    "IndependentMultiStageScenarioGenerator::get_current_scenario: "
    "no inner :ScenarioGenerator has been deserialized" ) );
- return( inners[ current_stage ]->get_current_scenario() );
+ return( inners[ 0 ]->get_current_scenario() );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -203,7 +213,7 @@ double IndependentMultiStageScenarioGenerator::
   throw( std::logic_error(
    "IndependentMultiStageScenarioGenerator::"
    "get_current_scenario_probability: no inner has been deserialized" ) );
- return( inners[ current_stage ]->get_current_scenario_probability() );
+ return( inners[ 0 ]->get_current_scenario_probability() );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -212,22 +222,22 @@ bool IndependentMultiStageScenarioGenerator::next_scenario( void )
 {
  if( inners.empty() )
   return( false );
- return( inners[ current_stage ]->next_scenario() );
+ return( inners[ 0 ]->next_scenario() );
  }
 
 /*--------------------------------------------------------------------------*/
 
 void IndependentMultiStageScenarioGenerator::reset_pool( void )
 {
- // Per :MultiStageScenarioGenerator semantics, reset_pool() acts on
- // the current stage only — it does not move the stage cursor and
- // does not touch the iteration of other stages. To also rewind the
- // stage cursor, call previous_stage( INFStage ).
+ // Per :MultiStageScenarioGenerator semantics, the generator's own face
+ // is the view pinned at stage 0: reset_pool() rewinds the iteration of
+ // that stage, and does not touch the iteration of any other one, whose
+ // pool is reached through a View.
  if( inners.empty() )
   throw( std::runtime_error(
    "IndependentMultiStageScenarioGenerator::reset_pool: "
    "no inner :ScenarioGenerator has been deserialized" ) );
- inners[ current_stage ]->reset_pool();
+ inners[ 0 ]->reset_pool();
  }
 
 /*--------------------------------------------------------------------------*/
@@ -244,34 +254,29 @@ bool IndependentMultiStageScenarioGenerator::is_pool_initialized( void ) const
 
 /*--------------------------------------------------------------------------*/
 
-bool IndependentMultiStageScenarioGenerator::next_stage( void )
-{
- if( current_stage + 1 >= inners.size() )
-  return( false );
- ++current_stage;
- inners[ current_stage ]->reset_pool();
- return( true );
- }
-
+/*--------------------------------------------------------------------------*/
+/*------------------------- VIEW-BASED ACCESS ------------------------------*/
 /*--------------------------------------------------------------------------*/
 
-void IndependentMultiStageScenarioGenerator::previous_stage(
-                                                          StageIndex step )
+std::unique_ptr< MultiStageScenarioGenerator::View >
+IndependentMultiStageScenarioGenerator::root_view( void ) const
 {
- if( step == 0 )
-  return;
- current_stage = ( step >= current_stage ) ? 0 : current_stage - step;
- inners[ current_stage ]->reset_pool();
+ if( inners.empty() )
+  throw( std::logic_error(
+   "IndependentMultiStageScenarioGenerator::root_view: no inner "
+   ":ScenarioGenerator has been deserialized" ) );
+ return( std::make_unique< StageView >( this , 0 ) );
  }
 
 /*--------------------------------------------------------------------------*/
 /*-------------------- POOL INITIALIZATION METHODS -------------------------*/
 /*--------------------------------------------------------------------------*/
-// init_*_pool( K ) acts on the inner of the *current stage* only, in
-// keeping with the :MultiStageScenarioGenerator convention that all
-// "current scenario" methods refer to the current stage. The caller
-// initializes per-stage pools by looping with next_stage() and issuing
-// a fresh init_*_pool( K_t ) at each stage.
+// init_*_pool( K ) acts on the inner of stage 0, the generator's own
+// face being the view pinned there, in keeping with the
+// :MultiStageScenarioGenerator convention that all "current scenario"
+// methods refer to the position they are called at. The caller
+// initializes per-stage pools by walking the stages with
+// View::descend() and issuing a fresh init_*_pool( K_t ) at each.
 
 void IndependentMultiStageScenarioGenerator::init_random_pool(
                                                          ScenarioIndex size )
@@ -281,7 +286,7 @@ void IndependentMultiStageScenarioGenerator::init_random_pool(
    "IndependentMultiStageScenarioGenerator::init_random_pool: "
    "no inner :ScenarioGenerator has been deserialized" ) );
 
- inners[ current_stage ]->init_random_pool( size );
+ inners[ 0 ]->init_random_pool( size );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -294,7 +299,63 @@ void IndependentMultiStageScenarioGenerator::init_representative_pool(
    "IndependentMultiStageScenarioGenerator::init_representative_pool: "
    "no inner :ScenarioGenerator has been deserialized" ) );
 
- inners[ current_stage ]->init_representative_pool( size );
+ inners[ 0 ]->init_representative_pool( size );
+ }
+
+/*--------------------------------------------------------------------------*/
+/*------------------------- CLASS StageView --------------------------------*/
+/*--------------------------------------------------------------------------*/
+
+const std::string &
+IndependentMultiStageScenarioGenerator::StageView::private_name( void ) const
+{
+ static const std::string name(
+                "IndependentMultiStageScenarioGenerator::StageView" );
+ return( name );
+ }
+
+/*--------------------------------------------------------------------------*/
+
+ScenarioGenerator *
+IndependentMultiStageScenarioGenerator::StageView::inner( void ) const
+{
+ if( f_stage >= f_parent->inners.size() )
+  throw( std::out_of_range(
+   "IndependentMultiStageScenarioGenerator::StageView::inner: the view is "
+   "pinned at stage " + std::to_string( f_stage ) + ", out of range" ) );
+ return( f_parent->inners[ f_stage ] );
+ }
+
+/*--------------------------------------------------------------------------*/
+
+bool IndependentMultiStageScenarioGenerator::StageView::descend( void )
+{
+ // the stages being independent, which realization is currently selected
+ // is immaterial: the pool of the next stage is the same in any case
+ if( std::size_t( f_stage ) + 1 >= f_parent->inners.size() )
+  return( false );
+ ++f_stage;
+ inner()->reset_pool();
+ return( true );
+ }
+
+/*--------------------------------------------------------------------------*/
+
+bool IndependentMultiStageScenarioGenerator::StageView::climb( void )
+{
+ if( f_stage == 0 )
+  return( false );
+ --f_stage;
+ inner()->reset_pool();
+ return( true );
+ }
+
+/*--------------------------------------------------------------------------*/
+
+std::unique_ptr< MultiStageScenarioGenerator::View >
+IndependentMultiStageScenarioGenerator::StageView::clone( void ) const
+{
+ return( std::make_unique< StageView >( * this ) );
  }
 
 /*--------------------------------------------------------------------------*/
