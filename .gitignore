@@ -6,6 +6,7 @@
 test/StochasticBlock_test
 test/test_discrete
 test/test_mssds
+test/test_imssg
 
 # --- C/C++ build artifacts ----------------------------------
 *.o
