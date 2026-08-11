@@ -189,6 +189,31 @@ int main( void )
  g->reset_pool();
  check_eq( g->get_current_scenario()[ 0 ] , 10 , "the generator rewinds" );
 
+ // -- a pool re-definition invalidates the views that relied on it --------
+ // the stages being independent, re-defining the pool of one of them only
+ // concerns the views pinned there, and not the one that re-defined it
+ auto a = g->root_view();
+ auto b = g->root_view();
+ auto c = g->root_view();
+ check( c->descend() , "c moves to stage 1" );
+ check( a->is_valid() && b->is_valid() && c->is_valid() ,
+        "all the views are valid to start with" );
+
+ a->init_random_pool();                   // re-defines the pool of stage 0
+ check( a->is_valid() , "the view that re-defined the pool is still valid" );
+ check( ! b->is_valid() , "the other view at that stage is invalidated" );
+ check( c->is_valid() , "a view at another stage is not" );
+
+ bool refused = false;
+ try { b->get_support_size(); } catch( const std::exception & ) {
+  refused = true;
+  }
+ check( refused , "an invalidated view refuses to be read" );
+
+ refused = false;
+ try { b->descend(); } catch( const std::exception & ) { refused = true; }
+ check( refused , "and refuses to be moved" );
+
  delete sg;
  std::remove( fname.c_str() );
 

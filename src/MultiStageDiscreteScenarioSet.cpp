@@ -273,9 +273,39 @@ MultiStageDiscreteScenarioSet::TreeView::private_name( void ) const
 
 /*--------------------------------------------------------------------------*/
 
+bool MultiStageDiscreteScenarioSet::TreeView::is_valid( void ) const
+{
+ // the pinned history is still the one this view was created on iff every
+ // node of it has the generation it had then; walking it upwards from the
+ // current node reads v_stamps backwards, root last
+ auto it = v_stamps.rbegin();
+ for( auto n = f_node ; n != InvalidNode ; n = f_parent->get_parent( n ) ) {
+  if( ( it == v_stamps.rend() ) ||
+      ( * it != f_parent->get_node_generation( n ) ) )
+   return( false );
+  ++it;
+  }
+ return( it == v_stamps.rend() );
+ }
+
+/*--------------------------------------------------------------------------*/
+
+void MultiStageDiscreteScenarioSet::TreeView::check_valid(
+					       const char * method ) const
+{
+ if( ! is_valid() )
+  throw( std::logic_error(
+   std::string( "MultiStageDiscreteScenarioSet::TreeView::" ) + method +
+   ": the pinned history has been regenerated, this view is no longer "
+   "valid" ) );
+ }
+
+/*--------------------------------------------------------------------------*/
+
 ScenarioGenerator::ScenarioSize
 MultiStageDiscreteScenarioSet::TreeView::get_scenario_size( void ) const
 {
+ check_valid( "get_scenario_size" );
  const auto & ch = f_parent->get_children( f_node );
  if( ch.empty() )
   return( 0 );
@@ -287,6 +317,7 @@ MultiStageDiscreteScenarioSet::TreeView::get_scenario_size( void ) const
 ScenarioGenerator::ScenarioIndex
 MultiStageDiscreteScenarioSet::TreeView::get_support_size( void )
 {
+ check_valid( "get_support_size" );
  return( static_cast< ScenarioIndex >(
                             f_parent->get_children( f_node ).size() ) );
  }
@@ -296,6 +327,7 @@ MultiStageDiscreteScenarioSet::TreeView::get_support_size( void )
 ScenarioGenerator::Scenario
 MultiStageDiscreteScenarioSet::TreeView::get_current_scenario( void ) const
 {
+ check_valid( "get_current_scenario" );
  const auto & ch = f_parent->get_children( f_node );
  if( f_pos >= ch.size() )
   throw( std::out_of_range(
@@ -309,6 +341,7 @@ MultiStageDiscreteScenarioSet::TreeView::get_current_scenario( void ) const
 double MultiStageDiscreteScenarioSet::TreeView::
                               get_current_scenario_probability( void ) const
 {
+ check_valid( "get_current_scenario_probability" );
  const auto & ch = f_parent->get_children( f_node );
  if( f_pos >= ch.size() )
   throw( std::out_of_range(
@@ -322,6 +355,7 @@ double MultiStageDiscreteScenarioSet::TreeView::
 
 bool MultiStageDiscreteScenarioSet::TreeView::next_scenario( void )
 {
+ check_valid( "next_scenario" );
  if( f_pos + 1 < f_parent->get_children( f_node ).size() ) {
   ++f_pos;
   return( true );
@@ -333,6 +367,7 @@ bool MultiStageDiscreteScenarioSet::TreeView::next_scenario( void )
 
 bool MultiStageDiscreteScenarioSet::TreeView::descend( void )
 {
+ check_valid( "descend" );
  const auto & ch = f_parent->get_children( f_node );
  if( f_pos >= ch.size() )
   return( false );                       // no realization selected
@@ -341,6 +376,7 @@ bool MultiStageDiscreteScenarioSet::TreeView::descend( void )
   return( false );                       // the selected one is a leaf
  f_node = child;                         // H <- ( H , x_t )
  f_pos = 0;
+ v_stamps.push_back( f_parent->get_node_generation( child ) );
  return( true );
  }
 
@@ -348,6 +384,7 @@ bool MultiStageDiscreteScenarioSet::TreeView::descend( void )
 
 bool MultiStageDiscreteScenarioSet::TreeView::climb( void )
 {
+ check_valid( "climb" );
  const auto p = f_parent->get_parent( f_node );
  if( p == InvalidNode )
   return( false );                       // already pinned at the root
@@ -359,6 +396,7 @@ bool MultiStageDiscreteScenarioSet::TreeView::climb( void )
   ++i;
  f_node = p;
  f_pos = i;
+ v_stamps.pop_back();
  return( true );
  }
 
@@ -375,6 +413,7 @@ MultiStageDiscreteScenarioSet::TreeView::clone( void ) const
 MultiStageScenarioGenerator::StageIndex
 MultiStageDiscreteScenarioSet::TreeView::stage( void ) const
 {
+ check_valid( "stage" );
  return( f_parent->get_node_stage( f_node ) );
  }
 

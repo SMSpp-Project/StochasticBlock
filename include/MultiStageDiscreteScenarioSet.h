@@ -49,6 +49,8 @@
 
 #include "ScenarioGenerator.h"
 
+#include <algorithm>
+
 #include <vector>
 
 /*--------------------------------------------------------------------------*/
@@ -283,6 +285,7 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
   double probability;                 ///< P( this | parent )
   std::vector< double > data;         ///< realization x_t (length d_t)
   std::vector< NodeIndex > children;  ///< child node indices
+  unsigned long generation = 0;       ///< bumped when children are redefined
   };
 
 /*--------------------------------------------------------------------------*/
@@ -299,14 +302,26 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
   * TreeView-s never interfere: this is what makes concurrent traversal
   * safe. A TreeView reads only; init_*_pool() are no-ops because any
   * scenario reduction is performed globally on the parent (see the class
-  * comments of MultiStageDiscreteScenarioSet). */
+  * comments of MultiStageDiscreteScenarioSet).
+  *
+  * Since the tree is materialised upfront, the pool of a TreeView is always
+  * initialised and a TreeView is valid for its whole life, save for a global
+  * reduction actually rebuilding the tree: a TreeView records the generation
+  * of each node of the pinned history, so that it detects a node of it
+  * having been regenerated and refuses to read stale data [see
+  * MultiStageScenarioGenerator::View::is_valid()]. */
 
  class TreeView : public MultiStageScenarioGenerator::View
  {
   public:
 
    TreeView( const MultiStageDiscreteScenarioSet * parent , NodeIndex node )
-    : f_parent( parent ) , f_node( node ) , f_pos( 0 ) { }
+    : f_parent( parent ) , f_node( node ) , f_pos( 0 ) {
+    // record the generation of each node of the pinned history, root first
+    for( auto n = node ; n != InvalidNode ; n = parent->get_parent( n ) )
+     v_stamps.push_back( parent->get_node_generation( n ) );
+    std::reverse( v_stamps.begin() , v_stamps.end() );
+    }
 
    void deserialize( const netCDF::NcGroup & ) override {
     throw( std::logic_error(
@@ -343,12 +358,19 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
    bool climb( void ) override;
    [[nodiscard]] std::unique_ptr< View > clone( void ) const override;
    [[nodiscard]] StageIndex stage( void ) const override;
+   [[nodiscard]] bool is_valid( void ) const override;
 
   private:
 
    const MultiStageDiscreteScenarioSet * f_parent;  ///< owning tree
    NodeIndex f_node;          ///< node whose children this view iterates
    std::size_t f_pos;         ///< cursor into that node's children
+
+   /// generation of each node of the pinned history, root first
+   std::vector< unsigned long > v_stamps;
+
+   /// throw if some node of the pinned history has been regenerated
+   void check_valid( const char * method ) const;
 
    [[nodiscard]] const std::string & private_name( void ) const override;
 
@@ -386,6 +408,18 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
  /// the conditional probability P( node \p n | its parent )
  [[nodiscard]] double get_node_probability( NodeIndex n ) const {
   return( f_nodes.at( n ).probability );
+  }
+
+/*--------------------------------------------------------------------------*/
+ /// how many times the children of node \p n have been redefined
+ /** The generation of a node is bumped every time its children are (re-)
+  * defined, which is how a TreeView tells that the sub-tree it is pinned
+  * into is no longer the one it was created on. In this class the tree is
+  * read from a netCDF file and never changes afterwards, so generations
+  * only move if a global reduction rebuilds the tree. */
+
+ [[nodiscard]] unsigned long get_node_generation( NodeIndex n ) const {
+  return( f_nodes.at( n ).generation );
   }
 
 /*--------------------------------------------------------------------------*/

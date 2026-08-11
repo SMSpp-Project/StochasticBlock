@@ -261,7 +261,8 @@ class IndependentMultiStageScenarioGenerator
 
    StageView( const IndependentMultiStageScenarioGenerator * parent ,
 	      StageIndex stage )
-    : f_parent( parent ) , f_stage( stage ) { }
+    : f_parent( parent ) , f_stage( stage ) ,
+      f_stamp( parent->get_stage_generation( stage ) ) { }
 
    void deserialize( const netCDF::NcGroup & ) override {
     throw( std::logic_error(
@@ -274,37 +275,55 @@ class IndependentMultiStageScenarioGenerator
     }
 
    [[nodiscard]] ScenarioIndex get_support_size( void ) override {
+    check_valid( "get_support_size" );
     return( inner()->get_support_size() );
     }
 
    [[nodiscard]] ScenarioSize get_scenario_size( void ) const override {
+    check_valid( "get_scenario_size" );
     return( inner()->get_scenario_size() );
     }
 
    [[nodiscard]] Scenario get_current_scenario( void ) const override {
+    check_valid( "get_current_scenario" );
     return( inner()->get_current_scenario() );
     }
 
    [[nodiscard]] double get_current_scenario_probability( void )
-    const override { return( inner()->get_current_scenario_probability() ); }
+    const override {
+    check_valid( "get_current_scenario_probability" );
+    return( inner()->get_current_scenario_probability() );
+    }
 
    bool next_scenario( void ) override {
+    check_valid( "next_scenario" );
     return( inner()->next_scenario() );
     }
 
-   void reset_pool( void ) override { inner()->reset_pool(); }
+   void reset_pool( void ) override {
+    check_valid( "reset_pool" );
+    inner()->reset_pool();
+    }
 
    [[nodiscard]] bool is_pool_initialized( void ) const override {
     return( inner()->is_pool_initialized() );
     }
 
-   // the stages being independent, each is reduced on its own
+   // the stages being independent, each is reduced on its own; a pool
+   // re-definition invalidates the other views pinned at the same stage,
+   // but not those pinned at any other one, and not this very view
    void init_random_pool( ScenarioIndex size = INFScenario ) override {
+    check_valid( "init_random_pool" );
     inner()->init_random_pool( size );
+    f_stamp = f_parent->bump_stage_generation( f_stage );
     }
 
    void init_representative_pool( ScenarioIndex size = INFScenario )
-    override { inner()->init_representative_pool( size ); }
+    override {
+    check_valid( "init_representative_pool" );
+    inner()->init_representative_pool( size );
+    f_stamp = f_parent->bump_stage_generation( f_stage );
+    }
 
    // history-pinned View interface: move through the stages
    bool descend( void ) override;
@@ -314,13 +333,24 @@ class IndependentMultiStageScenarioGenerator
     return( f_stage );
     }
 
+   // the stages being independent, only the pool of the stage this view is
+   // pinned at can invalidate it: how the stage has been reached does not
+   // matter, hence no history has to be checked
+   [[nodiscard]] bool is_valid( void ) const override {
+    return( f_stamp == f_parent->get_stage_generation( f_stage ) );
+    }
+
   private:
 
    /// the inner :ScenarioGenerator this view is pinned at
    [[nodiscard]] ScenarioGenerator * inner( void ) const;
 
+   /// throw if the pool of the pinned stage has been re-defined
+   void check_valid( const char * method ) const;
+
    const IndependentMultiStageScenarioGenerator * f_parent;  ///< owner
    StageIndex f_stage;        ///< stage whose inner this view reads
+   unsigned long f_stamp;     ///< generation of that stage when pinned
 
    [[nodiscard]] const std::string & private_name( void ) const override;
 
@@ -334,11 +364,33 @@ class IndependentMultiStageScenarioGenerator
  void clear_inners( void );
 
 /*--------------------------------------------------------------------------*/
+ /// how many times the pool of stage \p t has been re-defined
+ /** The generation of a stage is bumped by every init_*_pool() on it, which
+  * is how a StageView tells that the pool it is pinned at is no longer the
+  * one it was created on. */
+
+ [[nodiscard]] unsigned long get_stage_generation( StageIndex t ) const {
+  return( t < v_generation.size() ? v_generation[ t ] : 0 );
+  }
+
+/*--------------------------------------------------------------------------*/
+ /// bump the generation of stage \p t, returning the new value
+
+ unsigned long bump_stage_generation( StageIndex t ) const {
+  if( t >= v_generation.size() )
+   v_generation.resize( std::size_t( t ) + 1 , 0 );
+  return( ++v_generation[ t ] );
+  }
+
+/*--------------------------------------------------------------------------*/
 /*--------------------------- PRIVATE FIELDS -------------------------------*/
 /*--------------------------------------------------------------------------*/
 
  /// inner per-stage :ScenarioGenerator pointers, owned by this object
  std::vector< ScenarioGenerator * > inners;
+
+ /// per-stage pool generation, bumped by every init_*_pool() on the stage
+ mutable std::vector< unsigned long > v_generation;
 
 /*--------------------------------------------------------------------------*/
 

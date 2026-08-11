@@ -604,7 +604,10 @@ class ScenarioGenerator
   * interpreted (get_scenario_size(), get_current_scenario(),
   * next_scenario(), ...). To (re-)init the pool of more than one stage,
   * the caller walks the tree with View::descend() and calls
-  * init_random_pool() once per stage. */
+  * init_random_pool() once per stage. Being a pool re-definition, this is
+  * one of the two operations that *write* the process, and it invalidates
+  * the Views that were relying on the pool it re-defines [see
+  * MultiStageScenarioGenerator::View]. */
 
   virtual void init_random_pool( ScenarioIndex size = INFScenario ) = 0;
 
@@ -652,11 +655,13 @@ class ScenarioGenerator
   * called on; see init_random_pool() above for the rationale. To
   * (re-)init the representative universe of more than one stage, walk
   * the tree with View::descend() and call init_representative_pool() at
-  * each. Note that this is only meaningful when the stages can be
-  * reduced independently: for a genuine scenario *tree* the reduction
-  * is inherently global, hence it is rather performed by the generator
-  * as a whole and a View may refuse to reduce on its own; see the
-  * specific derived class. */
+  * each. In a genuine scenario *tree* this is the very operation that
+  * selects which children a node has, hence it has to be called at a node
+  * before its children can be read, and it invalidates the Views that were
+  * relying on the pool it re-defines [see MultiStageScenarioGenerator::
+  * View]. A generator that materialises the whole tree upfront can instead
+  * reduce it once and for all as a whole, in which case the call at a node
+  * has nothing left to do; see the specific derived class. */
 
   virtual void init_representative_pool( ScenarioIndex size = INFScenario ) = 0;
 
@@ -1024,7 +1029,32 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
   * Whether distinct Views can also be *used* concurrently depends on the
   * specific derived class: it is the case whenever the underlying data are
   * immutable and each View carries its own cursor, but a generator whose
-  * positions share a mutable cursor cannot promise it. */
+  * positions share a mutable cursor cannot promise it.
+  *
+  * Every method of a View but the init_*_pool() ones only *reads* the
+  * process: get_support_size(), get_current_scenario(), next_scenario(),
+  * reset_pool(), descend(), climb() and clone() leave the tree exactly as
+  * they found it, and can therefore be used by arbitrarily many Views at
+  * once. The init_*_pool() ones are the only ones that *write*: called on a
+  * View they (re-)define the pool of the node it is pinned at, which in a
+  * generator that constructs the tree on the fly is where the children of
+  * that node come into existence. The pool of a View must therefore have
+  * been initialised [see is_pool_initialized()] before it can be read or
+  * descend()-ed into, while a generator whose tree is entirely materialised
+  * upfront simply has all its Views born initialised.
+  *
+  * Since init_*_pool() re-defines a pool, it invalidates the Views that
+  * were relying on it: those pinned at the very same node, whose pool has
+  * just changed under their feet, and, unless is_stage_independent() is
+  * true, those pinned anywhere below it, whose sub-tree has just been
+  * regenerated. Views pinned elsewhere are unaffected: those on a different
+  * sub-tree share no node with it, and those above it only see their own
+  * children, which have not changed. Note that this depends only on where
+  * the Views are pinned now, not on the order in which they were created,
+  * since climb() allows a View to be anywhere at any time. A View knows
+  * whether it has been invalidated [see is_valid()] and refuses to be used
+  * if it has, rather than silently reading stale data; the View that
+  * init_*_pool() was called on obviously remains valid. */
 
  class View : public ScenarioGenerator
  {
@@ -1036,7 +1066,14 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
     * get_current_scenario(); its pool becomes that of X_{t+1} | ( H , x_t ),
     * with the first realization selected. Returns false, leaving the View
     * unchanged, if there is no further stage, i.e., the realization
-    * currently selected is a leaf of the scenario tree. */
+    * currently selected is a leaf of the scenario tree.
+    *
+    * Returning false is reserved for that legitimate answer: descending
+    * from a View whose pool has not been initialised yet [see
+    * is_pool_initialized()] is instead a usage error, since which the
+    * children are is precisely what a pool defines, and throws exception.
+    * The arrival View is initialised, or not, exactly as any other View
+    * pinned at that node would be. */
 
    virtual bool descend( void ) = 0;
 
@@ -1063,6 +1100,20 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
    /// the stage (depth of the pinned history H) of this View
 
    [[nodiscard]] virtual StageIndex stage( void ) const = 0;
+
+/*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
+   /// true if this View still refers to the process it was created on
+   /** Returns true if this View can still be used, and false if some
+    * init_*_pool() has meanwhile re-defined a pool it was relying on [see
+    * the general notes of this class for which Views a pool re-definition
+    * invalidates]. An invalidated View is inert: every other method of it
+    * throws exception rather than reading data that is no longer there, so
+    * that an owner that keeps Views around across pool re-definitions can
+    * ask, and rebuild the ones it has lost, instead of finding out much
+    * later. A View of a generator that never re-defines a pool is of course
+    * valid for its whole life. */
+
+   [[nodiscard]] virtual bool is_valid( void ) const = 0;
 
  };   // end( class View )
 

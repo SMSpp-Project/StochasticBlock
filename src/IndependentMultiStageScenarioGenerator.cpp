@@ -48,6 +48,7 @@ void IndependentMultiStageScenarioGenerator::clear_inners( void )
  for( auto * inner : inners )
   delete inner;
  inners.clear();
+ v_generation.clear();
  }
 
 /*--------------------------------------------------------------------------*/
@@ -287,6 +288,7 @@ void IndependentMultiStageScenarioGenerator::init_random_pool(
    "no inner :ScenarioGenerator has been deserialized" ) );
 
  inners[ 0 ]->init_random_pool( size );
+ bump_stage_generation( 0 );      // the generator's face is stage 0
  }
 
 /*--------------------------------------------------------------------------*/
@@ -300,6 +302,7 @@ void IndependentMultiStageScenarioGenerator::init_representative_pool(
    "no inner :ScenarioGenerator has been deserialized" ) );
 
  inners[ 0 ]->init_representative_pool( size );
+ bump_stage_generation( 0 );      // the generator's face is stage 0
  }
 
 /*--------------------------------------------------------------------------*/
@@ -328,14 +331,37 @@ IndependentMultiStageScenarioGenerator::StageView::inner( void ) const
 
 /*--------------------------------------------------------------------------*/
 
+void IndependentMultiStageScenarioGenerator::StageView::check_valid(
+					       const char * method ) const
+{
+ if( ! is_valid() )
+  throw( std::logic_error(
+   std::string( "IndependentMultiStageScenarioGenerator::StageView::" ) +
+   method + ": the pool of stage " + std::to_string( f_stage ) +
+   " has been re-defined, this view is no longer valid" ) );
+ }
+
+/*--------------------------------------------------------------------------*/
+
 bool IndependentMultiStageScenarioGenerator::StageView::descend( void )
 {
+ check_valid( "descend" );
+ // which the realizations of the next stage are is what the pool of this
+ // one defines, hence descending from an uninitialized pool is an error,
+ // while returning false is reserved for "there is no next stage"
+ if( ! inner()->is_pool_initialized() )
+  throw( std::logic_error(
+   "IndependentMultiStageScenarioGenerator::StageView::descend: the pool "
+   "of stage " + std::to_string( f_stage ) + " has not been initialized" ) );
+
  // the stages being independent, which realization is currently selected
  // is immaterial: the pool of the next stage is the same in any case
  if( std::size_t( f_stage ) + 1 >= f_parent->inners.size() )
   return( false );
  ++f_stage;
- inner()->reset_pool();
+ f_stamp = f_parent->get_stage_generation( f_stage );
+ if( inner()->is_pool_initialized() )   // the arrival stage may well have
+  inner()->reset_pool();                // no pool of its own yet
  return( true );
  }
 
@@ -343,10 +369,13 @@ bool IndependentMultiStageScenarioGenerator::StageView::descend( void )
 
 bool IndependentMultiStageScenarioGenerator::StageView::climb( void )
 {
+ check_valid( "climb" );
  if( f_stage == 0 )
   return( false );
  --f_stage;
- inner()->reset_pool();
+ f_stamp = f_parent->get_stage_generation( f_stage );
+ if( inner()->is_pool_initialized() )
+  inner()->reset_pool();
  return( true );
  }
 
