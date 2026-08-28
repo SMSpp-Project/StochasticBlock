@@ -225,6 +225,38 @@ int main( void )
             "round-trip: inner realization preserved" );
   }
 
+ // -- reducing the pool of a node ------------------------------------------
+ // with no Solver configured the selection falls back to the baseline one,
+ // which keeps the two most likely children of s0, e00 and e01, and gives
+ // them the probability of the one it discards
+ auto a = t->root_view();
+ check( a->descend() , "a descends into s0" );
+ check( a->get_support_size() == 3 , "s0 has 3 children to start with" );
+ auto b = a->clone();
+ auto up = t->root_view();
+ auto other = t->root_view();
+ check( other->next_scenario() && other->descend() , "other goes to s1" );
+
+ a->init_representative_pool( 2 );
+ check( a->get_support_size() == 2 , "the pool of s0 is reduced to 2" );
+ check_eq( a->get_current_scenario()[ 0 ] , 100 , "the first one is e00" );
+ double sum = a->get_current_scenario_probability();
+ check_eq( sum , 0.625 , "with the discarded probability on it" );
+ while( a->next_scenario() )
+  sum += a->get_current_scenario_probability();
+ check_eq( sum , 1.0 , "the pool probabilities still sum to one" );
+
+ check( a->is_valid() , "the view that reduced the pool is still valid" );
+ check( ! b->is_valid() , "another view pinned at that node is not" );
+ check( up->is_valid() , "a view above it is" );
+ check( other->get_support_size() == 3 , "and s1 keeps all its children" );
+
+ a->init_representative_pool();          // INFScenario: no restriction
+ check( a->get_support_size() == 3 , "s0 gets all of its children back" );
+ a->reset_pool();
+ check_eq( a->get_current_scenario_probability() , 0.5 ,
+           "with their original conditional probabilities" );
+
  delete sg;
  delete sg2;
  std::remove( fname.c_str() );

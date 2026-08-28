@@ -47,9 +47,11 @@
 /*------------------------------ INCLUDES ----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
+#include "BlockSolverConfig.h"
 #include "ScenarioGenerator.h"
 
 #include <algorithm>
+#include <memory>
 
 #include <vector>
 
@@ -105,25 +107,28 @@ namespace SMSpp_di_unipi_it
  * node-local consumer (a TwoStageStochasticBlock) treat its slice of the
  * tree as a plain ScenarioGenerator without knowing about the rest.
  *
- * ### Scenario selection is global
+ * ### Scenario selection happens at a node, and is delegated to a Solver
  *
- * For a scenario *tree*, scenario reduction is inherently a *global*
- * operation: reducing each stage independently would lose the joint
- * structure of the tree. Hence init_representative_pool( K ) on the
- * MultiStageDiscreteScenarioSet itself reduces the *whole tree* at once
- * (rebuilding an equivalent, smaller immutable tree), unlike the
- * per-position contract documented on the scalar forms in
- * ScenarioGenerator.h. Consistently, TreeView::init_*_pool() is a no-op: a
- * view never reduces on its own, it only reads the (already globally
- * reduced) tree. The intended pattern is therefore: build / deserialize the
- * tree, optionally call init_representative_pool( K ) once on the whole
- * generator, then fan out views.
+ * init_representative_pool( K ) acts on the pool of the node the View it is
+ * called on is pinned at, exactly as the contract in ScenarioGenerator.h
+ * prescribes: it selects K representatives among the children of that node,
+ * conditional on the history leading to it, which is precisely what makes
+ * reducing a tree different from reducing T independent sets. The selection
+ * itself is not implemented here: the children of the node are handed to a
+ * DiscreteScenarioSet, which reduces them through a ScenarioReductionBlock
+ * and whatever Solver the BlockSolverConfig passed to set_solver_config()
+ * attaches to it. The reduction algorithms thus stay where they belong, in
+ * a Solver, and the single-stage and the multi-stage case share them; with
+ * no Solver configured the fall-back is the same baseline selection the
+ * single-stage case uses.
  *
- * @note In this prototype init_representative_pool() performs the *identity*
- *       reduction (the tree is left as is); the global tree-reduction
- *       algorithm is a separate piece of work. The interface is the point
- *       here: where reduction lives (global, on the generator) and where it
- *       does not (per-view).
+ * Reducing a node does not throw its children away: they remain its
+ * universe, only the pool that the views iterate is restricted, and the
+ * conditional probability of each discarded child is accumulated onto the
+ * representative it has been assigned to. The reduction is therefore
+ * reversible, calling it again with INFScenario restores the whole set of
+ * children, and it is local: reducing a node says nothing about the pools
+ * of its own children, which the caller reduces by descending into them.
  *
  * ### netCDF format
  *
@@ -268,6 +273,28 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
 
  void init_representative_pool( ScenarioIndex size = INFScenario ) override;
 
+/*--------------------------------------------------------------------------*/
+ /// set the BlockSolverConfig that reduces the pool of a node
+ /** Sets the BlockSolverConfig that init_representative_pool() applies to
+  * the ScenarioReductionBlock it reduces a node with; ownership of \p
+  * solver_config is transferred. With none set, the selection falls back to
+  * the baseline one, exactly as in the single-stage case. */
+
+ void set_solver_config( BlockSolverConfig * solver_config ) {
+  f_solver_config.reset( solver_config );
+  }
+
+/*--------------------------------------------------------------------------*/
+ /// set the Block the scenarios of this tree are those of
+ /** Stores the Block, which init_representative_pool() passes on to the
+  * ScenarioReductionBlock together with the scenarios of the node being
+  * reduced, since the cost-aware reduction algorithms need it to evaluate
+  * them; ownership is *not* transferred. */
+
+ void set_Block( Block * block ) override {
+  f_stochastic_block = block;
+  }
+
 /** @} ---------------------------------------------------------------------*/
 /*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
 /*--------------------------------------------------------------------------*/
@@ -285,7 +312,21 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
   double probability;                 ///< P( this | parent )
   std::vector< double > data;         ///< realization x_t (length d_t)
   std::vector< NodeIndex > children;  ///< child node indices
-  unsigned long generation = 0;       ///< bumped when children are redefined
+  };
+
+/*--------------------------------------------------------------------------*/
+ /// the pool of a node, i.e. which of its children the views iterate
+ /** The tree read from the netCDF file is immutable, while the pool of a
+  * node is not: init_representative_pool() restricts it to K of the
+  * children, with their probabilities re-distributed, and restores it on
+  * request. Keeping it apart from the Node is what makes it possible to
+  * reduce a node through a View, which only holds a const pointer to the
+  * generator, without pretending that the tree itself changes. */
+
+ struct Pool {
+  std::vector< NodeIndex > selected;  ///< the children currently in the pool
+  std::vector< double > weights;      ///< their conditional probabilities
+  unsigned long generation = 0;       ///< bumped by every (re-)definition
   };
 
 /*--------------------------------------------------------------------------*/
@@ -300,9 +341,9 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
   * descend() / climb(). It holds a non-owning pointer to its parent
   * MultiStageDiscreteScenarioSet and a private cursor, so distinct
   * TreeView-s never interfere: this is what makes concurrent traversal
-  * safe. A TreeView reads only; init_*_pool() are no-ops because any
-  * scenario reduction is performed globally on the parent (see the class
-  * comments of MultiStageDiscreteScenarioSet).
+  * safe. The only thing a TreeView writes is the pool of the node it is
+  * pinned at, through init_representative_pool() (see the class comments of
+  * MultiStageDiscreteScenarioSet).
   *
   * Since the tree is materialised upfront, the pool of a TreeView is always
   * initialised and a TreeView is valid for its whole life, save for a global
@@ -349,9 +390,11 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
     return( true );
     }
 
-   // reduction is global, done on the parent: a view never reduces
+   // the pool of the node this view is pinned at is the one thing a view
+   // writes; random sampling of the children is not supported (yet)
    void init_random_pool( ScenarioIndex = INFScenario ) override { }
-   void init_representative_pool( ScenarioIndex = INFScenario ) override { }
+   void init_representative_pool( ScenarioIndex size = INFScenario )
+    override;
 
    // history-pinned View interface: move through the tree
    bool descend( void ) override;
@@ -419,8 +462,36 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
   * only move if a global reduction rebuilds the tree. */
 
  [[nodiscard]] unsigned long get_node_generation( NodeIndex n ) const {
-  return( f_nodes.at( n ).generation );
+  return( v_pool.at( n ).generation );
   }
+
+/*--------------------------------------------------------------------------*/
+ /// the children of node \p n that are currently in its pool
+ [[nodiscard]] const std::vector< NodeIndex > & get_pool(
+						   NodeIndex n ) const {
+  return( v_pool.at( n ).selected );
+  }
+
+/*--------------------------------------------------------------------------*/
+ /// the probability of the \p i-th child in the pool of node \p n
+ [[nodiscard]] double get_pool_weight( NodeIndex n , std::size_t i ) const {
+  return( v_pool.at( n ).weights.at( i ) );
+  }
+
+/*--------------------------------------------------------------------------*/
+ /// reset the pool of node \p n to all its children, with no reduction
+ void reset_node_pool( NodeIndex n ) const;
+
+/*--------------------------------------------------------------------------*/
+ /// restrict the pool of node \p n to \p size representative children
+ /** Selects \p size representatives among the children of node \p n by
+  * handing them to a DiscreteScenarioSet and reducing that through a
+  * ScenarioReductionBlock with the configured Solver [see
+  * set_solver_config()], then bumps the generation of the node, which
+  * invalidates every View pinned in the sub-tree below it. With \p size ==
+  * INFScenario the whole set of children is restored. */
+
+ void reduce_node( NodeIndex n , ScenarioIndex size ) const;
 
 /*--------------------------------------------------------------------------*/
  /// the realization x_t stored at node \p n
@@ -452,6 +523,15 @@ class MultiStageDiscreteScenarioSet : public MultiStageScenarioGenerator
 
  /// the root view implementing the ScenarioGenerator face of this object
  mutable std::unique_ptr< TreeView > f_self_view;
+
+ /// per-node pool state; mutable, unlike the tree the nodes describe
+ mutable std::vector< Pool > v_pool;
+
+ /// the BlockSolverConfig that attaches the Solver doing the reduction
+ std::unique_ptr< BlockSolverConfig > f_solver_config;
+
+ /// the Block the scenarios refer to, not owned
+ Block * f_stochastic_block = nullptr;
 
 /*--------------------------------------------------------------------------*/
 

@@ -19,6 +19,8 @@
 
 #include "MultiStageDiscreteScenarioSet.h"
 
+#include "DiscreteScenarioSet.h"
+
 #include <stdexcept>
 #include <string>
 
@@ -43,6 +45,7 @@ void MultiStageDiscreteScenarioSet::deserialize(
 {
  f_nodes.clear();
  f_stage_size.clear();
+ v_pool.clear();
  f_self_view.reset();
 
  // mandatory dimensions
@@ -118,6 +121,11 @@ void MultiStageDiscreteScenarioSet::deserialize(
     " has parent " + std::to_string( p ) + ")" ) );
   f_nodes[ p ].children.push_back( static_cast< NodeIndex >( n ) );
   }
+
+ // no reduction to start with: the pool of a node is all of its children
+ v_pool.resize( N );
+ for( std::size_t n = 0 ; n < N ; ++n )
+  reset_node_pool( static_cast< NodeIndex >( n ) );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -253,11 +261,91 @@ void MultiStageDiscreteScenarioSet::init_random_pool( ScenarioIndex )
 
 /*--------------------------------------------------------------------------*/
 
-void MultiStageDiscreteScenarioSet::init_representative_pool( ScenarioIndex )
+void MultiStageDiscreteScenarioSet::init_representative_pool(
+						       ScenarioIndex size )
 {
- // prototype: identity reduction. This is where GLOBAL scenario-tree
- // reduction would rebuild a smaller equivalent tree; see the class
- // comments in the header.
+ self_view().init_representative_pool( size );
+ }
+
+/*--------------------------------------------------------------------------*/
+/*------------------------- POOL OF A NODE ---------------------------------*/
+/*--------------------------------------------------------------------------*/
+
+void MultiStageDiscreteScenarioSet::reset_node_pool( NodeIndex n ) const
+{
+ auto & pool = v_pool.at( n );
+ pool.selected = f_nodes.at( n ).children;
+ pool.weights.clear();
+ pool.weights.reserve( pool.selected.size() );
+ for( auto c : pool.selected )
+  pool.weights.push_back( get_node_probability( c ) );
+ }
+
+/*--------------------------------------------------------------------------*/
+
+void MultiStageDiscreteScenarioSet::reduce_node( NodeIndex n ,
+						 ScenarioIndex size ) const
+{
+ auto & pool = v_pool.at( n );
+ const auto & children = f_nodes.at( n ).children;
+
+ // INFScenario, or asking for no fewer than there are, means "no
+ // restriction": give the node back all of its children
+ if( ( size == INFScenario ) || ( size >= children.size() ) ) {
+  reset_node_pool( n );
+  ++pool.generation;
+  return;
+  }
+
+ if( size == 0 )
+  throw( std::invalid_argument(
+   "MultiStageDiscreteScenarioSet::reduce_node: the number of "
+   "representatives must be positive" ) );
+
+ if( children.empty() )
+  throw( std::logic_error(
+   "MultiStageDiscreteScenarioSet::reduce_node: node " +
+   std::to_string( n ) + " is a leaf, it has no pool to reduce" ) );
+
+ // the children of the node, with their conditional probabilities, are an
+ // ordinary discrete scenario set: hand them to one, and let it reduce
+ // them through a ScenarioReductionBlock and the configured Solver, so
+ // that the single- and the multi-stage case share the algorithms
+ DiscreteScenarioSet dss;
+ std::vector< std::vector< double > > scenarios;
+ std::vector< double > weights;
+ scenarios.reserve( children.size() );
+ weights.reserve( children.size() );
+ for( auto c : children ) {
+  const auto d = get_node_data( c );
+  scenarios.emplace_back( d.begin() , d.end() );
+  weights.push_back( get_node_probability( c ) );
+  }
+ dss.load_from_memory( scenarios , weights );
+
+ if( f_solver_config )
+  dss.set_solver_config( f_solver_config->clone() );
+ if( f_stochastic_block )
+  dss.set_Block( f_stochastic_block );
+
+ dss.init_representative_pool( size );
+
+ // read back which children have been selected, and with which
+ // probabilities the discarded ones have been accumulated onto them
+ const auto selected = dss.get_selected_scenarios();
+ pool.selected.clear();
+ pool.weights.clear();
+ pool.selected.reserve( selected.size() );
+ pool.weights.reserve( selected.size() );
+ dss.reset_pool();
+ for( std::size_t i = 0 ; i < selected.size() ; ++i ) {
+  pool.selected.push_back( children.at( selected[ i ] ) );
+  pool.weights.push_back( dss.get_current_scenario_probability() );
+  if( i + 1 < selected.size() )
+   dss.next_scenario();
+  }
+
+ ++pool.generation;
  }
 
 /*--------------------------------------------------------------------------*/
@@ -306,7 +394,7 @@ ScenarioGenerator::ScenarioSize
 MultiStageDiscreteScenarioSet::TreeView::get_scenario_size( void ) const
 {
  check_valid( "get_scenario_size" );
- const auto & ch = f_parent->get_children( f_node );
+ const auto & ch = f_parent->get_pool( f_node );
  if( ch.empty() )
   return( 0 );
  return( f_parent->get_node_data( ch.front() ).size() );
@@ -319,7 +407,7 @@ MultiStageDiscreteScenarioSet::TreeView::get_support_size( void )
 {
  check_valid( "get_support_size" );
  return( static_cast< ScenarioIndex >(
-                            f_parent->get_children( f_node ).size() ) );
+                                f_parent->get_pool( f_node ).size() ) );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -328,7 +416,7 @@ ScenarioGenerator::Scenario
 MultiStageDiscreteScenarioSet::TreeView::get_current_scenario( void ) const
 {
  check_valid( "get_current_scenario" );
- const auto & ch = f_parent->get_children( f_node );
+ const auto & ch = f_parent->get_pool( f_node );
  if( f_pos >= ch.size() )
   throw( std::out_of_range(
    "MultiStageDiscreteScenarioSet::TreeView::get_current_scenario: "
@@ -342,13 +430,13 @@ double MultiStageDiscreteScenarioSet::TreeView::
                               get_current_scenario_probability( void ) const
 {
  check_valid( "get_current_scenario_probability" );
- const auto & ch = f_parent->get_children( f_node );
+ const auto & ch = f_parent->get_pool( f_node );
  if( f_pos >= ch.size() )
   throw( std::out_of_range(
    "MultiStageDiscreteScenarioSet::TreeView::"
    "get_current_scenario_probability: iteration past the last "
    "realization" ) );
- return( f_parent->get_node_probability( ch[ f_pos ] ) );
+ return( f_parent->get_pool_weight( f_node , f_pos ) );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -356,7 +444,7 @@ double MultiStageDiscreteScenarioSet::TreeView::
 bool MultiStageDiscreteScenarioSet::TreeView::next_scenario( void )
 {
  check_valid( "next_scenario" );
- if( f_pos + 1 < f_parent->get_children( f_node ).size() ) {
+ if( f_pos + 1 < f_parent->get_pool( f_node ).size() ) {
   ++f_pos;
   return( true );
   }
@@ -368,11 +456,11 @@ bool MultiStageDiscreteScenarioSet::TreeView::next_scenario( void )
 bool MultiStageDiscreteScenarioSet::TreeView::descend( void )
 {
  check_valid( "descend" );
- const auto & ch = f_parent->get_children( f_node );
+ const auto & ch = f_parent->get_pool( f_node );
  if( f_pos >= ch.size() )
   return( false );                       // no realization selected
  const auto child = ch[ f_pos ];
- if( f_parent->get_children( child ).empty() )
+ if( f_parent->get_pool( child ).empty() )
   return( false );                       // the selected one is a leaf
  f_node = child;                         // H <- ( H , x_t )
  f_pos = 0;
@@ -390,7 +478,7 @@ bool MultiStageDiscreteScenarioSet::TreeView::climb( void )
   return( false );                       // already pinned at the root
  // re-select the realization this view had descended into, so that
  // climb() undoes descend()
- const auto & sibs = f_parent->get_children( p );
+ const auto & sibs = f_parent->get_pool( p );
  std::size_t i = 0;
  while( ( i < sibs.size() ) && ( sibs[ i ] != f_node ) )
   ++i;
@@ -398,6 +486,19 @@ bool MultiStageDiscreteScenarioSet::TreeView::climb( void )
  f_pos = i;
  v_stamps.pop_back();
  return( true );
+ }
+
+/*--------------------------------------------------------------------------*/
+
+void MultiStageDiscreteScenarioSet::TreeView::init_representative_pool(
+						       ScenarioIndex size )
+{
+ check_valid( "init_representative_pool" );
+ f_parent->reduce_node( f_node , size );
+ // the pool this view reads is the one it has just re-defined, hence the
+ // view stays valid, unlike any other one pinned at this node or below it
+ v_stamps.back() = f_parent->get_node_generation( f_node );
+ f_pos = 0;
  }
 
 /*--------------------------------------------------------------------------*/
