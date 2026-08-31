@@ -107,20 +107,49 @@ namespace SMSpp_di_unipi_it
  * node-local consumer (a TwoStageStochasticBlock) treat its slice of the
  * tree as a plain ScenarioGenerator without knowing about the rest.
  *
- * ### Scenario selection happens at a node, and is delegated to a Solver
+ * ### Reducing a node is not selecting scenarios
  *
- * init_representative_pool( K ) acts on the pool of the node the View it is
- * called on is pinned at, exactly as the contract in ScenarioGenerator.h
- * prescribes: it selects K representatives among the children of that node,
- * conditional on the history leading to it, which is precisely what makes
- * reducing a tree different from reducing T independent sets. The selection
- * itself is not implemented here: the children of the node are handed to a
- * DiscreteScenarioSet, which reduces them through a ScenarioReductionBlock
- * and whatever Solver the BlockSolverConfig passed to set_solver_config()
- * attaches to it. The reduction algorithms thus stay where they belong, in
- * a Solver, and the single-stage and the multi-stage case share them; with
- * no Solver configured the fall-back is the same baseline selection the
- * single-stage case uses.
+ * @warning What init_representative_pool( K ) does here is a *local
+ *          heuristic*, and a placeholder: it selects K of the children of
+ *          one node, judging them by a measure of goodness applied to them
+ *          alone. That is not scenario selection. In a multi-stage problem
+ *          a scenario is a whole root-to-leaf path, not a node, so asking
+ *          for the K best scenarios is a question about paths, whose answer
+ *          may well be a tree of a different shape, rather than the same
+ *          tree with some branches pruned level by level. Note in
+ *          particular that the K asked for here is a number of children of
+ *          one node, and not a number of scenarios: the two coincide only
+ *          in the last stage of a tree with a single node per earlier one.
+ *
+ * The two are told apart by where the reduction is asked for.
+ * init_representative_pool( K ) called on a View acts on the pool of the
+ * node it is pinned at, and is the local heuristic above; called on the
+ * generator it acts on the whole object, which is where a global reduction
+ * rebuilding the tree belongs, that being the only level holding every
+ * path. Today the latter delegates to the View pinned at the root, so the
+ * two coincide, but the entry point is there for the real algorithm to fill
+ * in, and the generation counters already do the right thing: a reduction
+ * at the root invalidates every View below it, which is exactly what has to
+ * happen when the shape of the tree changes.
+ *
+ * The selection itself is not implemented here: the children of the node
+ * are handed to a DiscreteScenarioSet, which reduces them through a
+ * ScenarioReductionBlock and whatever Solver the BlockSolverConfig passed
+ * to set_solver_config() attaches to it. The reduction algorithms thus stay
+ * where they belong, in a Solver, and the single-stage and the multi-stage
+ * case share them; with no Solver configured the fall-back is the same
+ * baseline selection the single-stage case uses.
+ *
+ * Which is also why what those Solver do is a heuristic here and not the
+ * answer: they reduce a flat set of scenario vectors, judging them by a
+ * matrix of pairwise distances between the vectors themselves. On the
+ * children of one node that is exactly the right question. On a tree it is
+ * not, since two paths sharing a prefix cannot be told apart before the
+ * prefix ends, so the distance that a multi-stage reduction needs is one
+ * that accounts for that, and the shape of the resulting tree is part of
+ * its answer rather than an input to it. Feeding the flattened paths to a
+ * single-stage algorithm does return something, but it answers a different
+ * question.
  *
  * Reducing a node does not throw its children away: they remain its
  * universe, only the pool that the views iterate is restricted, and the
