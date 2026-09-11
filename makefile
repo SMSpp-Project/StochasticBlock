@@ -31,6 +31,9 @@
 # macros to be exported - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 StcBlkOBJ = $(StcBlkSDR)/obj/DiscreteScenarioSet.o \
+	$(StcBlkSDR)/obj/IndependentMultiStageScenarioGenerator.o \
+	$(StcBlkSDR)/obj/MultiStageDiscreteScenarioSet.o \
+	$(StcBlkSDR)/obj/ScenarioReductionBlock.o \
 	$(StcBlkSDR)/obj/StochasticBlock.o
 
 StcBlkLIB = 
@@ -39,6 +42,9 @@ StcBlkINC = -I$(StcBlkSDR)/include
 
 StcBlkH   = $(StcBlkSDR)/include/ScenarioGenerator.h \
 	$(StcBlkSDR)/include/DiscreteScenarioSet.h \
+	$(StcBlkSDR)/include/IndependentMultiStageScenarioGenerator.h \
+	$(StcBlkSDR)/include/MultiStageDiscreteScenarioSet.h \
+	$(StcBlkSDR)/include/ScenarioReductionBlock.h \
 	$(StcBlkSDR)/include/StochasticBlock.h
 
 # clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -62,5 +68,30 @@ $(StcBlkSDR)/obj/DiscreteScenarioSet.o: \
 	$(StcBlkSDR)/include/DiscreteScenarioSet.h $(SMS++OBJ)
 	$(CC) -c $(StcBlkSDR)/src/DiscreteScenarioSet.cpp -o $@ \
 	$(StcBlkINC) $(CFLBkINC) $(SMS++INC) $(SW)
+
+# IndependentMultiStageScenarioGenerator only needs the (abstract)
+# ScenarioGenerator and core SMS++ (netCDF, factory).
+$(StcBlkSDR)/obj/IndependentMultiStageScenarioGenerator.o: \
+	$(StcBlkSDR)/src/IndependentMultiStageScenarioGenerator.cpp \
+	$(StcBlkSDR)/include/ScenarioGenerator.h \
+	$(StcBlkSDR)/include/IndependentMultiStageScenarioGenerator.h $(SMS++OBJ)
+	$(CC) -c $(StcBlkSDR)/src/IndependentMultiStageScenarioGenerator.cpp \
+	-o $@ $(StcBlkINC) $(SMS++INC) $(SW)
+
+# MultiStageDiscreteScenarioSet only needs the (abstract) ScenarioGenerator
+# and core SMS++ (netCDF, factory); no CapacitatedFacilityLocationBlock.
+$(StcBlkSDR)/obj/MultiStageDiscreteScenarioSet.o: \
+	$(StcBlkSDR)/src/MultiStageDiscreteScenarioSet.cpp \
+	$(StcBlkSDR)/include/ScenarioGenerator.h \
+	$(StcBlkSDR)/include/MultiStageDiscreteScenarioSet.h $(SMS++OBJ)
+	$(CC) -c $(StcBlkSDR)/src/MultiStageDiscreteScenarioSet.cpp -o $@ \
+	$(StcBlkINC) $(SMS++INC) $(SW)
+
+$(StcBlkSDR)/obj/ScenarioReductionBlock.o: \
+	$(StcBlkSDR)/src/ScenarioReductionBlock.cpp \
+	$(StcBlkSDR)/include/ScenarioReductionBlock.h \
+	$(StcBlkSDR)/include/ScenarioGenerator.h $(SMS++OBJ)
+	$(CC) -c $(StcBlkSDR)/src/ScenarioReductionBlock.cpp -o $@ \
+	$(StcBlkINC) $(SMS++INC) $(SW)
 
 ########################## End of makefile ###################################

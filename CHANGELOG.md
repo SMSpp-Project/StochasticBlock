@@ -13,6 +13,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [0.7.0] - 2026-09-12
+
+### Added
+
+- `ScenarioReductionBlock`, and `DiscreteScenarioSet::load_from_memory()` and
+  `get_scenario()`: a DiscreteScenarioSet is a container of the data, whose
+  reduction is left to a Solver such as those of ScenarioReductionSolver
+
+- `IndependentMultiStageScenarioGenerator`, the multi-stage scenario generator
+  whose stages are independent
+
+### Changed
+
+- StochasticBlock no longer links CapacitatedFacilityLocationBlock, which
+  nothing in it uses since the scenario reduction moved to
+  ScenarioReductionSolver
+
+- a multi-stage scenario generator is navigated through Views only: the
+  internal cursor is gone, `descend()` and `climb()` move the View itself,
+  which has `clone()`
+
+- (re-)defining the pool is the only write on a scenario generator: a View
+  requires an initialized pool and detects having been invalidated by a new
+  one
+
+- the pool of a node is reduced through the DiscreteScenarioSet machinery, the
+  node keeping its children as the universe and only restricting the pool the
+  Views read; this is a local heuristic, not the selection of scenarios a tree
+  asks for
+
+- the version of the module is the git tag of its repository, or the
+  VERSION.txt of a release tarball, and the shared library carries it: its
+  SONAME is major.minor while the major is 0, and it is installed with an
+  RPATH relative to itself, so that an installed tree keeps working wherever
+  it is moved
+
+### Fixed
+
+- `ScenarioGenerator::serialize()` writes the type attribute
+
 ## [0.6.0] - 2025-12-12
 
 ### Added
@@ -117,7 +157,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - First test release.
 
-[Unreleased]: https://gitlab.com/smspp/stochasticblock/-/compare/0.6.0...develop
+[Unreleased]: https://gitlab.com/smspp/stochasticblock/-/compare/0.7.0...develop
+[0.7.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.6.0...0.7.0
 [0.6.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.5.0...0.6.0
 [0.5.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.3...0.5.0
 [0.4.3]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.2...0.4.3
