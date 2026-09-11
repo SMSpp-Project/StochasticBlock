@@ -184,8 +184,10 @@ do {
 
 When configured with appropriate solvers, `DiscreteScenarioSet` can perform
 optimization-based scenario reduction by formulating the problem as a
-`CapacitatedFacilityLocationBlock` instance. This minimizes the Wasserstein
-distance between the original and reduced distributions.
+`ScenarioReductionBlock`, solved by the Solver of the given BlockSolverConfig
+(e.g., those of [ScenarioReductionSolver](https://gitlab.com/smspp/scenarioreductionsolver)).
+This minimizes the Wasserstein distance between the original and reduced
+distributions.
 
 The class offers **three ways** to configure scenario reduction, allowing
 you to choose the approach that best fits your workflow:
@@ -250,8 +252,6 @@ These instructions will let you build StochasticBlock on your system.
 ### Requirements
 
 - [SMS++ core library](https://gitlab.com/smspp/smspp)
-
-- [CapacitatedFacilityLocationBlock](https://gitlab.com/smspp/capacitatedfacilitylocationblock) (optional, enables scenario reduction functionality)
 
 ### Build and install with CMake
 

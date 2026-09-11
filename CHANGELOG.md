@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- StochasticBlock no longer links CapacitatedFacilityLocationBlock, which
+  nothing in it uses since the scenario reduction moved to
+  ScenarioReductionSolver
+
 ### Fixed
 
 ## [0.6.0] - 2025-12-12
