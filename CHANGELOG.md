@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- the module does not depend on CapacitatedFacilityLocationBlock: the
+  sub-problem of the scenario reduction is built through the factory, so
+  neither the makefiles nor the packages require that module
+
 ## [0.7.0] - 2026-09-12
 
 ### Added
