@@ -36,11 +36,6 @@
 # *H   is the list of all include files
 # *INC is the -I< include directories >
 
-# define input macros for CapacitatedFacilityLocationBlock makefile +
-# dependencies (excluding core SMS++), then include it
-CFLBkSDR = $(StcBlkSDR)/../CapacitatedFacilityLocationBlock
-include $(CFLBkSDR)/makefile-s
-
 # include the makefile requiring all external modules in input
 include $(StcBlkSDR)/makefile
 
@@ -48,11 +43,11 @@ include $(StcBlkSDR)/makefile
 
 # append external -I directives to StcBlkBINC, StcBlkBOBJ and StcBlkBH as
 # defined by the makefile, thus the := assignment has to be used
-StcBlkOBJ := $(StcBlkOBJ) $(CFLBkOBJ)
-StcBlkH := $(StcBlkH) $(CFLBkH)
-StcBlkINC := $(CFLBkINC) $(StcBlkINC)
+StcBlkOBJ := $(StcBlkOBJ)
+StcBlkH := $(StcBlkH)
+StcBlkINC := $(StcBlkINC)
 
 # external libraries for StochasticBlock
-StcBlkLIB = $(CFLBkLIB)
+StcBlkLIB =
 
 ########################### End of makefile-s ################################
