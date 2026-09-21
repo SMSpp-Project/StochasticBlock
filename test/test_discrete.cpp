@@ -54,6 +54,7 @@
 
 #include <iostream>  // std::cout, std::cerr
 #include <cstdio>    // std::remove
+#include <filesystem> // std::filesystem for the final cleanup
 #include <chrono>    // std::chrono for timing
 #include <iomanip>   // std::setprecision
 #include <cmath>     // std::abs, std::sqrt
@@ -1100,7 +1101,13 @@ int main( int argc , char ** argv )
  cout << "Tests failed: " << tests_failed << endl;
 
  // Clean up any leftover test files
- system( "rm -f test_*.nc4 test_*.txt 2>/dev/null" );
+ std::error_code ec;
+ for( const auto & f : std::filesystem::directory_iterator( "." , ec ) ) {
+  const auto name = f.path().filename().string();
+  const auto ext = f.path().extension().string();
+  if( ( name.rfind( "test_" , 0 ) == 0 ) && ( ext == ".nc4" || ext == ".txt" ) )
+   std::filesystem::remove( f.path() , ec );
+  }
 
  return( tests_failed > 0 ? 1 : 0 );
 }
