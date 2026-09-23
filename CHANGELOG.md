@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- the test of the discrete distribution removes the files it leaves behind
+  with `std::filesystem`, rather than with a call to the shell that says
+  nothing when it fails
+- whoever links the module keeps it: the classes of a module register
+  themselves in the factory from a static initialiser, and a linker that
+  drops what looks unused takes the registration away with it, so the target
+  now tells whoever links it to keep the symbol that forces the module in,
+  and on ELF, where naming the symbol is not enough, the library as a whole
 ### Fixed
 
 - the module does not depend on CapacitatedFacilityLocationBlock: the
