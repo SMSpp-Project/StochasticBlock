@@ -9,7 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- the tests of `MultiStageDiscreteScenarioSet` and of
+  `IndependentMultiStageScenarioGenerator`, which were built by the makefile
+  and never run, are registered with ctest as
+  `MultiStageDiscreteScenarioSet_unit_test` and
+  `IndependentMultiStageScenarioGenerator_unit_test`, labelled
+  `StochasticBlock`
+
 ### Changed
+
+- the test of the discrete distribution needs nothing but the module and
+  the core: the reduction to representatives, which is asked of a Solver of
+  another module (`ScenarioReductionSolver` or a `:MILPSolver`) and which
+  the test used to skip when that module was not linked, is tested in
+  ScenarioReductionSolver, hence the test no longer links MILPSolver
 
 - the test of the discrete distribution removes the files it leaves behind
   with `std::filesystem`, rather than with a call to the shell that says

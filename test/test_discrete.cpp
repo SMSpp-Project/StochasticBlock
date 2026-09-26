@@ -17,26 +17,25 @@
  *
  * Test 2 - Configuration Patterns:
  * - Pattern 1: SimpleConfiguration<int> (baseline method)
- * - Pattern 2: SimpleConfiguration<pair<int, BlockSolverConfig*>>
+ * - Pattern 2: SimpleConfiguration<pair<int, BlockSolverConfig*>>, of which
+ *       only the pool size is checked, the BlockSolverConfig naming a Solver
+ *       that is not in this module
  *
- * Test 3 - Scenario Reduction Algorithms:
- * - ScenarioReductionSolver algorithms (Dupacova, BestFit, FirstFit)
- * - MILPSolver implementations (CPLEX, HiGHS)
+ * Test 3 - Serialization and Deserialization:
+ * - the scenario reduction configuration is not serialized
+ * - deserialization with no configuration
+ * - the pool state after a serialize / deserialize round trip
  *
- * Test 4 - Serialization and Deserialization:
- * - DiscreteScenarioSet persistence with scenario reduction configuration
- * - Full serialization/deserialization round-trip with solver configs
- * - Deserialization with various configurations (no config, poolSize only,
- *       poolSize+ell)
- * - Complete scenario data persistence and restoration
- * - Invalid poolSize value handling during deserialization
- *
- * Test 5 - Iteration and Span-based Getters:
+ * Test 4 - Iteration and Span-based Getters:
  * - Full iteration through selected scenarios
  * - Span-based getters (get_selected_scenarios, get_set_weights,
  *       get_pool_weights)
  * - Probability normalization verification
  * - Index validation
+ *
+ * The reduction proper is asked of a Solver, which no module this one depends
+ * on provides: the heuristics of ScenarioReductionSolver are tested in that
+ * module.
  *
  * \author Benoît Tran \n
  *         Dipartimento di Informatica \n
@@ -202,61 +201,11 @@ unique_ptr< DiscreteScenarioSet > load_test_scenarios( int num_scenarios = 20 ,
  return( dss );
 }
 
-// Helper to create BlockConfig for scenario reduction
-// Helper to create BlockSolverConfig for different solver types
-BlockSolverConfig * create_solver_config( const string & solver_type ,
-                                          const string & algorithm = "" ,
-                                          double time_limit = 60.0 ,
-                                          int verbosity = 0 ) {
+// A BlockSolverConfig naming the Solver of a scenario reduction: the Solver is
+// only named, not built, hence it needs not be in the factory
+BlockSolverConfig * create_solver_config( void ) {
  auto * solver_config = new BlockSolverConfig( true ); // differential mode
-
- if( solver_type == "ScenarioReductionSolver" ) {
-  // ScenarioReductionSolver configuration
-  solver_config->add_ComputeConfig( "ScenarioReductionSolver" , nullptr );
- }
- else {
-  // MILP Solver configuration
-  auto * compute_config = new ComputeConfig();
-  compute_config->set_diff( true );
-
-  // Add common MILP parameters
-  compute_config->int_pars.emplace_back( "intLogVerb" , verbosity );
-  compute_config->int_pars.emplace_back( "intRelaxIntVars" , 0 );
-  compute_config->dbl_pars.emplace_back( "dblRelAcc" , 1e-7 );
-
-  if( time_limit > 0 ) {
-   // Use solver-specific time limit parameter names
-   if( solver_type == "CPXMILPSolver" ) {
-    compute_config->dbl_pars.emplace_back( "CPXPARAM_TimeLimit" , time_limit );
-   }
-   else if( solver_type == "GRBMILPSolver" ) {
-    compute_config->dbl_pars.emplace_back( "TimeLimit" , time_limit );
-   }
-   else if( solver_type == "SCIPMILPSolver" ) {
-    compute_config->dbl_pars.emplace_back( "limits/time" , time_limit );
-   }
-   else if( solver_type == "HiGHSMILPSolver" ) {
-    compute_config->dbl_pars.emplace_back( "time_limit" , time_limit );
-   }
-  }
-
-  // Add solver-specific parameters
-  if( solver_type == "CPXMILPSolver" ) {
-   compute_config->int_pars.emplace_back( "CPXPARAM_Threads" , 1 );
-   if( verbosity > 0 ) {
-    compute_config->int_pars.emplace_back( "CPXPARAM_MIP_Display" , 3 );
-   }
-  }
-  else if( solver_type == "GRBMILPSolver" ) {
-   compute_config->int_pars.emplace_back( "Threads" , 1 );
-   if( verbosity > 0 ) {
-    compute_config->int_pars.emplace_back( "OutputFlag" , 1 );
-   }
-  }
-
-  solver_config->add_ComputeConfig( string( solver_type ) , compute_config );
- }
-
+ solver_config->add_ComputeConfig( "ScenarioReductionSolver" , nullptr );
  return( solver_config );
 }
 
@@ -554,16 +503,6 @@ TestResult test_basic_functionality( ) {
 
 REGISTER_TEST( "Basic Functionality" , test_basic_functionality );
 
-// A missing downstream Solver (e.g. ScenarioReductionSolver, which is only
-// linked by its own module) is not a DiscreteScenarioSet failure: the
-// solver-based reduction path is exercised by the ScenarioReductionSolver
-// test, so here we treat it as a skip to keep these tests independent of
-// downstream modules.
-static bool solver_unavailable( const string & msg ) {
- return msg.find( "Solver factory" ) != string::npos ||
-        msg.find( "no Solver registered" ) != string::npos;
- }
-
 // Test 2: Configuration Patterns
 TestResult test_configuration_patterns( ) {
  try {
@@ -600,8 +539,7 @@ TestResult test_configuration_patterns( ) {
    auto dss = load_test_scenarios( 20 , 5 );
 
    // Create a BlockSolverConfig for ScenarioReductionSolver
-   auto * solver_config = create_solver_config( "ScenarioReductionSolver" ,
-                                                "Dupacova" );
+   auto * solver_config = create_solver_config();
    auto * pattern2_config = new SimpleConfiguration< pair<
     int , Configuration * > >(
     make_pair( 6 , solver_config ) );
@@ -617,24 +555,13 @@ TestResult test_configuration_patterns( ) {
     };
    }
 
-   // Test that advanced scenario reduction works
-   dss->init_representative_pool( 6 );
-   if( dss->get_poolSize() != 6 ) {
-    return {
-     false ,
-     "Pattern 2: failed (expected 6 scenarios, got " + to_string(
-      dss->get_poolSize() ) + ")"
-    };
-   }
-
-   // Note: Do not delete solver_config - DiscreteScenarioSet keeps a reference to it
+   // the reduction itself, which builds the Solver, is not done here [see
+   // the comments at the top of the file]
   }
 
   return { true , "All configuration patterns tested successfully" };
  }
  catch( const exception & e ) {
-  if( solver_unavailable( e.what() ) )
-   return { true , string( "skipped (Solver unavailable): " ) + e.what() };
   return { false , string( "Patterns test failed: " ) + e.what() };
  }
 }
@@ -642,69 +569,15 @@ TestResult test_configuration_patterns( ) {
 REGISTER_TEST( "Configuration Patterns" , test_configuration_patterns );
 
 
-// Test 3: Scenario reduction algorithms
-TestResult test_scenario_reduction_algorithms( ) {
- try {
-  const int num_scenarios = 15;
-  const int scenario_size = 5;
-  const int poolSize = 5;
-
-  // Test various solver implementations - all treated uniformly
-  // ScenarioReductionSolver with different algorithms
-  vector< pair< string , string > > solver_configs = {
-   { "ScenarioReductionSolver" , "Dupacova" } ,
-   { "ScenarioReductionSolver" , "BestFit" } ,
-   { "ScenarioReductionSolver" , "FirstFit" } ,
-   { "CPXMILPSolver" , "" } ,
-   { "HiGHSMILPSolver" , "" }
-  };
-
-  for( const auto & [ solver_name, algorithm ] : solver_configs ) {
-   try {
-    auto dss = load_test_scenarios( num_scenarios , scenario_size );
-
-    auto * solver_config = create_solver_config( solver_name , algorithm );
-
-    dss->set_solver_config( solver_config );
-    dss->init_representative_pool( poolSize );
-
-    if( dss->get_poolSize() != poolSize ) {
-     string test_name = algorithm.empty()
-                         ? solver_name
-                         : solver_name + ":" + algorithm;
-     return {
-      false , test_name + " failed: wrong number of scenarios selected"
-     };
-    }
-   }
-   catch( const exception & e ) {
-    string test_name = algorithm.empty()
-                        ? solver_name
-                        : solver_name + ":" + algorithm;
-    cout << test_name << " not available or test skipped: " << e.what() << endl;
-   }
-  }
-
-  return { true , "All scenario reduction algorithms tested successfully" };
- }
- catch( const exception & e ) {
-  return { false , string( "Test failed: " ) + e.what() };
- }
-}
-
-REGISTER_TEST( "Scenario Reduction Algorithms" ,
-               test_scenario_reduction_algorithms );
-
-// Test 4: Serialization and deserialization
+// Test 3: Serialization and deserialization
 TestResult test_serialization_deserialization( ) {
  try {
   // Part 1: Verify config is NOT serialized
   {
    auto dss1 = load_test_scenarios( 10 , 5 );
-   auto * solver_config = create_solver_config( "ScenarioReductionSolver" ,
-                                                "Dupacova" );
-   dss1->set_solver_config( solver_config );
-   dss1->init_representative_pool( 3 );
+   dss1->set_solver_config( create_solver_config() , 3 );
+   if( dss1->get_poolSize() != 3 )
+    return { false , "poolSize not set with the solver config" };
 
    string nc_filename = "test_dss_with_config.nc4";
    {
@@ -727,10 +600,7 @@ TestResult test_serialization_deserialization( ) {
    }
 
    // Config must be set manually after deserialization
-   auto * solver_config2 = create_solver_config( "ScenarioReductionSolver" ,
-                                                 "Dupacova" );
-   dss2->set_solver_config( solver_config2 );
-   dss2->init_representative_pool( 3 );
+   dss2->set_solver_config( create_solver_config() , 3 );
 
    if( dss2->get_poolSize() != 3 ) {
     remove( nc_filename.c_str() );
@@ -769,106 +639,8 @@ TestResult test_serialization_deserialization( ) {
   }
 
 
-  // Part 5: Serialization after init_representative_pool
-  // Verify that pool state (including aggregated weights) is preserved
-  {
-   // Create and initialize a DiscreteScenarioSet with representative pool
-   auto dss1 = load_test_scenarios( 15 , 4 );
-
-   // Set up scenario reduction configuration
-   auto * solver_config = create_solver_config( "ScenarioReductionSolver" ,
-                                                "Dupacova" );
-   dss1->set_solver_config( solver_config );
-
-   // Initialize representative pool (uses weight aggregation)
-   dss1->init_representative_pool( 5 );
-
-   // Get the selected scenarios and their aggregated weights
-   auto selected_before = dss1->get_selected_scenarios();
-   auto weights_before = dss1->get_pool_weights();
-
-   // Verify we have 5 selected scenarios
-   if( selected_before.size() != 5 ) {
-    return { false , "Representative pool should have 5 scenarios" };
-   }
-
-   // Store the first few selected indices for comparison
-   vector< ScenarioGenerator::ScenarioIndex > first_three_before;
-   for( size_t i = 0 ; i < min( size_t( 3 ) , selected_before.size() ) ; ++i ) {
-    first_three_before.push_back( selected_before[ i ] );
-   }
-
-   // Serialize the state
-   string nc_filename = "test_representative_pool_state.nc4";
-   {
-    netCDF::NcFile file( nc_filename , netCDF::NcFile::replace );
-    dss1->serialize( file );
-    file.close();
-   }
-
-   // Create a new instance and deserialize
-   auto dss2 = make_unique< DiscreteScenarioSet >();
-   {
-    netCDF::NcFile file( nc_filename , netCDF::NcFile::read );
-    dss2->deserialize( file );
-    file.close();
-   }
-
-   // Initialize representative pool on the deserialized instance
-   dss2->init_representative_pool( 5 );
-
-   // Get the selected scenarios and weights after deserialization
-   auto selected_after = dss2->get_selected_scenarios();
-   auto weights_after = dss2->get_pool_weights();
-
-   // Verify the same scenarios are selected
-   if( selected_after.size() != selected_before.size() ) {
-    remove( nc_filename.c_str() );
-    return { false , "Different number of scenarios after deserialization" };
-   }
-
-   // Check that at least the first few selected scenarios match
-   // (Full match might not occur due to solver differences, but structure should be similar)
-   bool some_match = false;
-   for( size_t i = 0 ; i < min( size_t( 3 ) , selected_after.size() ) ; ++i ) {
-    for( auto idx : first_three_before ) {
-     if( selected_after[ i ] == idx ) {
-      some_match = true;
-      break;
-     }
-    }
-   }
-
-   if( ! some_match && selected_after.size() > 0 ) {
-    // This is not necessarily an error - different solver runs might produce different selections
-    // Just log it for information
-#ifndef NDEBUG
-    cout <<
-     "Note: Representative pool selection differs after serialization (expected with solver variations)"
-     << endl;
-#endif
-   }
-
-   // Verify weights sum to 1.0 (fundamental property that must be preserved)
-   double weight_sum = 0.0;
-   for( auto w : weights_after ) {
-    weight_sum += w;
-   }
-
-   if( abs( weight_sum - 1.0 ) > 1e-6 ) {
-    remove( nc_filename.c_str() );
-    return {
-     false ,
-     "Representative pool weights don't sum to 1.0 after deserialization"
-    };
-   }
-
-   // Clean up
-   remove( nc_filename.c_str() );
-  }
-
-  // Part 5b: Test that serialization preserves initialized pool state
-  // This tests serializing AFTER init_representative_pool has been called
+  // Part 3: Test that serialization preserves initialized pool state
+  // This tests serializing AFTER the pool has been initialized
   {
    // Create and fully initialize a DiscreteScenarioSet
    auto dss1 = load_test_scenarios( 12 , 3 );
@@ -926,8 +698,6 @@ TestResult test_serialization_deserialization( ) {
   return { true , "NetCDF serialization and deserialization tests passed" };
  }
  catch( const exception & e ) {
-  if( solver_unavailable( e.what() ) )
-   return { true , string( "skipped (Solver unavailable): " ) + e.what() };
   return { false , string( "Serialization test failed: " ) + e.what() };
  }
 }
@@ -935,7 +705,7 @@ TestResult test_serialization_deserialization( ) {
 REGISTER_TEST( "Serialization and Deserialization" ,
                test_serialization_deserialization );
 
-// Test 5: Iteration and Span-based Getters
+// Test 4: Iteration and Span-based Getters
 TestResult test_iteration_and_spans( ) {
  try {
   auto dss = load_test_scenarios( 15 , 5 );

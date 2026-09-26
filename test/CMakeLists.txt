@@ -51,10 +51,6 @@ add_test(NAME ${modName}_test
 add_executable(test_discrete test_discrete.cpp)
 target_link_libraries(test_discrete PRIVATE SMS++::StochasticBlock)
 
-if (TARGET SMS++::MILPSolver)
-    target_link_libraries(test_discrete PRIVATE SMS++::MILPSolver)
-endif ()
-
 if (WIN32 AND BUILD_SHARED_LIBS AND NOT DEFINED ENV{CONDA_BUILD})
     # On Windows with shared libraries enabled copies all runtime DLL
     # dependencies next to the executable in the build directory
@@ -69,6 +65,56 @@ endif ()
 
 add_test(NAME test_discrete
          COMMAND test_discrete)
+
+# ----- MultiStageDiscreteScenarioSet_unit_test ---------------------------- #
+
+# The view API of the scenario tree, clone() and the serialize() /
+# deserialize() round trip of MultiStageDiscreteScenarioSet.
+set(_t MultiStageDiscreteScenarioSet_unit_test)
+add_executable(${_t} test_mssds.cpp)
+target_link_libraries(${_t} PRIVATE SMS++::StochasticBlock)
+
+if (WIN32 AND BUILD_SHARED_LIBS AND NOT DEFINED ENV{CONDA_BUILD})
+    # On Windows with shared libraries enabled copies all runtime DLL
+    # dependencies next to the executable in the build directory
+    # (POST_BUILD), using CMake's TARGET_RUNTIME_DLLS generator expression
+    add_custom_command(TARGET ${_t} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_RUNTIME_DLLS:${_t}>
+            $<TARGET_FILE_DIR:${_t}>
+            COMMAND_EXPAND_LISTS
+            COMMENT "Copying runtime DLLs next to ${_t}.exe")
+endif ()
+
+# run in the build tree, since it writes (and removes) a netCDF file
+add_test(NAME ${_t}
+         COMMAND ${_t}
+         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+
+# ----- IndependentMultiStageScenarioGenerator_unit_test -------------------- #
+
+# The view API of IndependentMultiStageScenarioGenerator, whose stages do not
+# depend on the history.
+set(_t IndependentMultiStageScenarioGenerator_unit_test)
+add_executable(${_t} test_imssg.cpp)
+target_link_libraries(${_t} PRIVATE SMS++::StochasticBlock)
+
+if (WIN32 AND BUILD_SHARED_LIBS AND NOT DEFINED ENV{CONDA_BUILD})
+    # On Windows with shared libraries enabled copies all runtime DLL
+    # dependencies next to the executable in the build directory
+    # (POST_BUILD), using CMake's TARGET_RUNTIME_DLLS generator expression
+    add_custom_command(TARGET ${_t} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_RUNTIME_DLLS:${_t}>
+            $<TARGET_FILE_DIR:${_t}>
+            COMMAND_EXPAND_LISTS
+            COMMENT "Copying runtime DLLs next to ${_t}.exe")
+endif ()
+
+# run in the build tree, since it writes (and removes) a netCDF file
+add_test(NAME ${_t}
+         COMMAND ${_t}
+         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 # ----- the label of this module's tests ------------------------------------ #
 
