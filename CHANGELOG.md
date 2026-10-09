@@ -7,11 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-09
+
 ### Added
+
+- the tests of `MultiStageDiscreteScenarioSet` and of
+  `IndependentMultiStageScenarioGenerator`, which were built by the makefile
+  and never run, are registered with ctest as
+  `MultiStageDiscreteScenarioSet_unit_test` and
+  `IndependentMultiStageScenarioGenerator_unit_test`, labelled
+  `StochasticBlock`
 
 ### Changed
 
+- the test of the discrete distribution needs nothing but the module and
+  the core: the reduction to representatives, which is asked of a Solver of
+  another module (`ScenarioReductionSolver` or a `:MILPSolver`) and which
+  the test used to skip when that module was not linked, is tested in
+  ScenarioReductionSolver, hence the test no longer links MILPSolver
+
+- the test of the discrete distribution removes the files it leaves behind
+  with `std::filesystem`, rather than with a call to the shell that says
+  nothing when it fails
+
+- whoever links the module keeps it: the classes of a module register
+  themselves in the factory from a static initialiser, and a linker that
+  drops what looks unused takes the registration away with it, so the target
+  now tells whoever links it to keep the symbol that forces the module in,
+  and on ELF, where naming the symbol is not enough, the library as a whole
+
 ### Fixed
+
+- on macOS a program linking the module lost the classes the module
+  registers in the factories when the linker dropped the library, as it
+  does under `-dead_strip_dylibs`, which conda sets: the target now asks the
+  linker for the symbol that forces the module in (`-u`), which ld64,
+  unlike the ELF linker, counts as a use of the library
+
+- the module does not depend on CapacitatedFacilityLocationBlock: the
+  sub-problem of the scenario reduction is built through the factory, so
+  neither the makefiles nor the packages require that module
 
 ## [0.7.0] - 2026-09-12
 
@@ -99,12 +134,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.0] - 2024-02-29
 
-### Added
-
-### Changed
-
-### Fixed
-
 ## [0.4.3] - 2024-02-29
 
 ### Changed
@@ -157,10 +186,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - First test release.
 
-[Unreleased]: https://gitlab.com/smspp/stochasticblock/-/compare/0.7.0...develop
+[Unreleased]: https://gitlab.com/smspp/stochasticblock/-/compare/0.8.0...develop
+[0.8.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.7.0...0.8.0
 [0.7.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.6.0...0.7.0
-[0.6.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.5.0...0.6.0
-[0.5.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.3...0.5.0
+[0.6.0]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.3...0.6.0
 [0.4.3]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.2...0.4.3
 [0.4.2]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.1...0.4.2
 [0.4.1]: https://gitlab.com/smspp/stochasticblock/-/compare/0.4.0...0.4.1

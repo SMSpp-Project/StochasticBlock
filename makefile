@@ -59,15 +59,12 @@ $(StcBlkSDR)/obj/StochasticBlock.o: $(StcBlkSDR)/src/StochasticBlock.cpp \
 	$(CC) -c $(StcBlkSDR)/src/StochasticBlock.cpp -o $@ $(StcBlkINC) \
 	$(SMS++INC) $(SW)
 
-# Note: DiscreteScenarioSet requires CapacitatedFacilityLocationBlock for
-# scenario reduction functionality. The $(CFLBkINC) dependency must be
-# provided by the including makefile when DiscreteScenarioSet is used.
 $(StcBlkSDR)/obj/DiscreteScenarioSet.o: \
 	$(StcBlkSDR)/src/DiscreteScenarioSet.cpp \
 	$(StcBlkSDR)/include/ScenarioGenerator.h \
 	$(StcBlkSDR)/include/DiscreteScenarioSet.h $(SMS++OBJ)
 	$(CC) -c $(StcBlkSDR)/src/DiscreteScenarioSet.cpp -o $@ \
-	$(StcBlkINC) $(CFLBkINC) $(SMS++INC) $(SW)
+	$(StcBlkINC) $(SMS++INC) $(SW)
 
 # IndependentMultiStageScenarioGenerator only needs the (abstract)
 # ScenarioGenerator and core SMS++ (netCDF, factory).

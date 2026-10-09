@@ -5,8 +5,8 @@
 # --- Project-specific ---------------------------------------
 test/StochasticBlock_test
 test/test_discrete
-test/test_mssds
-test/test_imssg
+test/MultiStageDiscreteScenarioSet_unit_test
+test/IndependentMultiStageScenarioGenerator_unit_test
 
 # --- C/C++ build artifacts ----------------------------------
 *.o

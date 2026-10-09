@@ -11,7 +11,9 @@
 ##############################################################################
 
 # the executables built here
-NAMES = StochasticBlock_test test_discrete test_mssds test_imssg
+NAMES = StochasticBlock_test test_discrete \
+        MultiStageDiscreteScenarioSet_unit_test \
+        IndependentMultiStageScenarioGenerator_unit_test
 
 # basic directory
 DIR = .
@@ -24,7 +26,7 @@ SW_DEBUG = -g -glldb -fno-inline $(COMMON_SW)
 # debug switches with address sanitizer and extra pedantic warning
 SW_DEBUG_ASAN = -g3 -glldb -fno-inline $(COMMON_SW) -fsanitize=undefined -fsanitize=address -fno-omit-frame-pointer -Wpedantic -Wextra -Wno-unused-parameter
 # production switches
-SW_RELEASE = -O3 $(COMMON_SW) -DNDEBUG -DCLANG_1200_0_32_27_PATCH
+SW_RELEASE = -O3 $(COMMON_SW) -DNDEBUG
 
 # compiler
 CC = clang++
@@ -64,36 +66,31 @@ clean::
 StcBlkSDR = ..
 include $(StcBlkSDR)/makefile-c
 
-# MILPSolver (without core SMS++), only needed by test_discrete
-MILPSSDR = ../../MILPSolver
-include $(MILPSSDR)/makefile-s
-
 # main module (linking phase) - - - - - - - - - - - - - - - - - - - - - - - -
 
 # StochasticBlock_test needs only StochasticBlock + core
 $(DIR)/StochasticBlock_test: $(StcBlkOBJ) $(DIR)/test.o
 	$(CC) -o $@ $(DIR)/test.o $(StcBlkOBJ) $(StcBlkLIB) $(SW)
 
-# test_discrete additionally needs MILPSolver
-$(DIR)/test_discrete: $(StcBlkOBJ) $(MILPSOBJ) $(DIR)/test_discrete.o
-	$(CC) -o $@ $(DIR)/test_discrete.o $(StcBlkOBJ) $(MILPSOBJ) \
-	      $(StcBlkLIB) $(MILPSLIB) $(SW)
+# as do all the others
+$(DIR)/test_discrete: $(StcBlkOBJ) $(DIR)/test_discrete.o
+	$(CC) -o $@ $(DIR)/test_discrete.o $(StcBlkOBJ) $(StcBlkLIB) $(SW)
 
-# test_mssds needs only StochasticBlock + core
-$(DIR)/test_mssds: $(StcBlkOBJ) $(DIR)/test_mssds.o
+$(DIR)/MultiStageDiscreteScenarioSet_unit_test: $(StcBlkOBJ) \
+                                               $(DIR)/test_mssds.o
 	$(CC) -o $@ $(DIR)/test_mssds.o $(StcBlkOBJ) $(StcBlkLIB) $(SW)
 
-# test_imssg needs only StochasticBlock + core
-$(DIR)/test_imssg: $(StcBlkOBJ) $(DIR)/test_imssg.o
+$(DIR)/IndependentMultiStageScenarioGenerator_unit_test: $(StcBlkOBJ) \
+                                                        $(DIR)/test_imssg.o
 	$(CC) -o $@ $(DIR)/test_imssg.o $(StcBlkOBJ) $(StcBlkLIB) $(SW)
 
 # dependencies: every .o from its .cpp + every recursively included .h- - - -
 
 # include directives
-MINC =  $(StcBlkINC) $(MILPSINC)
+MINC =  $(StcBlkINC)
 
 # includes
-MH =    $(StcBlkH) $(MILPSH)
+MH =    $(StcBlkH)
 
 # compile command
 

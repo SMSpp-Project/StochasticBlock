@@ -1,6 +1,7 @@
 # test
 
-Two testers for the `StochasticBlock` module.
+The testers of the `StochasticBlock` module, which need nothing but the
+module and the core SMS++ library.
 
 - `StochasticBlock_test` exercises the core `StochasticBlock` machinery:
   wrapping a Block into a stochastic problem, setting the scenario data,
@@ -8,14 +9,27 @@ Two testers for the `StochasticBlock` module.
   results.
 
 - `test_discrete` validates `DiscreteScenarioSet`, the class that manages a
-  discrete set of scenarios: scenario storage and access, pool selection,
-  optimization-based scenario reduction, the configuration and serialization
-  patterns, and the handling of invalid inputs. The reduction step relies on
-  a `MILPSolver` backend when one is available.
+  discrete set of scenarios: scenario storage and access, the random and the
+  baseline pool selection, the configuration and serialization patterns, and
+  the handling of invalid inputs.
 
-Both are built by the provided `makefile` (or via CMake from the umbrella,
-where each is registered as a separate `ctest`). Run them as
-`./StochasticBlock_test` and `./test_discrete`.
+- `MultiStageDiscreteScenarioSet_unit_test` checks the scenario tree of
+  `MultiStageDiscreteScenarioSet` through its view API, the independence of
+  the views and of their clones, the joint probabilities of the leaves and
+  the serialization round trip.
+
+- `IndependentMultiStageScenarioGenerator_unit_test` checks the same view API
+  on `IndependentMultiStageScenarioGenerator`, whose stages do not depend on
+  the history.
+
+The reduction of a `DiscreteScenarioSet` to its representatives is asked of
+a Solver that no dependency of this module provides: the heuristics of
+`ScenarioReductionSolver` are tested in that module, and the reductions of
+the instances of a model in the suites of the umbrella.
+
+All of them are built by the provided `makefile` (or via CMake from the
+umbrella, where each is registered as a separate `ctest` labelled
+`StochasticBlock`). Run them as `./<name>`, with no argument.
 
 
 ## Authors
