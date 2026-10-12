@@ -66,7 +66,7 @@ endif ()
 add_test(NAME test_discrete
          COMMAND test_discrete)
 
-# ----- MultiStageDiscreteScenarioSet_unit_test ---------------------------- #
+# ----- MultiStageDiscreteScenarioSet_unit_test ----------------------------- #
 
 # The view API of the scenario tree, clone() and the serialize() /
 # deserialize() round trip of MultiStageDiscreteScenarioSet.
