@@ -24,10 +24,13 @@
 #include "DiscreteScenarioSet.h"
 #include "Solver.h"
 
+#include <algorithm>
 #include <cmath>
+#include <functional>
 #include <numeric>
+#include <random>
+#include <tuple>
 #include <unordered_map>
-#include <unordered_set>
 
 /*--------------------------------------------------------------------------*/
 /*----------------------------- NAMESPACE ----------------------------------*/
@@ -57,7 +60,15 @@ static void validate_poolSize_value(
 
 /*--------------------------------------------------------------------------*/
 
-// Pick k distinct indices out of n, sampled with probability given by weights
+// Pick k distinct indices out of n by weighted sampling without replacement,
+// i.e., with the distribution of k successive draws, each proportional to
+// the weights of the indices not drawn yet, and return them in the order
+// those draws would pick them. Each index i of weight w_i > 0 gets the key
+// log( u_i ) / w_i, with u_i uniform in ( 0 , 1 ], and the k largest keys
+// are taken (Efraimidis and Spirakis): one random number per index and
+// O( n log k ) time whatever the weights. The indices of weight 0 come after
+// all the positive ones and are taken uniformly at random, which happens
+// only when fewer than k weights are positive.
 static void generateWeightedRandomSubset(
  size_t n , size_t k ,
  const std::vector< double > & weights ,
@@ -65,7 +76,11 @@ static void generateWeightedRandomSubset(
  std::mt19937 & rng )
 {
  if( k > n )
-  throw std::invalid_argument( "k must be <= n" );
+  throw std::invalid_argument(
+   "generateWeightedRandomSubset: k must be <= n" );
+ if( weights.size() != n )
+  throw std::invalid_argument(
+   "generateWeightedRandomSubset: weights must have size n" );
 
  ind.clear();
  if( k == 0 ) return;
@@ -76,15 +91,31 @@ static void generateWeightedRandomSubset(
   return;
   }
 
- std::discrete_distribution< ScenarioGenerator::ScenarioIndex > dist(
-  weights.begin() , weights.end() );
+ // ( positive weight , key , index ): the lexicographic order puts every
+ // positive weight before every null one, and the largest key first
+ using Key = std::tuple< bool , double , ScenarioGenerator::ScenarioIndex >;
+ std::vector< Key > keys;
+ keys.reserve( n );
 
- std::unordered_set< ScenarioGenerator::ScenarioIndex > seen;
- seen.reserve( k );
- while( seen.size() < k )
-  seen.insert( dist( rng ) );
+ std::uniform_real_distribution< double > unif( 0.0 , 1.0 );
+ for( size_t i = 0 ; i < n ; ++i ) {
+  const double w = weights[ i ];
+  if( ! ( std::isfinite( w ) && ( w >= 0 ) ) )
+   throw std::invalid_argument(
+    "generateWeightedRandomSubset: weight " + std::to_string( i ) +
+    " is " + std::to_string( w ) + ", not finite and non-negative" );
+  // 1 - unif( rng ) is in ( 0 , 1 ], so its log is finite
+  const double lu = std::log( 1.0 - unif( rng ) );
+  keys.emplace_back( w > 0 , w > 0 ? lu / w : lu ,
+                     ScenarioGenerator::ScenarioIndex( i ) );
+  }
 
- ind.assign( seen.begin() , seen.end() );
+ std::partial_sort( keys.begin() , keys.begin() + k , keys.end() ,
+                    std::greater< Key >() );
+
+ ind.reserve( k );
+ for( size_t i = 0 ; i < k ; ++i )
+  ind.push_back( std::get< 2 >( keys[ i ] ) );
  }
 
 /*--------------------------------------------------------------------------*/

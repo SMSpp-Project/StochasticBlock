@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `DiscreteScenarioSet::init_random_pool()` with scenarios of different
+  probability no longer draws until it has met enough distinct scenarios,
+  which never ended when fewer scenarios than asked had a positive
+  probability and could take very long when the probabilities were skewed:
+  the pool is drawn in one pass (Efraimidis and Spirakis), with the same
+  distribution as successive draws without replacement, in the order those
+  draws would give rather than in the arbitrary order of a hash set; the
+  scenarios of probability 0 are taken last, uniformly, and a negative or
+  non-finite probability is refused
+
 ## [0.8.0] - 2026-10-09
 
 ### Added

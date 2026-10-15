@@ -9,7 +9,7 @@
  * - Part 1: Scenario loading and deserialization
  * - Part 2: Parameter validation (invalid poolSize)
  * - Part 3: Random pool initialization
- * - Part 4: Rejection sampling verification (unique selections)
+ * - Part 4: Random pool selections are distinct and valid
  * - Part 5: Utility methods (is_pool_initialized, set_seed, get_ell/set_ell,
  *      get_scenario_value)
  * - Part 6: Edge cases and error conditions (single scenario, select all,
@@ -32,6 +32,12 @@
  *       get_pool_weights)
  * - Probability normalization verification
  * - Index validation
+ *
+ * Test 5 - Weighted Random Pool:
+ * - exactly the positive weights when as many are asked
+ * - more scenarios asked than positive weights; all weights null are refused
+ * - frequencies of one and two draws against the exact probabilities
+ * - a negative weight is refused
  *
  * The reduction proper is asked of a Solver, which no module this one depends
  * on provides: the heuristics of ScenarioReductionSolver are tested in that
@@ -57,6 +63,7 @@
 #include <chrono>    // std::chrono for timing
 #include <iomanip>   // std::setprecision
 #include <cmath>     // std::abs, std::sqrt
+#include <numeric>   // std::iota
 #include <set>       // std::set for uniqueness testing
 #include <span>      // std::span for C++20 features
 
@@ -266,12 +273,12 @@ TestResult test_basic_functionality( ) {
    return { false , "Invalid probability: " + to_string( prob ) };
   }
 
-  // Part 4: Test rejection sampling (random pool produces unique selections)
+  // Part 4: the random pool produces distinct, valid selections
   // Create a larger dataset for testing
   auto dss_large = load_test_scenarios( 100 , 10 );
   dss_large->set_seed( 42 ); // For reproducibility
 
-  // Select 50 scenarios using random pool (uses rejection sampling internally)
+  // Select 50 scenarios using random pool
   dss_large->init_random_pool( 50 );
 
   auto selected = dss_large->get_selected_scenarios();
@@ -283,13 +290,11 @@ TestResult test_basic_functionality( ) {
    };
   }
 
-  // Verify all selected indices are unique (key property of rejection sampling)
+  // Verify all selected indices are unique (sampling without replacement)
   set< ScenarioGenerator::ScenarioIndex > unique_indices(
    selected.begin() , selected.end() );
   if( unique_indices.size() != selected.size() ) {
-   return {
-    false , "Random pool produced duplicate indices (rejection sampling failed)"
-   };
+   return { false , "Random pool produced duplicate indices" };
   }
 
   // Verify all indices are valid
@@ -502,6 +507,128 @@ TestResult test_basic_functionality( ) {
 }
 
 REGISTER_TEST( "Basic Functionality" , test_basic_functionality );
+
+// A DiscreteScenarioSet of weights.size() scenarios of size 1 with the given
+// weights
+unique_ptr< DiscreteScenarioSet > load_weighted_scenarios(
+ const vector< double > & weights ) {
+ static int counter = 0;
+ const string filename = "test_weighted_pool_" + to_string( counter++ ) +
+                         ".nc4";
+ auto dss = make_unique< DiscreteScenarioSet >();
+ try {
+  netCDF::NcFile file( filename , netCDF::NcFile::replace );
+  auto group = file.addGroup( "scenarios" );
+  auto nd = group.addDim( "NumberScenarios" , weights.size() );
+  auto sd = group.addDim( "ScenarioSize" , 1 );
+  auto sv = group.addVar( "Scenarios" , netCDF::NcDouble() , { nd , sd } );
+  auto wv = group.addVar( "PoolWeights" , netCDF::NcDouble() , nd );
+  vector< double > data( weights.size() );
+  iota( data.begin() , data.end() , 0.0 );
+  sv.putVar( data.data() );
+  wv.putVar( weights.data() );
+  dss->deserialize( group );
+  }
+ catch( ... ) {
+  remove( filename.c_str() );
+  throw;
+  }
+ remove( filename.c_str() );
+ return( dss );
+ }
+
+// Test 5: weighted random pool, i.e., sampling without replacement with the
+// probabilities of successive weighted draws
+TestResult test_weighted_random_pool( ) {
+ try {
+  using Idx = ScenarioGenerator::ScenarioIndex;
+
+  // as many scenarios as positive weights: exactly the positive ones
+  const vector< double > w0 = { 0 , 0.5 , 0 , 0.25 , 0.25 , 0 };
+  auto dss = load_weighted_scenarios( w0 );
+  for( unsigned long seed = 1 ; seed <= 20 ; ++seed ) {
+   dss->set_seed( seed );
+   dss->init_random_pool( 3 );
+   auto sel = dss->get_selected_scenarios();
+   set< Idx > s( sel.begin() , sel.end() );
+   if( s != set< Idx >{ 1 , 3 , 4 } )
+    return { false , "3 out of 3 positive weights did not give {1, 3, 4}" };
+   }
+
+  // more scenarios than positive weights: all the positive ones first, then
+  // distinct null-weight ones
+  for( unsigned long seed = 1 ; seed <= 20 ; ++seed ) {
+   dss->set_seed( seed );
+   dss->init_random_pool( 5 );
+   auto sel = dss->get_selected_scenarios();
+   if( sel.size() != 5 )
+    return { false , "5 out of 6 gave " + to_string( sel.size() ) };
+   set< Idx > first( sel.begin() , sel.begin() + 3 );
+   set< Idx > all( sel.begin() , sel.end() );
+   if( ( first != set< Idx >{ 1 , 3 , 4 } ) || ( all.size() != 5 ) )
+    return { false , "5 out of 6 did not take the positive weights first" };
+   }
+
+  // all weights null: refused already when read, the weights are
+  // probabilities and must sum to 1
+  try {
+   ( void ) load_weighted_scenarios( { 0 , 0 , 0 , 0 } );
+   return { false , "all null weights were not refused" };
+   }
+  catch( const invalid_argument & ) {}
+
+  // one draw is taken with probability proportional to the weights; the seed
+  // is fixed, so the frequencies are deterministic and 5 standard deviations
+  // only guard against a wrong distribution
+  const vector< double > w1 = { 0.7 , 0.1 , 0.1 , 0.1 };
+  auto dss_freq = load_weighted_scenarios( w1 );
+  dss_freq->set_seed( 2026 );
+  const int R = 20000;
+  vector< int > hits( w1.size() , 0 );
+  for( int r = 0 ; r < R ; ++r ) {
+   dss_freq->init_random_pool( 1 );
+   ++hits[ dss_freq->get_selected_scenarios()[ 0 ] ];
+   }
+  for( size_t i = 0 ; i < w1.size() ; ++i ) {
+   const double sd = sqrt( w1[ i ] * ( 1 - w1[ i ] ) / R );
+   if( abs( double( hits[ i ] ) / R - w1[ i ] ) > 5 * sd )
+    return { false , "scenario " + to_string( i ) + " drawn " +
+                     to_string( hits[ i ] ) + " times out of " +
+                     to_string( R ) + ", weight " + to_string( w1[ i ] ) };
+   }
+
+  // two of four: the pair { 0 , 1 } has probability
+  // 0.7 * 0.1 / 0.3 + 0.1 * 0.7 / 0.9 of being drawn
+  const double p01 = 0.7 * 0.1 / 0.3 + 0.1 * 0.7 / 0.9;
+  int h01 = 0;
+  for( int r = 0 ; r < R ; ++r ) {
+   dss_freq->init_random_pool( 2 );
+   auto sel = dss_freq->get_selected_scenarios();
+   if( set< Idx >( sel.begin() , sel.end() ) == set< Idx >{ 0 , 1 } )
+    ++h01;
+   }
+  if( abs( double( h01 ) / R - p01 ) > 5 * sqrt( p01 * ( 1 - p01 ) / R ) )
+   return { false , "pair {0, 1} drawn " + to_string( h01 ) +
+                    " times out of " + to_string( R ) + ", expected " +
+                    to_string( p01 * R ) };
+
+  // a negative weight is refused, at the latest when the pool is drawn; the
+  // weights below sum to 1, so it is not the sum that refuses them
+  try {
+   auto dss_neg = load_weighted_scenarios( { 0.5 , -0.1 , 0.6 } );
+   dss_neg->init_random_pool( 2 );
+   return { false , "a negative weight was not refused" };
+   }
+  catch( const invalid_argument & ) {}
+
+  return { true , "Weighted random pool tests passed" };
+  }
+ catch( const exception & e ) {
+  return { false , string( "Exception during test: " ) + e.what() };
+  }
+ }
+
+REGISTER_TEST( "Weighted Random Pool" , test_weighted_random_pool );
 
 // Test 2: Configuration Patterns
 TestResult test_configuration_patterns( ) {
