@@ -61,14 +61,10 @@ static void validate_poolSize_value(
 /*--------------------------------------------------------------------------*/
 
 // Pick k distinct indices out of n by weighted sampling without replacement,
-// i.e., with the distribution of k successive draws, each proportional to
-// the weights of the indices not drawn yet, and return them in the order
-// those draws would pick them. Each index i of weight w_i > 0 gets the key
-// log( u_i ) / w_i, with u_i uniform in ( 0 , 1 ], and the k largest keys
-// are taken (Efraimidis and Spirakis): one random number per index and
-// O( n log k ) time whatever the weights. The indices of weight 0 come after
-// all the positive ones and are taken uniformly at random, which happens
-// only when fewer than k weights are positive.
+// in the order successive draws would give, as the k largest keys
+// log( u_i ) / w_i; the indices of weight 0 come last, uniformly. The math
+// and the reference are in the documentation of init_random_pool() in
+// DiscreteScenarioSet.h.
 static void generateWeightedRandomSubset(
  size_t n , size_t k ,
  const std::vector< double > & weights ,
