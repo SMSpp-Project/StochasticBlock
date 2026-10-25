@@ -47,6 +47,12 @@ StcBlkH   = $(StcBlkSDR)/include/ScenarioGenerator.h \
 	$(StcBlkSDR)/include/ScenarioReductionBlock.h \
 	$(StcBlkSDR)/include/StochasticBlock.h
 
+# the C++20 module smspp.stochasticblock - - - - - - - - - - - - - - - - - -
+# [see makefile-mod of SMS++]
+
+$(eval $(call SMSppMODrule,StcBlk,$(StcBlkSDR),StochasticBlock,\
+	smspp.stochasticblock,$(SMS++MOD)))
+
 # clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 clean::
