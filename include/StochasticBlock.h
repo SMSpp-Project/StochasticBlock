@@ -229,11 +229,6 @@ namespace SMSpp_di_unipi_it {
   * StochasticBlock.
   *
   * @param data_mappings the vector of pointers to SimpleDataMappingBase.
-  *
-  * @param destroy_previous_block indicates whether the previous inner Block
-  *        must be destroyed. The default value of this parameter is \c true,
-  *        which means that the previous inner Block (if any) is destroyed and
-  *        its allocated memory is released.
   */
  void set_data_mappings(
   std::vector< std::unique_ptr< SimpleDataMappingBase > > && data_mappings ) {

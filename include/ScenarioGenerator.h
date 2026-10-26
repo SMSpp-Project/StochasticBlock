@@ -118,14 +118,14 @@ class Block;
  * "internal structure" of x_t, which can in general be the composition of
  * different random variables (say, a pair ( c , a ) where c is the vector
  * c[ j ] denoting the cost of a given commodity at a predetermined set of
- * locations j \in J, and a is the vector a[ j ] denoting the availability of
- * the same commodity at the same places; or the matrix of pairs where each
- * row correspond to a different commodity, ...). As far as the base classes
- * are concerned, a scenario x_t for a given stage t is just a vector of
- * appropriate length d_t, whose internal structure is supposed to be fixed
- * and known to the user. Also, the base classes make no assumption on how
- * the variable X_t depends on ( x_0 , ... , x_{t-1} ) (the history at stage
- * t).
+ * locations \f$ j \in J \f$, and a is the vector a[ j ] denoting the
+ * availability of the same commodity at the same places; or the matrix of
+ * pairs where each row corresponds to a different commodity, ...). As far
+ * as the base classes are concerned, a scenario x_t for a given stage t is
+ * just a vector of appropriate length d_t, whose internal structure is
+ * supposed to be fixed and known to the user. Also, the base classes make
+ * no assumption on how the variable X_t depends on ( x_0 , ... , x_{t-1} )
+ * (the history at stage t).
  *
  * When T = 1, the time dimension is implicit, i.e., the stochastic process is
  * its only element, the random variable X_0, and a scenario is its unique
@@ -868,8 +868,8 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
  *  @{ */
 
 /// type for the index characterizing a specific size
-/** Integer type that can be used to identify one of the possible stages t \in
- * 0, ..., T - 1, i.e., it has to be at least as large to hold T - 1. */
+/** Integer type that can be used to identify one of the possible stages
+ * t = 0, ..., T - 1, i.e., it has to be at least as large to hold T - 1. */
 
  using StageIndex = unsigned short;
 
@@ -980,7 +980,8 @@ class MultiStageScenarioGenerator : public ScenarioGenerator
  * Anyway, this fully justifies the return value of next_scenario(), since in
  * MultiStageScenarioGenerator, as opposed to its base class, it is not known
  * beforehand how many sub-scenarios sharing the same history H_t will be
- * available. */
+ * available.
+ *  @{ */
 
  // Semantics of the inherited pool methods on
  // :MultiStageScenarioGenerator. Because the base ScenarioGenerator has
