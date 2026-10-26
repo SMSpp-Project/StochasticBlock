@@ -30,8 +30,6 @@ module;
 #include "DiscreteScenarioSet.h"
 #include "IndependentMultiStageScenarioGenerator.h"
 #include "MultiStageDiscreteScenarioSet.h"
-#include "ScenarioGenerator.h"
-#include "ScenarioReductionBlock.h"
 #include "StochasticBlock.h"
 
 /*--------------------------------------------------------------------------*/
