@@ -51,7 +51,7 @@ StcBlkH   = $(StcBlkSDR)/include/ScenarioGenerator.h \
 # [see makefile-mod of SMS++]
 
 $(eval $(call SMSppMODrule,StcBlk,$(StcBlkSDR),StochasticBlock,\
-	smspp.stochasticblock,$(SMS++MOD)))
+	smspp.stochasticblock,SMS++))
 
 # clean - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -77,7 +77,8 @@ $(StcBlkSDR)/obj/DiscreteScenarioSet.o: \
 $(StcBlkSDR)/obj/IndependentMultiStageScenarioGenerator.o: \
 	$(StcBlkSDR)/src/IndependentMultiStageScenarioGenerator.cpp \
 	$(StcBlkSDR)/include/ScenarioGenerator.h \
-	$(StcBlkSDR)/include/IndependentMultiStageScenarioGenerator.h $(SMS++OBJ)
+	$(StcBlkSDR)/include/IndependentMultiStageScenarioGenerator.h \
+	$(SMS++OBJ)
 	$(CC) -c $(StcBlkSDR)/src/IndependentMultiStageScenarioGenerator.cpp \
 	-o $@ $(StcBlkINC) $(SMS++INC) $(SW)
 
