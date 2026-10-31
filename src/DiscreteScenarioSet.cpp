@@ -609,5 +609,17 @@ void DiscreteScenarioSet::apply_baseline_selection( ScenarioIndex target_size )
  }
 
 /*--------------------------------------------------------------------------*/
+// the factory is defined here, and not in the header, so that there is one
+// of it also when the libraries are DLLs of Windows, each of which would
+// otherwise have a copy of its own
+
+ScenarioGenerator::ScenarioGeneratorFactoryMap &
+ ScenarioGenerator::f_factory( void )
+{
+ static ScenarioGeneratorFactoryMap s_factory;
+ return( s_factory );
+ }
+
+/*--------------------------------------------------------------------------*/
 /*-------------- End file DiscreteScenarioSet.cpp --------------------------*/
 /*--------------------------------------------------------------------------*/

@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- the factory of `ScenarioGenerator` is defined in a source file instead of
+  the header, so that there is one also when the libraries are DLLs of
+  Windows, each of which had a copy of its own
+
 - the makefiles of the tests and of the tools build also with g++: they
   take the option that stops at the first error and the one of the
   debugging information, which clang++ and g++ spell differently

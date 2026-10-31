@@ -762,10 +762,7 @@ class ScenarioGenerator
   * rationale for using a method is that this is the "Construct On First Use
   * Idiom" that solves the "static initialization order problem". */
 
- static ScenarioGeneratorFactoryMap & f_factory( void ) {
-  static ScenarioGeneratorFactoryMap s_factory;
-  return( s_factory );
-  }
+ static ScenarioGeneratorFactoryMap & f_factory( void );
 
 /*--------------------------------------------------------------------------*/
  /// empty placeholder for class-specific static initialization
