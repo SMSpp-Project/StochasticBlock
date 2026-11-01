@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `set_data()` takes the data as a `std::span< const double >` (a
+  `std::vector< double >` converts to it), in place of the overloads for a
+  vector and for an iterator, as `DataMapping::set_data()` does; the tester
+  registers its methods with spans
+
 - the README leaves the channels that distribute SMS++ to the
   installation guide of the wiki (Installing-SMS++), keeping the names
   of the packages of the module
