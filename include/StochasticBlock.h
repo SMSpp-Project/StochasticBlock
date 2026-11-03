@@ -229,11 +229,6 @@ namespace SMSpp_di_unipi_it {
   * StochasticBlock.
   *
   * @param data_mappings the vector of pointers to SimpleDataMappingBase.
-  *
-  * @param destroy_previous_block indicates whether the previous inner Block
-  *        must be destroyed. The default value of this parameter is \c true,
-  *        which means that the previous inner Block (if any) is destroyed and
-  *        its allocated memory is released.
   */
  void set_data_mappings(
   std::vector< std::unique_ptr< SimpleDataMappingBase > > && data_mappings ) {
@@ -288,7 +283,10 @@ namespace SMSpp_di_unipi_it {
  /** This function sets the value of the (possibly stochastic) data of this
   * StochasticBlock.
   *
-  * @param data The vector containing the values of the data to be set.
+  * @param data The values of the data to be set (say, a scenario), which
+  *        each DataMapping reads at the positions of its SetFrom; one of
+  *        them going past the end of \p data makes std::invalid_argument
+  *        be thrown.
   *
   * @param issuePMod Decides if and how a "physical Modification" is issued,
   *        as described in Observer::make_par().
@@ -296,29 +294,8 @@ namespace SMSpp_di_unipi_it {
   * @param issueAMod Decides if and how an "abstract Modification" is issued,
   *        as described in Observer::make_par().
   */
- void set_data( const std::vector< double > & data ,
+ void set_data( std::span< const double > data ,
          c_ModParam issuePMod = eNoBlck ,
-         c_ModParam issueAMod = eNoBlck ) {
-  for ( size_t i = 0; i < data_mappings.size( ); ++i )
-   data_mappings[ i ]->set_data( data.begin( ) , issuePMod , issueAMod );
- }
-
- /*--------------------------------------------------------------------------*/
-
- /// sets the (possibly stochastic) data of this StochasticBlock
- /** This function sets the value of the (possibly stochastic) data of this
-  * StochasticBlock.
-  *
-  * @param data An iterator to the first element of the data.
-  *
-  * @param issuePMod Decides if and how a "physical Modification" is issued,
-  *        as described in Observer::make_par().
-  *
-  * @param issueAMod Decides if and how an "abstract Modification" is issued,
-  *        as described in Observer::make_par().
-  */
- template < class Iterator >
- void set_data( Iterator data , c_ModParam issuePMod = eNoBlck ,
          c_ModParam issueAMod = eNoBlck ) {
   for ( size_t i = 0; i < data_mappings.size( ); ++i )
    data_mappings[ i ]->set_data( data , issuePMod , issueAMod );

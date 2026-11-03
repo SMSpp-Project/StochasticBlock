@@ -22,6 +22,8 @@
 #include <StochasticBlock.h>
 
 #include <random>
+#include <span>
+#include <stdexcept>
 #include <iostream>
 
 /*--------------------------------------------------------------------------*/
@@ -69,43 +71,47 @@ public:
  }
 
  template< class T >
- void set_data( typename std::vector< T >::const_iterator values ,
+ void set_data( std::span< const T > values ,
                 Subset && subset ,
                 bool ordered = false ,
                 c_ModParam issuePMod = eNoBlck ,
                 c_ModParam issueAMod = eNoBlck ) {
+  if( values.size() < subset.size() )
+   throw( std::invalid_argument( "DummyBlock::set_data: the span is shorter "
+                                 "than the Subset" ) );
   auto & data = get_data< T >();
-  for( auto i : subset ) {
-   data[ i ] = *values;
-   std::advance( values , 1 );
-  }
+  for( Index h = 0 ; h < subset.size() ; ++h )
+   data[ subset[ h ] ] = values[ h ];
  }
 
  template< class T >
- void set_data( typename std::vector< T >::const_iterator values ,
+ void set_data( std::span< const T > values ,
                 Range rng = Range( 0 , Inf< Index >() ) ,
                 c_ModParam issuePMod = eNoBlck ,
                 c_ModParam issueAMod = eNoBlck ) {
   auto & data = get_data< T >();
   decltype( rng.second ) size = data.size();
   rng.second = std::min( size , rng.second );
-  for( std::size_t i = rng.first ; i < rng.second ; ++i ) {
-   data[ i ] = *values;
-   std::advance( values , 1 );
-  }
+  if( rng.second <= rng.first )
+   return;
+  if( values.size() < rng.second - rng.first )
+   throw( std::invalid_argument( "DummyBlock::set_data: the span is shorter "
+                                 "than the Range" ) );
+  for( std::size_t i = rng.first ; i < rng.second ; ++i )
+   data[ i ] = values[ i - rng.first ];
  }
 
  static void static_initialization( ) {
-  register_method< DummyBlock , MF_int_it , Subset && , const bool >
+  register_method< DummyBlock , MF_int_sp , Subset && , const bool >
    ( "DummyBlock::set_data" , &DummyBlock::set_data< int > );
 
-  register_method< DummyBlock , MF_int_it , Range >
+  register_method< DummyBlock , MF_int_sp , Range >
    ( "DummyBlock::set_data" , &DummyBlock::set_data< int > );
 
-  register_method< DummyBlock , MF_dbl_it , Subset && , const bool >
+  register_method< DummyBlock , MF_dbl_sp , Subset && , const bool >
    ( "DummyBlock::set_data" , &DummyBlock::set_data< double > );
 
-  register_method< DummyBlock , MF_dbl_it , Range >
+  register_method< DummyBlock , MF_dbl_sp , Range >
    ( "DummyBlock::set_data" , &DummyBlock::set_data< double > );
  }
 
@@ -126,16 +132,16 @@ SMSpp_insert_in_factory_cpp_1( DummyBlock );
 /*--------------------------------------------------------------------------*/
 
 template< class T >
-struct Iter;
+struct Span;
 
 template< >
-struct Iter< int > {
- using type = Block::MF_int_it;
+struct Span< int > {
+ using type = Block::MF_int_sp;
 };
 
 template< >
-struct Iter< double > {
- using type = Block::MF_dbl_it;
+struct Span< double > {
+ using type = Block::MF_dbl_sp;
 };
 
 template< class S , class T >
@@ -143,13 +149,13 @@ struct FunctionType;
 
 template< class T >
 struct FunctionType< Subset , T > {
- using type = Block::FunctionType< typename Iter< T >::type , Subset && , bool >
- ;
+ using type = Block::FunctionType< typename Span< T >::type , Subset && ,
+                                   bool >;
 };
 
 template< class T >
 struct FunctionType< Range , T > {
- using type = Block::FunctionType< typename Iter< T >::type , Range >;
+ using type = Block::FunctionType< typename Span< T >::type , Range >;
 };
 
 template< class S , class T >
@@ -280,7 +286,7 @@ void test( std::size_t int_size , std::size_t dbl_size ) {
  std::vector< double > data( int_data );
  data.insert( data.end() , dbl_data.begin() , dbl_data.end() );
 
- stochastic_block.set_data( data.begin() );
+ stochastic_block.set_data( data );
 
  auto block_int_data = inner_block->get_data< int >();
  auto block_dbl_data = inner_block->get_data< double >();

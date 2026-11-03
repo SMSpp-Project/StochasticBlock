@@ -41,6 +41,14 @@ if (WIN32 AND BUILD_SHARED_LIBS AND NOT DEFINED ENV{CONDA_BUILD})
             $<TARGET_FILE_DIR:${modName}_test>
             COMMAND_EXPAND_LISTS
             COMMENT "Copying runtime DLLs next to ${modName}_test.exe")
+    # one link at a time, since two copies of the same DLL into a
+    # directory collide, and Ninja links in parallel
+    get_property(_pools GLOBAL PROPERTY JOB_POOLS)
+    if (NOT _pools MATCHES "smspp_runtime_dlls=")
+        set_property(GLOBAL APPEND PROPERTY JOB_POOLS smspp_runtime_dlls=1)
+    endif ()
+    set_property(TARGET ${modName}_test
+                 PROPERTY JOB_POOL_LINK smspp_runtime_dlls)
 endif ()
 
 add_test(NAME ${modName}_test
@@ -61,12 +69,20 @@ if (WIN32 AND BUILD_SHARED_LIBS AND NOT DEFINED ENV{CONDA_BUILD})
             $<TARGET_FILE_DIR:test_discrete>
             COMMAND_EXPAND_LISTS
             COMMENT "Copying runtime DLLs next to test_discrete.exe")
+    # one link at a time, since two copies of the same DLL into a
+    # directory collide, and Ninja links in parallel
+    get_property(_pools GLOBAL PROPERTY JOB_POOLS)
+    if (NOT _pools MATCHES "smspp_runtime_dlls=")
+        set_property(GLOBAL APPEND PROPERTY JOB_POOLS smspp_runtime_dlls=1)
+    endif ()
+    set_property(TARGET test_discrete
+                 PROPERTY JOB_POOL_LINK smspp_runtime_dlls)
 endif ()
 
 add_test(NAME test_discrete
          COMMAND test_discrete)
 
-# ----- MultiStageDiscreteScenarioSet_unit_test ---------------------------- #
+# ----- MultiStageDiscreteScenarioSet_unit_test ----------------------------- #
 
 # The view API of the scenario tree, clone() and the serialize() /
 # deserialize() round trip of MultiStageDiscreteScenarioSet.
@@ -84,6 +100,14 @@ if (WIN32 AND BUILD_SHARED_LIBS AND NOT DEFINED ENV{CONDA_BUILD})
             $<TARGET_FILE_DIR:${_t}>
             COMMAND_EXPAND_LISTS
             COMMENT "Copying runtime DLLs next to ${_t}.exe")
+    # one link at a time, since two copies of the same DLL into a
+    # directory collide, and Ninja links in parallel
+    get_property(_pools GLOBAL PROPERTY JOB_POOLS)
+    if (NOT _pools MATCHES "smspp_runtime_dlls=")
+        set_property(GLOBAL APPEND PROPERTY JOB_POOLS smspp_runtime_dlls=1)
+    endif ()
+    set_property(TARGET ${_t}
+                 PROPERTY JOB_POOL_LINK smspp_runtime_dlls)
 endif ()
 
 # run in the build tree, since it writes (and removes) a netCDF file
@@ -109,6 +133,14 @@ if (WIN32 AND BUILD_SHARED_LIBS AND NOT DEFINED ENV{CONDA_BUILD})
             $<TARGET_FILE_DIR:${_t}>
             COMMAND_EXPAND_LISTS
             COMMENT "Copying runtime DLLs next to ${_t}.exe")
+    # one link at a time, since two copies of the same DLL into a
+    # directory collide, and Ninja links in parallel
+    get_property(_pools GLOBAL PROPERTY JOB_POOLS)
+    if (NOT _pools MATCHES "smspp_runtime_dlls=")
+        set_property(GLOBAL APPEND PROPERTY JOB_POOLS smspp_runtime_dlls=1)
+    endif ()
+    set_property(TARGET ${_t}
+                 PROPERTY JOB_POOL_LINK smspp_runtime_dlls)
 endif ()
 
 # run in the build tree, since it writes (and removes) a netCDF file

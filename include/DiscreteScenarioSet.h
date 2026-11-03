@@ -110,7 +110,7 @@ public:
   const std::vector< double > & weights = {} );
 
 /*--------------------------------------------------------------------------*/
-/*--------------------- ScenarioGenerator INTERFACE -----------------------*/
+/*--------------------- ScenarioGenerator INTERFACE ------------------------*/
 /*--------------------------------------------------------------------------*/
 
  void set_seed( unsigned long seed ) override { rng.seed( seed ); }
@@ -143,8 +143,33 @@ public:
   }
 
 /*--------------------------------------------------------------------------*/
-/*----------------------- POOL MANAGEMENT ---------------------------------*/
+/*----------------------- POOL MANAGEMENT ----------------------------------*/
 /*--------------------------------------------------------------------------*/
+
+ /// draw a random pool of pool_size distinct scenarios
+ /** Draws a pool of \p pool_size distinct scenarios by weighted sampling
+  * without replacement: the pool has the distribution of \p pool_size
+  * successive draws, each of which picks scenario \f$ i \f$ among those not
+  * drawn yet with probability proportional to its weight \f$ w_i \f$ [see
+  * get_set_weights()], and the scenarios are in the order those draws would
+  * give. This is done in one pass, with one random number per scenario [1]:
+  * scenario \f$ i \f$ with \f$ w_i > 0 \f$ gets the key
+  * \f[
+  *   k_i = \frac{ \ln u_i }{ w_i } \;, \qquad u_i \sim U( 0 , 1 ] \;,
+  * \f]
+  * i.e., the logarithm of the key \f$ u_i^{1 / w_i} \f$ of [1], which has
+  * the same order and does not underflow for small weights, and the pool is
+  * made of the \p pool_size largest keys, in decreasing order. This takes
+  * \f$ O( n \log \mathrm{pool\_size} ) \f$ time for \f$ n \f$ scenarios,
+  * whatever the weights. The scenarios with \f$ w_i = 0 \f$ come after all
+  * the others, in random order, hence they enter the pool only if fewer
+  * than \p pool_size weights are positive. A negative or non-finite weight
+  * is refused with std::invalid_argument. A pool as large as the whole set
+  * (INFScenario included) has all the scenarios, in their order.
+  *
+  * [1] P. S. Efraimidis, P. G. Spirakis, "Weighted random sampling with a
+  *     reservoir", Information Processing Letters 97(5), 181-185, 2006,
+  *     doi:10.1016/j.ipl.2005.11.003 */
 
  void init_random_pool( ScenarioIndex pool_size = INFScenario ) override;
 
@@ -156,7 +181,7 @@ public:
   ScenarioIndex target_pool_size = INFScenario ) override;
 
 /*--------------------------------------------------------------------------*/
-/*----------------------- CONFIGURATION -----------------------------------*/
+/*----------------------- CONFIGURATION ------------------------------------*/
 /*--------------------------------------------------------------------------*/
 
  /** Set the BlockSolverConfig used to attach a Solver to the
@@ -187,7 +212,7 @@ public:
  void set_config( Configuration * config ) override;
 
 /*--------------------------------------------------------------------------*/
-/*------------------------------ GETTERS ----------------------------------*/
+/*------------------------------ GETTERS -----------------------------------*/
 /*--------------------------------------------------------------------------*/
 
  [[nodiscard]] const ScenarioIndex & get_nbScenarios() const {
@@ -264,13 +289,13 @@ public:
   }
 
 /*--------------------------------------------------------------------------*/
-/*--------------------- PRIVATE PART OF THE CLASS -------------------------*/
+/*--------------------- PRIVATE PART OF THE CLASS --------------------------*/
 /*--------------------------------------------------------------------------*/
 
 private:
 
 /*--------------------------------------------------------------------------*/
-/*--------------------------- PRIVATE FIELDS ------------------------------*/
+/*--------------------------- PRIVATE FIELDS -------------------------------*/
 /*--------------------------------------------------------------------------*/
 
  DiscreteScenarioPool scenarioSet;
@@ -305,7 +330,7 @@ private:
  std::vector< double > poolWeights;
 
 /*--------------------------------------------------------------------------*/
-/*------------------------ PRIVATE METHODS --------------------------------*/
+/*------------------------ PRIVATE METHODS ---------------------------------*/
 /*--------------------------------------------------------------------------*/
 
  void empty_pool();
