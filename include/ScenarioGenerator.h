@@ -663,7 +663,8 @@ class ScenarioGenerator
   * reduce it once and for all as a whole, in which case the call at a node
   * has nothing left to do; see the specific derived class. */
 
-  virtual void init_representative_pool( ScenarioIndex size = INFScenario ) = 0;
+  virtual void init_representative_pool(
+				       ScenarioIndex size = INFScenario ) = 0;
 
 /*--------------------------------------------------------------------------*/
  /// read the data of the current scenario

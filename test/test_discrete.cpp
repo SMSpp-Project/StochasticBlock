@@ -164,7 +164,8 @@ string create_test_scenario_file( int num_scenarios = 20 ,
   netCDF::NcDim sizeDim = dataFile.addDim( "ScenarioSize" , scenario_size );
 
   // Create scenario variable
-  netCDF::NcVar scenarioVar = dataFile.addVar( "Scenarios" , netCDF::NcDouble() ,
+  netCDF::NcVar scenarioVar = dataFile.addVar( "Scenarios" ,
+                                               netCDF::NcDouble() ,
                                                { scenarioDim , sizeDim } );
 
   // Fill with test data
@@ -312,8 +313,8 @@ TestResult test_basic_functionality( ) {
    return { false , "Pool should not be initialized before deserialization" };
   }
 
-  // After deserialization the pool is lazily set to the canonical (full) order,
-  // so the generator is immediately walkable (see
+  // After deserialization the pool is lazily set to the canonical (full)
+  // order, so the generator is immediately walkable (see
   // DiscreteScenarioSet::deserialize).
   auto dss_util = load_test_scenarios( 10 , 4 );
   if( ! dss_util->is_pool_initialized() ) {
@@ -661,7 +662,8 @@ TestResult test_configuration_patterns( ) {
    }
   }
 
-  // Test Pattern 2: SimpleConfiguration<pair<int, Configuration*>> where Configuration* is BlockSolverConfig*
+  // Test Pattern 2: SimpleConfiguration<pair<int, Configuration*>> where
+  // Configuration* is BlockSolverConfig*
   {
    auto dss = load_test_scenarios( 20 , 5 );
 
@@ -723,7 +725,10 @@ TestResult test_serialization_deserialization( ) {
    // Config should NOT be restored - poolSize should be 0
    if( dss2->get_poolSize() != 0 ) {
     remove( nc_filename.c_str() );
-    return { false , "poolSize should be 0 after deserialization (config not serialized)" };
+    return {
+     false ,
+     "poolSize should be 0 after deserialization (config not serialized)"
+    };
    }
 
    // Config must be set manually after deserialization
@@ -782,8 +787,9 @@ TestResult test_serialization_deserialization( ) {
    dss1->next_scenario();
    dss1->next_scenario();
 
-   // Note: Current serialization does NOT save the pool state (selected scenarios)
-   // It only saves the configuration. This test documents current behavior.
+   // Note: Current serialization does NOT save the pool state (selected
+   // scenarios) It only saves the configuration. This test documents current
+   // behavior.
    string nc_filename = "test_pool_state.nc4";
    {
     netCDF::NcFile file( nc_filename , netCDF::NcFile::replace );
@@ -1002,7 +1008,8 @@ int main( int argc , char ** argv )
  for( const auto & f : std::filesystem::directory_iterator( "." , ec ) ) {
   const auto name = f.path().filename().string();
   const auto ext = f.path().extension().string();
-  if( ( name.rfind( "test_" , 0 ) == 0 ) && ( ext == ".nc4" || ext == ".txt" ) )
+  if( ( name.rfind( "test_" , 0 ) == 0 ) &&
+      ( ext == ".nc4" || ext == ".txt" ) )
    std::filesystem::remove( f.path() , ec );
   }
 

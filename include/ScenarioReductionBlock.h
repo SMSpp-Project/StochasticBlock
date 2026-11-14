@@ -192,8 +192,8 @@ public:
 /*--------------------------------------------------------------------------*/
 
  void load( std::istream & input , char frmt = 0 ) override {
-  throw std::logic_error(
-   "ScenarioReductionBlock::load: not implemented" );
+  throw( std::logic_error(
+   "ScenarioReductionBlock::load: not implemented" ) );
   }
 
  void print( std::ostream & output , char vlvl = 0 ) const override;

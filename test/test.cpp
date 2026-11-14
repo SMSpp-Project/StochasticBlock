@@ -341,12 +341,12 @@ int main( int argc , char ** argv )
    std::cout << "Options:" << std::endl;
    std::cout << "  -v, --verbose    Enable verbose output" << std::endl;
    std::cout << "  -h, --help       Show this help message" << std::endl;
-   return 0;
+   return( 0 );
   }
   else {
    std::cerr << "Unknown argument: " << arg << std::endl;
    std::cerr << "Use --help for usage information" << std::endl;
-   return 1;
+   return( 1 );
   }
  }
 
