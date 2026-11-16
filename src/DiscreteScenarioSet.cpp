@@ -53,9 +53,9 @@ static void validate_poolSize_value(
  DiscreteScenarioSet::ScenarioIndex max_scenarios )
 {
  if( size == 0 || size > max_scenarios )
-  throw std::invalid_argument(
+  throw( std::invalid_argument(
    "Invalid pool size: must be between 1 and " +
-   std::to_string( max_scenarios ) );
+   std::to_string( max_scenarios ) ) );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -72,11 +72,11 @@ static void generateWeightedRandomSubset(
  std::mt19937 & rng )
 {
  if( k > n )
-  throw std::invalid_argument(
-   "generateWeightedRandomSubset: k must be <= n" );
+  throw( std::invalid_argument(
+   "generateWeightedRandomSubset: k must be <= n" ) );
  if( weights.size() != n )
-  throw std::invalid_argument(
-   "generateWeightedRandomSubset: weights must have size n" );
+  throw( std::invalid_argument(
+   "generateWeightedRandomSubset: weights must have size n" ) );
 
  ind.clear();
  if( k == 0 ) return;
@@ -97,9 +97,9 @@ static void generateWeightedRandomSubset(
  for( size_t i = 0 ; i < n ; ++i ) {
   const double w = weights[ i ];
   if( ! ( std::isfinite( w ) && ( w >= 0 ) ) )
-   throw std::invalid_argument(
+   throw( std::invalid_argument(
     "generateWeightedRandomSubset: weight " + std::to_string( i ) +
-    " is " + std::to_string( w ) + ", not finite and non-negative" );
+    " is " + std::to_string( w ) + ", not finite and non-negative" ) );
   // 1 - unif( rng ) is in ( 0 , 1 ], so its log is finite
   const double lu = std::log( 1.0 - unif( rng ) );
   keys.emplace_back( w > 0 , w > 0 ? lu / w : lu ,
@@ -180,9 +180,9 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
  ::deserialize_dim( group , "ScenarioSize" , scenarioSize , false );
 
  if( nbScenarios == 0 )
-  throw std::invalid_argument( "NumberScenarios must be positive" );
+  throw( std::invalid_argument( "NumberScenarios must be positive" ) );
  if( scenarioSize == 0 )
-  throw std::invalid_argument( "ScenarioSize must be positive" );
+  throw( std::invalid_argument( "ScenarioSize must be positive" ) );
 
  scenarioSet.resize( boost::extents[ nbScenarios ][ scenarioSize ] );
  std::vector< std::size_t > sizes = { nbScenarios , scenarioSize };
@@ -197,14 +197,14 @@ void DiscreteScenarioSet::deserialize( const netCDF::NcGroup & group )
  if( ! probsLoaded )
   setWeights.assign( nbScenarios , 1.0 / nbScenarios );
  else if( setWeights.size() != nbScenarios )
-  throw std::invalid_argument(
-   "PoolWeights size does not match NumberScenarios" );
+  throw( std::invalid_argument(
+   "PoolWeights size does not match NumberScenarios" ) );
 
  double sum = std::accumulate( setWeights.begin() , setWeights.end() , 0.0 );
  if( std::abs( sum - 1.0 ) > 1e-6 )
-  throw std::invalid_argument(
+  throw( std::invalid_argument(
    "Scenario probabilities sum to " + std::to_string( sum ) +
-   " rather than 1.0" );
+   " rather than 1.0" ) );
 
  // Lazy canonical init: walk entire set in natural order
  universeIndexes.resize( nbScenarios );
@@ -225,16 +225,16 @@ void DiscreteScenarioSet::load_from_memory(
  const std::vector< double > & weights )
 {
  if( scenarios.empty() )
-  throw std::invalid_argument(
-   "DiscreteScenarioSet::load_from_memory: no scenarios provided" );
+  throw( std::invalid_argument(
+   "DiscreteScenarioSet::load_from_memory: no scenarios provided" ) );
 
  const std::size_t N = scenarios.size();
  const std::size_t D = scenarios[ 0 ].size();
 
  for( std::size_t i = 1 ; i < N ; ++i )
   if( scenarios[ i ].size() != D )
-   throw std::invalid_argument(
-    "DiscreteScenarioSet::load_from_memory: scenario rows differ in size" );
+   throw( std::invalid_argument(
+    "DiscreteScenarioSet::load_from_memory: scenario rows differ in size" ) );
 
  nbScenarios  = static_cast< ScenarioIndex >( N );
  scenarioSize = static_cast< ScenarioSize >( D );
@@ -248,8 +248,8 @@ void DiscreteScenarioSet::load_from_memory(
   setWeights.assign( N , 1.0 / static_cast< double >( N ) );
  else {
   if( weights.size() != N )
-   throw std::invalid_argument(
-    "DiscreteScenarioSet::load_from_memory: weights size mismatch" );
+   throw( std::invalid_argument(
+    "DiscreteScenarioSet::load_from_memory: weights size mismatch" ) );
   setWeights = weights;
   }
 
@@ -291,15 +291,16 @@ void DiscreteScenarioSet::set_config( Configuration * config )
   return;
   }
 
- throw std::invalid_argument(
-  "DiscreteScenarioSet::set_config: unsupported configuration type" );
+ throw( std::invalid_argument(
+  "DiscreteScenarioSet::set_config: unsupported configuration type" ) );
  }
 
 /*--------------------------------------------------------------------------*/
 /*--------------------------- init_random_pool -----------------------------*/
 /*--------------------------------------------------------------------------*/
 
-// Build a pool by sampling pool_size scenarios at random, weighted by setWeights
+// Build a pool by sampling pool_size scenarios at random, weighted by
+// setWeights
 void DiscreteScenarioSet::init_random_pool( ScenarioIndex pool_size )
 {
  scenarioIndexes.clear();
@@ -320,11 +321,11 @@ void DiscreteScenarioSet::init_random_pool( ScenarioIndex pool_size )
  if( pool_size == INFScenario )
   effective_size = universe_size;
  else if( pool_size == 0 )
-  throw std::invalid_argument(
-   "DiscreteScenarioSet::init_random_pool: pool_size must be positive" );
+  throw( std::invalid_argument(
+   "DiscreteScenarioSet::init_random_pool: pool_size must be positive" ) );
  else if( pool_size > universe_size )
-  throw std::invalid_argument(
-   "DiscreteScenarioSet::init_random_pool: pool_size exceeds universe size" );
+  throw( std::invalid_argument(
+  "DiscreteScenarioSet::init_random_pool: pool_size exceeds universe size" ) );
 
  poolSize = effective_size;
 
@@ -373,14 +374,14 @@ void DiscreteScenarioSet::init_representative_pool(
   }
 
  if( target_pool_size == 0 )
-  throw std::invalid_argument(
+  throw( std::invalid_argument(
    "DiscreteScenarioSet::init_representative_pool: "
-   "target_pool_size must be positive" );
+   "target_pool_size must be positive" ) );
 
  if( target_pool_size > nbScenarios )
-  throw std::invalid_argument(
+  throw( std::invalid_argument(
    "DiscreteScenarioSet::init_representative_pool: "
-   "target_pool_size exceeds nbScenarios" );
+   "target_pool_size exceeds nbScenarios" ) );
 
  poolSize = target_pool_size;
 
@@ -406,27 +407,27 @@ void DiscreteScenarioSet::init_representative_pool(
   config_copy->apply( srb.get() );
 
   if( srb->get_registered_solvers().empty() )
-   throw std::runtime_error(
+   throw( std::runtime_error(
     "DiscreteScenarioSet::init_representative_pool: "
-    "no Solver registered after BlockSolverConfig::apply" );
+    "no Solver registered after BlockSolverConfig::apply" ) );
 
   auto * solver = srb->get_registered_solvers().front();
 
   // Solve
   int status = solver->compute();
   if( status != Solver::kOK )
-   throw std::runtime_error(
+   throw( std::runtime_error(
     "DiscreteScenarioSet::init_representative_pool: "
-    "Solver failed with status " + std::to_string( status ) );
+    "Solver failed with status " + std::to_string( status ) ) );
 
   solver->get_var_solution();
 
   // Read solution from ScenarioReductionBlock
   const auto & sol = srb->get_solution();
   if( ! sol.is_set() )
-   throw std::runtime_error(
+   throw( std::runtime_error(
     "DiscreteScenarioSet::init_representative_pool: "
-    "Solver did not write a solution into ScenarioReductionBlock" );
+    "Solver did not write a solution into ScenarioReductionBlock" ) );
 
   scenarioIndexes = sol.selected_indices;
   update_pool_weights_with_assignments( sol.assignments );
@@ -449,18 +450,19 @@ void DiscreteScenarioSet::init_representative_pool(
 /*------------------------------ next_scenario -----------------------------*/
 /*--------------------------------------------------------------------------*/
 
-// Advance to the next scenario in the pool; false when already at the last one.
+// Advance to the next scenario in the pool; false when already at the last
+// one.
 bool DiscreteScenarioSet::next_scenario()
 {
  if( ! is_initialized || scenarioIndexes.empty() )
-  return false;
+  return( false );
 
  if( currentScenarioIndex < scenarioIndexes.size() - 1 ) {
   ++currentScenarioIndex;
-  return true;
+  return( true );
   }
 
- return false;
+ return( false );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -471,9 +473,9 @@ std::span< const DiscreteScenarioSet::ScenarioIndex >
 DiscreteScenarioSet::get_selected_scenarios() const
 {
  if( ! is_initialized )
-  throw std::runtime_error(
-   "get_selected_scenarios: pool not initialized" );
- return scenarioIndexes;
+  throw( std::runtime_error(
+   "get_selected_scenarios: pool not initialized" ) );
+ return( scenarioIndexes );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -493,7 +495,8 @@ void DiscreteScenarioSet::empty_pool()
 
 /*--------------------------------------------------------------------------*/
 
-// Symmetric matrix of pairwise distances between all scenarios (the transport costs)
+// Symmetric matrix of pairwise distances between all scenarios (the transport
+// costs)
 DiscreteScenarioSet::CMatrix
 DiscreteScenarioSet::compute_transport_cost_matrix(
  ScenarioIndex n_scenarios , ScenarioSize scenario_size , float ell ) const
@@ -514,7 +517,7 @@ DiscreteScenarioSet::compute_transport_cost_matrix(
    }
   }
 
- return costs;
+ return( costs );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -522,7 +525,7 @@ DiscreteScenarioSet::compute_transport_cost_matrix(
 double DiscreteScenarioSet::compute_scenario_distance(
  const Eigen::VectorXd & s1 , const Eigen::VectorXd & s2 , float ell ) const
 {
- return std::pow( ( s1 - s2 ).norm() , ell );
+ return( std::pow( ( s1 - s2 ).norm() , ell ) );
  }
 
 /*--------------------------------------------------------------------------*/
@@ -554,8 +557,8 @@ void DiscreteScenarioSet::update_pool_weights_with_assignments(
  const std::vector< ScenarioIndex > & assignments )
 {
  if( assignments.size() != nbScenarios )
-  throw std::invalid_argument(
-   "update_pool_weights_with_assignments: assignments size mismatch" );
+  throw( std::invalid_argument(
+   "update_pool_weights_with_assignments: assignments size mismatch" ) );
 
  std::unordered_map< ScenarioIndex , size_t > repr_to_pos;
  for( size_t pos = 0 ; pos < scenarioIndexes.size() ; ++pos )
@@ -567,9 +570,9 @@ void DiscreteScenarioSet::update_pool_weights_with_assignments(
   if( it != repr_to_pos.end() )
    agg[ it->second ] += setWeights[ i ];
   else
-   throw std::runtime_error(
+   throw( std::runtime_error(
     "update_pool_weights_with_assignments: scenario " +
-    std::to_string( i ) + " assigned to non-selected representative" );
+    std::to_string( i ) + " assigned to non-selected representative" ) );
   }
 
  sumPoolWeights = std::accumulate( agg.begin() , agg.end() , 0.0 );
@@ -588,7 +591,8 @@ void DiscreteScenarioSet::update_pool_weights_with_assignments(
 
 /*--------------------------------------------------------------------------*/
 
-// Fallback selection without a Solver: just keep the target_size heaviest scenarios
+// Fallback selection without a Solver: just keep the target_size heaviest
+// scenarios
 void DiscreteScenarioSet::apply_baseline_selection( ScenarioIndex target_size )
 {
  std::vector< std::pair< ScenarioIndex , double > > wp;
@@ -598,7 +602,7 @@ void DiscreteScenarioSet::apply_baseline_selection( ScenarioIndex target_size )
    setWeights[ i ] : 1.0 / nbScenarios ) );
 
  std::sort( wp.begin() , wp.end() ,
-  []( const auto & a , const auto & b ) { return a.second > b.second; } );
+  []( const auto & a , const auto & b ) { return( a.second > b.second ); } );
 
  scenarioIndexes.clear();
  scenarioIndexes.reserve( target_size );

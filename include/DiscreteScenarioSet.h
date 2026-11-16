@@ -117,21 +117,21 @@ public:
 
  [[nodiscard]] inline Scenario get_current_scenario() const override {
   const auto index = scenarioIndexes[ currentScenarioIndex ];
-  return Scenario( &scenarioSet[ index ][ 0 ] , scenarioSize );
+  return( Scenario( &scenarioSet[ index ][ 0 ] , scenarioSize ) );
   }
 
  [[nodiscard]] double get_current_scenario_probability() const override {
-  return poolWeights[ currentScenarioIndex ];
+  return( poolWeights[ currentScenarioIndex ] );
   }
 
  bool next_scenario() override;
 
  [[nodiscard]] ScenarioSize get_scenario_size() const override {
-  return scenarioSize;
+  return( scenarioSize );
   }
 
  [[nodiscard]] ScenarioIndex get_support_size() override {
-  return nbScenarios;
+  return( nbScenarios );
   }
 
  /** Set the partner Block. If block is a TwoStageStochasticBlock, stores
@@ -216,64 +216,64 @@ public:
 /*--------------------------------------------------------------------------*/
 
  [[nodiscard]] const ScenarioIndex & get_nbScenarios() const {
-  return nbScenarios;
+  return( nbScenarios );
   }
 
  [[nodiscard]] const ScenarioSize & get_scenarioSize() const {
-  return scenarioSize;
+  return( scenarioSize );
   }
 
  [[nodiscard]] bool is_pool_initialized() const override {
-  return is_initialized;
+  return( is_initialized );
   }
 
  void reset_pool() override {
   if( ! is_initialized )
-   throw std::runtime_error( "reset_pool: pool not initialized" );
+   throw( std::runtime_error( "reset_pool: pool not initialized" ) );
   currentScenarioIndex = 0;
   }
 
  [[nodiscard]] double get_scenario_value(
   ScenarioIndex scenario_idx , ScenarioSize component_idx ) const {
   if( scenario_idx >= nbScenarios || component_idx >= scenarioSize )
-   throw std::out_of_range( "get_scenario_value: index out of range" );
-  return scenarioSet[ scenario_idx ][ component_idx ];
+   throw( std::out_of_range( "get_scenario_value: index out of range" ) );
+  return( scenarioSet[ scenario_idx ][ component_idx ] );
   }
 
  [[nodiscard]] std::span< const ScenarioIndex > get_selected_scenarios()
   const;
 
- [[nodiscard]] ScenarioIndex get_poolSize() const { return poolSize; }
+ [[nodiscard]] ScenarioIndex get_poolSize() const { return( poolSize ); }
 
- [[nodiscard]] float get_ell() const { return ell; }
+ [[nodiscard]] float get_ell() const { return( ell ); }
 
  void set_ell( float ell_value ) {
   if( ell_value <= 0 )
-   throw std::invalid_argument( "set_ell: ell must be positive" );
+   throw( std::invalid_argument( "set_ell: ell must be positive" ) );
   ell = ell_value;
   }
 
  [[nodiscard]] inline std::span< const double > get_set_weights() const {
-  return setWeights;
+  return( setWeights );
   }
 
  [[nodiscard]] inline std::span< const double > get_pool_weights() const {
   if( ! is_initialized )
-   throw std::runtime_error( "get_pool_weights: pool not initialized" );
-  return poolWeights;
+   throw( std::runtime_error( "get_pool_weights: pool not initialized" ) );
+  return( poolWeights );
   }
 
  /** Returns the number of representative scenarios that
   * init_representative_pool() will select. Used by
   * ScenarioReductionSolver to determine K. */
  [[nodiscard]] ScenarioIndex get_NReducedScenarios() const {
-  return poolSize;
+  return( poolSize );
   }
 
  /** Returns the full weight vector (all N scenarios). Used by
   * ScenarioReductionSolver to build the internal CFLB. */
  [[nodiscard]] const std::vector< double > & get_Weights() const {
-  return setWeights;
+  return( setWeights );
   }
 
  /** Returns a single scenario as a vector. Used by
@@ -282,10 +282,10 @@ public:
  [[nodiscard]] std::vector< double > get_scenario(
   ScenarioIndex idx ) const {
   if( idx >= nbScenarios )
-   throw std::out_of_range( "get_scenario: index out of range" );
-  return std::vector< double >(
+   throw( std::out_of_range( "get_scenario: index out of range" ) );
+  return( std::vector< double >(
    &scenarioSet[ idx ][ 0 ] ,
-   &scenarioSet[ idx ][ 0 ] + scenarioSize );
+   &scenarioSet[ idx ][ 0 ] + scenarioSize ) );
   }
 
 /*--------------------------------------------------------------------------*/

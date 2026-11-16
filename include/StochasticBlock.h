@@ -333,8 +333,8 @@ namespace SMSpp_di_unipi_it {
 
  int get_objective_sense( ) const override {
   if ( auto inner_block = get_inner_block( ) )
-   return ( inner_block->get_objective_sense( ) );
-  return ( Objective::eUndef );
+   return( inner_block->get_objective_sense( ) );
+  return( Objective::eUndef );
  }
 
  /*--------------------------------------------------------------------------*/
@@ -349,7 +349,7 @@ namespace SMSpp_di_unipi_it {
 
  const std::vector< std::unique_ptr< SimpleDataMappingBase > > &
  get_data_mappings( ) const {
-  return ( data_mappings );
+  return( data_mappings );
  }
 
  /*--------------------------------------------------------------------------*/
@@ -362,7 +362,7 @@ namespace SMSpp_di_unipi_it {
   */
 
  Block * get_inner_block( ) const {
-  return ( v_Block.empty( ) ? nullptr : v_Block.front( ) );
+  return( v_Block.empty( ) ? nullptr : v_Block.front( ) );
  }
 
  /*--------------------------------------------------------------------------*/
