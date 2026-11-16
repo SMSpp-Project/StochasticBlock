@@ -56,6 +56,7 @@
 
 #include "DiscreteScenarioSet.h"
 #include "BlockSolverConfig.h"
+#include "SMSTerminate.h"
 
 #include <iostream>  // std::cout, std::cerr
 #include <cstdio>    // std::remove
@@ -73,27 +74,6 @@
 
 using namespace SMSpp_di_unipi_it;
 using namespace std;
-
-/*--------------------------------------------------------------------------*/
-/*------------------------------ FUNCTIONS ---------------------------------*/
-/*--------------------------------------------------------------------------*/
-
-/// Custom terminate function to print the exception message
-
-void smspp_terminate( void ) {
-
- std::cerr << "Uncaught exception in executing SMS++:\n";
- try {
-  std::rethrow_exception( std::current_exception() );
- }
- catch( const std::exception & e ) {
-  std::cerr << "\tException type: " << typeid( e ).name() << "\n";
-  std::cerr << "\tException message: " << e.what() << "\n";
- } catch( ... ) {
-  std::cerr << "\tUnknown exception" << std::endl;
- }
- std::abort(); // or exit(1)
-}
 
 /*--------------------------------------------------------------------------*/
 /*--------------------------- TEST FRAMEWORK -------------------------------*/
