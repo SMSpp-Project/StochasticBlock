@@ -12,44 +12,16 @@
 
 # The classes of the modules register themselves in the factories from
 # static objects, which nothing here names: a shared library is kept by
-# what its module asks of the linker [see the CMakeLists.txt of the
-# module], while an archive has to be taken whole.
-if (NOT BUILD_SHARED_LIBS)
-    if (MSVC)
-        add_link_options("/WHOLEARCHIVE" "/FORCE:MULTIPLE")
-    else () # Unix
-        if (APPLE)
-            add_link_options("-Wl,-all_load")
-        else ()
-            add_link_options("-Wl,--whole-archive,--allow-multiple-definition")
-        endif ()
-    endif ()
-endif ()
+# what its module asks of the linker, while an archive has to be taken
+# whole [see SMSppModule.cmake of SMS++].
+smspp_keep_modules()
 
 # ----- StochasticBlock_test ------------------------------------------------ #
 
 add_executable(${modName}_test test.cpp)
 target_link_libraries(${modName}_test PRIVATE SMS++::StochasticBlock)
 
-if (WIN32 AND BUILD_SHARED_LIBS AND NOT DEFINED ENV{CONDA_BUILD})
-    # On Windows with shared libraries enabled copies all runtime DLL
-    # dependencies next to the executable in the build directory
-    # (POST_BUILD), using CMake's TARGET_RUNTIME_DLLS generator expression
-    add_custom_command(TARGET ${modName}_test POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_RUNTIME_DLLS:${modName}_test>
-            $<TARGET_FILE_DIR:${modName}_test>
-            COMMAND_EXPAND_LISTS
-            COMMENT "Copying runtime DLLs next to ${modName}_test.exe")
-    # one link at a time, since two copies of the same DLL into a
-    # directory collide, and Ninja links in parallel
-    get_property(_pools GLOBAL PROPERTY JOB_POOLS)
-    if (NOT _pools MATCHES "smspp_runtime_dlls=")
-        set_property(GLOBAL APPEND PROPERTY JOB_POOLS smspp_runtime_dlls=1)
-    endif ()
-    set_property(TARGET ${modName}_test
-                 PROPERTY JOB_POOL_LINK smspp_runtime_dlls)
-endif ()
+smspp_copy_runtime(${modName}_test)
 
 add_test(NAME ${modName}_test
          COMMAND ${modName}_test)
@@ -59,25 +31,7 @@ add_test(NAME ${modName}_test
 add_executable(test_discrete test_discrete.cpp)
 target_link_libraries(test_discrete PRIVATE SMS++::StochasticBlock)
 
-if (WIN32 AND BUILD_SHARED_LIBS AND NOT DEFINED ENV{CONDA_BUILD})
-    # On Windows with shared libraries enabled copies all runtime DLL
-    # dependencies next to the executable in the build directory
-    # (POST_BUILD), using CMake's TARGET_RUNTIME_DLLS generator expression
-    add_custom_command(TARGET test_discrete POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_RUNTIME_DLLS:test_discrete>
-            $<TARGET_FILE_DIR:test_discrete>
-            COMMAND_EXPAND_LISTS
-            COMMENT "Copying runtime DLLs next to test_discrete.exe")
-    # one link at a time, since two copies of the same DLL into a
-    # directory collide, and Ninja links in parallel
-    get_property(_pools GLOBAL PROPERTY JOB_POOLS)
-    if (NOT _pools MATCHES "smspp_runtime_dlls=")
-        set_property(GLOBAL APPEND PROPERTY JOB_POOLS smspp_runtime_dlls=1)
-    endif ()
-    set_property(TARGET test_discrete
-                 PROPERTY JOB_POOL_LINK smspp_runtime_dlls)
-endif ()
+smspp_copy_runtime(test_discrete)
 
 add_test(NAME test_discrete
          COMMAND test_discrete)
@@ -90,25 +44,7 @@ set(_t MultiStageDiscreteScenarioSet_unit_test)
 add_executable(${_t} test_mssds.cpp)
 target_link_libraries(${_t} PRIVATE SMS++::StochasticBlock)
 
-if (WIN32 AND BUILD_SHARED_LIBS AND NOT DEFINED ENV{CONDA_BUILD})
-    # On Windows with shared libraries enabled copies all runtime DLL
-    # dependencies next to the executable in the build directory
-    # (POST_BUILD), using CMake's TARGET_RUNTIME_DLLS generator expression
-    add_custom_command(TARGET ${_t} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_RUNTIME_DLLS:${_t}>
-            $<TARGET_FILE_DIR:${_t}>
-            COMMAND_EXPAND_LISTS
-            COMMENT "Copying runtime DLLs next to ${_t}.exe")
-    # one link at a time, since two copies of the same DLL into a
-    # directory collide, and Ninja links in parallel
-    get_property(_pools GLOBAL PROPERTY JOB_POOLS)
-    if (NOT _pools MATCHES "smspp_runtime_dlls=")
-        set_property(GLOBAL APPEND PROPERTY JOB_POOLS smspp_runtime_dlls=1)
-    endif ()
-    set_property(TARGET ${_t}
-                 PROPERTY JOB_POOL_LINK smspp_runtime_dlls)
-endif ()
+smspp_copy_runtime(${_t})
 
 # run in the build tree, since it writes (and removes) a netCDF file
 add_test(NAME ${_t}
@@ -123,25 +59,7 @@ set(_t IndependentMultiStageScenarioGenerator_unit_test)
 add_executable(${_t} test_imssg.cpp)
 target_link_libraries(${_t} PRIVATE SMS++::StochasticBlock)
 
-if (WIN32 AND BUILD_SHARED_LIBS AND NOT DEFINED ENV{CONDA_BUILD})
-    # On Windows with shared libraries enabled copies all runtime DLL
-    # dependencies next to the executable in the build directory
-    # (POST_BUILD), using CMake's TARGET_RUNTIME_DLLS generator expression
-    add_custom_command(TARGET ${_t} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_RUNTIME_DLLS:${_t}>
-            $<TARGET_FILE_DIR:${_t}>
-            COMMAND_EXPAND_LISTS
-            COMMENT "Copying runtime DLLs next to ${_t}.exe")
-    # one link at a time, since two copies of the same DLL into a
-    # directory collide, and Ninja links in parallel
-    get_property(_pools GLOBAL PROPERTY JOB_POOLS)
-    if (NOT _pools MATCHES "smspp_runtime_dlls=")
-        set_property(GLOBAL APPEND PROPERTY JOB_POOLS smspp_runtime_dlls=1)
-    endif ()
-    set_property(TARGET ${_t}
-                 PROPERTY JOB_POOL_LINK smspp_runtime_dlls)
-endif ()
+smspp_copy_runtime(${_t})
 
 # run in the build tree, since it writes (and removes) a netCDF file
 add_test(NAME ${_t}
