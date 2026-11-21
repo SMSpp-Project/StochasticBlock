@@ -205,7 +205,8 @@ int main( void )
  check( c->is_valid() , "a view at another stage is not" );
 
  bool refused = false;
- try { b->get_support_size(); } catch( const std::exception & ) {
+ try { static_cast< void >( b->get_support_size() ); }
+ catch( const std::exception & ) {
   refused = true;
   }
  check( refused , "an invalidated view refuses to be read" );
